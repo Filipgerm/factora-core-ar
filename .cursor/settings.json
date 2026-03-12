@@ -1,0 +1,22 @@
+{
+  "plugins": {
+    "vercel": {
+      "enabled": true
+    },
+    "slack": {
+      "enabled": true
+    },
+    "stripe": {
+      "enabled": true
+    },
+    "notion-workspace": {
+      "enabled": true
+    },
+    "supabase": {
+      "enabled": true
+    },
+    "linear": {
+      "enabled": true
+    }
+  }
+}

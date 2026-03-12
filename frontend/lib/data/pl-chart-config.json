@@ -1,0 +1,18 @@
+{
+  "colors": {
+    "revenue": "#003380",
+    "expenses": "#133b4f",
+    "margin": "#f59e0b"
+  },
+  "padding": {
+    "top": 5,
+    "bottom": 20,
+    "left": 12,
+    "right": 10
+  },
+  "ticks": {
+    "value": 5,
+    "revenue": 5,
+    "margin": 5
+  }
+}

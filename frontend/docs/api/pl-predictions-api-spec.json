@@ -1,0 +1,302 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "P&L Predictions API",
+    "description": "API endpoints for profit & loss statements and predictions data",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Support",
+      "email": "support@factora.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.factora.com",
+      "description": "Production server"
+    },
+    {
+      "url": "https://staging-api.factora.com",
+      "description": "Staging server"
+    }
+  ],
+  "paths": {
+    "/api/customers/{customerId}/pl-predictions": {
+      "get": {
+        "summary": "Get P&L statement and predictions for a customer",
+        "description": "Returns comprehensive profit & loss data including KPIs, monthly trends, detailed P&L statement, and expense category breakdown",
+        "operationId": "getPLPredictions",
+        "tags": ["P&L Predictions"],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "description": "Customer identifier (slug format)",
+            "schema": {
+              "type": "string",
+              "example": "euromed-supplies-gmbh"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "description": "Year for P&L data (defaults to current year)",
+            "schema": {
+              "type": "integer",
+              "example": 2025
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "P&L predictions retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PLPredictionsResponse"
+                },
+                "example": {
+                  "kpis": [
+                    {
+                      "label": "Total Revenue",
+                      "value": 600000.0,
+                      "currency": "€",
+                      "digits": 2
+                    },
+                    {
+                      "label": "Total Expenses",
+                      "value": 530000.0,
+                      "currency": "€",
+                      "digits": 2
+                    },
+                    {
+                      "label": "Net Income",
+                      "value": 70000.0,
+                      "currency": "€",
+                      "digits": 2
+                    },
+                    {
+                      "label": "Average Margin",
+                      "value": 11.6,
+                      "suffix": "%"
+                    }
+                  ],
+                  "monthlyData": [
+                    {
+                      "month": "Sep 2024",
+                      "revenue": 250000,
+                      "expenses": 220000,
+                      "income": 30000,
+                      "margin": 12.0
+                    },
+                    {
+                      "month": "Oct 2024",
+                      "revenue": 260000,
+                      "expenses": 225000,
+                      "income": 35000,
+                      "margin": 13.5
+                    }
+                  ],
+                  "expenseCategories": [
+                    {
+                      "category": "Cost of Goods Sold (COGS)",
+                      "amount": 291750,
+                      "transactions": 320,
+                      "avgAmount": 912,
+                      "percentage": 55.0
+                    },
+                    {
+                      "category": "Salaries",
+                      "amount": 155600,
+                      "transactions": 24,
+                      "avgAmount": 6483,
+                      "percentage": 29.4
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PLPredictionsResponse": {
+        "type": "object",
+        "required": ["kpis", "monthlyData", "expenseCategories"],
+        "properties": {
+          "kpis": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PLKPI"
+            },
+            "description": "Key performance indicators for P&L"
+          },
+          "monthlyData": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlyPLData"
+            },
+            "description": "Monthly P&L data for trend analysis"
+          },
+          "expenseCategories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExpenseCategory"
+            },
+            "description": "Detailed expense category breakdown"
+          }
+        }
+      },
+      "PLKPI": {
+        "type": "object",
+        "required": ["label", "value"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "KPI label",
+            "example": "Total Revenue"
+          },
+          "value": {
+            "type": "number",
+            "description": "KPI value",
+            "example": 600000.0
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency symbol (if applicable)",
+            "example": "€"
+          },
+          "digits": {
+            "type": "integer",
+            "description": "Number of decimal places",
+            "example": 2
+          },
+          "suffix": {
+            "type": "string",
+            "description": "Suffix for the value (e.g., percentage)",
+            "example": "%"
+          }
+        }
+      },
+      "MonthlyPLData": {
+        "type": "object",
+        "required": ["month", "revenue", "expenses", "income", "margin"],
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "Month and year",
+            "example": "Sep 2024"
+          },
+          "revenue": {
+            "type": "number",
+            "description": "Monthly revenue in EUR",
+            "example": 250000
+          },
+          "expenses": {
+            "type": "number",
+            "description": "Monthly expenses in EUR",
+            "example": 220000
+          },
+          "income": {
+            "type": "number",
+            "description": "Monthly net income in EUR",
+            "example": 30000
+          },
+          "margin": {
+            "type": "number",
+            "description": "Profit margin percentage",
+            "example": 12.0
+          }
+        }
+      },
+      "ExpenseCategory": {
+        "type": "object",
+        "required": [
+          "category",
+          "amount",
+          "transactions",
+          "avgAmount",
+          "percentage"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Expense category name",
+            "example": "Cost of Goods Sold (COGS)"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Total amount for this category in EUR",
+            "example": 291750
+          },
+          "transactions": {
+            "type": "integer",
+            "description": "Number of transactions in this category",
+            "example": 320
+          },
+          "avgAmount": {
+            "type": "number",
+            "description": "Average transaction amount in EUR",
+            "example": 912
+          },
+          "percentage": {
+            "type": "number",
+            "description": "Percentage of total expenses",
+            "example": 55.0
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error", "message"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error code",
+            "example": "CUSTOMER_NOT_FOUND"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message",
+            "example": "Customer with ID 'euromed-supplies-gmbh' not found"
+          },
+          "details": {
+            "type": "string",
+            "description": "Additional error details",
+            "example": "Please verify the customer ID and try again"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "P&L Predictions",
+      "description": "Endpoints for profit & loss statements and predictions data"
+    }
+  ]
+}

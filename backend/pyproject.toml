@@ -1,0 +1,52 @@
+[project]
+name = "factora"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-dotenv",
+    "python-multipart",
+    "requests",
+    "httpx",
+    "sqlalchemy>=2.0",
+    "alembic",
+    "supabase>=2.0.0",
+    "asyncpg",
+    "psycopg[binary] >= 3.1.0",
+    "pypdf",
+    "pdfplumber",
+    "pytesseract",
+    "pillow",
+    "PyMuPDF",
+    "PyPDF2",
+    "pypdfium2",
+    "pydantic_settings",
+    "striprtf",
+    # --- Data / time handling ---
+    "pandas",
+    "python-dateutil",
+    "pytz",
+    "tzdata",
+    "python-multipart",
+    "email-validator",
+    "sib_api_v3_sdk",
+    "phonenumbers",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-anyio",
+    "pytest-mock",
+    "pytest-cov",
+    "asgi-lifespan",
+    "argon2-cffi>=23.1.0",
+    "tenacity>=8.2.0",
+    "certifi",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "packages*"] # Explicitly include your core logic
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

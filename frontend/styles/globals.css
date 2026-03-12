@@ -1,0 +1,296 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* =============================================================================
+   1. MASTER ENTERPRISE THEME (KLEEMANN)
+   Used as the default fallback globally (e.g. Onboarding / Sign In)
+   ============================================================================= */
+:root {
+  /* KLEEMANN BRAND TOKENS */
+  --brand-primary: #0061a0;
+  --brand-grad-start: #004573;
+  --brand-grad-end: var(--brand-primary);
+  --brand-primary-hover: #1998d5;
+  --brand-primary-subtle: #f0f7ff;
+  --brand-primary-muted: #cce4f5;
+  --brand-primary-border: #99c7e6;
+  --brand-page-bg-start: #f8fafc;
+  --brand-page-bg-end: #f1f5f9;
+  --brand-surface: var(--brand-grad-start);
+
+  /* STANDARD UI TOKENS (Neutral defaults) */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: var(--brand-primary);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: var(--brand-primary);
+  --radius: 0.625rem;
+
+  /* SIDEBAR DEFAULTS */
+  --sidebar: oklch(0.99 0 0);
+  --sidebar-foreground: oklch(0.15 0 0);
+  --sidebar-primary: var(--brand-primary);
+  --sidebar-primary-foreground: #f9fafb;
+  --sidebar-accent: oklch(0.96 0 0);
+  --sidebar-accent-foreground: var(--brand-primary);
+  --sidebar-border: oklch(0.92 0 0);
+  --sidebar-ring: var(--brand-primary);
+  --sidebar-muted-foreground: oklch(0.55 0 0);
+
+  /* CHARTS */
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+
+  /* FIXED SEMANTIC COLORS (Preserved for Bank/Summary components) */
+  --bank-consent-bg-start: #edfdfa;
+  --bank-consent-bg-end: #9df7e7;
+  --bank-form-bg: #002f30;
+  --bank-form-primary: #2f9a8a;
+  --bank-form-primary-hover: #268174;
+  --bank-form-accent: #2f9a8a;
+  --bank-form-muted: #cac3af;
+
+  --entity-card-selected-border: #06b6d4;
+  --entity-card-selected-bg: #ecfeff;
+  --entity-card-status-bg: #d1fae5;
+  --entity-card-status-text: #047857;
+  --summary-accent: #059669;
+  --summary-accent-hover: #047857;
+  --summary-accent-muted: #0d9488;
+  --summary-section-bg-start: #ecfdf5;
+  --summary-section-bg-end: #f0fdfa;
+  --summary-section-border: #d1fae5;
+  --summary-section-divider: #a7f3d0;
+  --summary-focus-ring: #10b981;
+  --summary-icon-muted: #34d399;
+}
+
+/* =============================================================================
+   2. DASHBOARD THEME (FACTORA)
+   Overrides the root tokens when wrapped inside the `.dashboard-theme` class
+   ============================================================================= */
+.dashboard-theme {
+  /* Factora's Exact Palette */
+  --background: oklch(0.98 0.005 240);
+  --foreground: oklch(0.15 0.02 240);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0.02 240);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.02 240);
+
+  /* Made Factora's Teal the absolute primary for buttons */
+  --primary: oklch(0.58 0.12 180);
+  --primary-foreground: oklch(0.98 0.005 240);
+
+  --secondary: oklch(0.28 0.06 200);
+  --secondary-foreground: oklch(0.98 0.005 240);
+  --muted: oklch(0.96 0.01 240);
+  --muted-foreground: oklch(0.55 0.02 240);
+  --accent: oklch(0.58 0.12 180);
+  --accent-foreground: oklch(0.98 0.005 240);
+  --border: oklch(0.92 0.01 240);
+  --input: oklch(0.96 0.01 240);
+  --ring: oklch(0.58 0.12 180);
+
+  /* Overriding the "Brand" variables so any component using them turns Teal inside the Dashboard */
+  --brand-primary: #2f9a8a; /* Factora Teal */
+  --brand-primary-hover: #38b2a0; /* Lighter Factora Teal for hover states */
+  --brand-primary-subtle: #e6f7f5; /* Ultra-light teal background */
+  --brand-primary-muted: #bfe6e0; /* Muted teal */
+  --brand-primary-border: #99d6cc; /* Teal border */
+
+  --brand-grad-start: #071a33; /* Factora Navy */
+  --brand-grad-end: #133b4f;
+
+  /* Factora Sidebar Colors */
+  --sidebar: oklch(0.18 0.08 210);
+  --sidebar-foreground: oklch(0.85 0.02 240);
+  --sidebar-primary: oklch(0.58 0.12 180); /* Teal active tabs */
+  --sidebar-primary-foreground: oklch(0.98 0.005 240);
+  --sidebar-accent: oklch(0.28 0.06 200);
+  --sidebar-accent-foreground: oklch(0.85 0.02 240);
+  --sidebar-border: oklch(0.28 0.06 200);
+  --sidebar-ring: oklch(0.58 0.12 180);
+  --sidebar-muted-foreground: oklch(0.65 0.02 240);
+
+  /* Factora Chart Colors */
+  --chart-1: oklch(0.58 0.12 180); /* Teal */
+  --chart-2: oklch(0.45 0.15 220); /* Blue */
+  --chart-3: oklch(0.65 0.18 40); /* Orange */
+  --chart-4: oklch(0.55 0.2 140); /* Green */
+  --chart-5: oklch(0.5 0.22 300); /* Purple */
+}
+
+.dark {
+  /* Retained exactly as you provided previously */
+  --background: oklch(0.12 0.02 240);
+  --foreground: oklch(0.95 0.005 240);
+  --card: oklch(0.15 0.02 240);
+  --card-foreground: oklch(0.95 0.005 240);
+  --popover: oklch(0.15 0.02 240);
+  --popover-foreground: oklch(0.95 0.005 240);
+  --primary: oklch(0.58 0.12 180);
+  --primary-foreground: oklch(0.12 0.02 240);
+  --secondary: oklch(0.28 0.06 200);
+  --secondary-foreground: oklch(0.95 0.005 240);
+  --muted: oklch(0.2 0.02 240);
+  --muted-foreground: oklch(0.65 0.02 240);
+  --accent: oklch(0.58 0.12 180);
+  --accent-foreground: oklch(0.12 0.02 240);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.95 0.005 240);
+  --border: oklch(0.25 0.02 240);
+  --input: oklch(0.2 0.02 240);
+  --ring: oklch(0.58 0.12 180);
+  --chart-1: oklch(0.58 0.12 180);
+  --chart-2: oklch(0.45 0.15 220);
+  --chart-3: oklch(0.65 0.18 40);
+  --chart-4: oklch(0.55 0.2 140);
+  --chart-5: oklch(0.5 0.22 300);
+  --sidebar: oklch(0.1 0.02 240);
+  --sidebar-foreground: oklch(0.85 0.02 240);
+  --sidebar-primary: oklch(0.58 0.12 180);
+  --sidebar-primary-foreground: oklch(0.1 0.02 240);
+  --sidebar-accent: oklch(0.2 0.02 240);
+  --sidebar-accent-foreground: oklch(0.85 0.02 240);
+  --sidebar-border: oklch(0.25 0.02 240);
+  --sidebar-ring: oklch(0.58 0.12 180);
+  --sidebar-muted-foreground: oklch(0.65 0.02 240);
+}
+
+/* =============================================================================
+   3. TAILWIND COMPILER MAPPINGS
+   ============================================================================= */
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+
+  /* BRAND SEMANTIC MAPPINGS */
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-primary-hover: var(--brand-primary-hover);
+  --color-brand-primary-subtle: var(--brand-primary-subtle);
+  --color-brand-primary-muted: var(--brand-primary-muted);
+  --color-brand-primary-border: var(--brand-primary-border);
+  --color-brand-grad-start: var(--brand-grad-start);
+  --color-brand-grad-end: var(--brand-grad-end);
+  --color-brand-page-bg-start: var(--brand-page-bg-start);
+  --color-brand-page-bg-end: var(--brand-page-bg-end);
+  --color-brand-surface: var(--brand-surface);
+
+  /* FIXED SEMANTIC MAPPINGS */
+  --color-bank-consent-bg-start: var(--bank-consent-bg-start);
+  --color-bank-consent-bg-end: var(--bank-consent-bg-end);
+  --color-bank-form-bg: var(--bank-form-bg);
+  --color-bank-form-primary: var(--bank-form-primary);
+  --color-bank-form-primary-hover: var(--bank-form-primary-hover);
+  --color-bank-form-accent: var(--bank-form-accent);
+  --color-bank-form-muted: var(--bank-form-muted);
+  --color-entity-card-selected-border: var(--entity-card-selected-border);
+  --color-entity-card-selected-bg: var(--entity-card-selected-bg);
+  --color-entity-card-status-bg: var(--entity-card-status-bg);
+  --color-entity-card-status-text: var(--entity-card-status-text);
+  --color-summary-accent: var(--summary-accent);
+  --color-summary-accent-hover: var(--summary-accent-hover);
+  --color-summary-accent-muted: var(--summary-accent-muted);
+  --color-summary-section-bg-start: var(--summary-section-bg-start);
+  --color-summary-section-bg-end: var(--summary-section-bg-end);
+  --color-summary-section-border: var(--summary-section-border);
+  --color-summary-section-divider: var(--summary-section-divider);
+  --color-summary-focus-ring: var(--summary-focus-ring);
+  --color-summary-icon-muted: var(--summary-icon-muted);
+}
+
+/* Specific scrollbar hiding for tables during animations */
+.invoices-table-container {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* Internet Explorer and Edge */
+}
+
+.invoices-table-container::-webkit-scrollbar {
+  display: none !important; /* WebKit browsers (Chrome, Safari, Edge) */
+  width: 0 !important;
+  height: 0 !important;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Discreet mode: blur sensitive data while keeping layout */
+body.discreet [data-sensitive="true"] {
+  filter: blur(6px);
+  transition: filter 150ms ease;
+}
+
+body.discreet [data-sensitive="true"]:hover {
+  filter: blur(8px);
+}
+
+.sensitive-blur {
+  filter: blur(6px);
+}

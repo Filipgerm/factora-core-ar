@@ -1,0 +1,92 @@
+services:
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/certbot:/var/www/certbot.ro
+      # - ./nginx/ssl:/etc/letsencrypt:ro         # <— path so NGINX and Certbot share certs
+      # - ./nginx/certbot:/var/www/certbot  # <— shared folder for ACME HTTP challenge
+    networks:
+      - factora-network
+    depends_on:
+      - frontend
+      - backend
+      # - certbot
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build: ./frontend
+    # Port mapping removed - access through nginx reverse proxy
+    # For direct access during development, uncomment the line below:
+    # ports:
+    #   - "127.0.0.1:3000:3000"
+    volumes:
+      # Direct mapping for hot-reload
+      - ./frontend:/app
+      - next-cache:/app/.next # Docker-managed, fixes EACCES
+      - next-modules:/app/node_modules # optional but helps with hot reload
+    networks:
+      - factora-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    build: ./backend
+    # Port mapping removed - access through nginx reverse proxy
+    # For direct access during development, uncomment the line below:
+    # ports:
+    #   - "127.0.0.1:8000:8000"
+    volumes:
+      # Direct mapping between host directory and container directory
+      # Changes on host appear instantly in container
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    networks:
+      - factora-network
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # certbot:
+  #   image: certbot/certbot
+  #   volumes:
+  #     - ./nginx/ssl:/etc/letsencrypt            # <— stores certificates
+  #     - ./nginx/certbot:/var/www/certbot        # <— for ACME challenge files
+  #   command: >
+  #     certonly --webroot
+  #     --webroot-path=/var/www/certbot
+  #     --email your-email@example.com
+  #     --agree-tos
+  #     --no-eff-email
+  #     -d factora.eu -d www.factora.eu
+  #   networks:
+  #     - factora-network
+  #   restart: "no"   
+
+networks:
+  factora-network:
+    driver: bridge
+
+volumes:
+  next-cache:
+  next-modules:

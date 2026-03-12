@@ -1,0 +1,31 @@
+# SSL Certificates - Never commit private keys!
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+nginx/ssl/*.p12
+nginx/ssl/*.pfx
+
+# Keep the directory structure
+!nginx/ssl/.gitkeep
+!nginx/ssl/README.md
+
+# Certbot certificates
+nginx/certbot/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+.vercel
+.env*.local

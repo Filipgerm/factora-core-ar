@@ -1,0 +1,82 @@
+{
+  "753944523": {
+    "name": "Freeman Sporting Goods",
+    "addressLines": [
+      "Blvd. Marina 5",
+      "Freeman Sporting Goods",
+      "969 Ocean View",
+      "Lisbon, PT 1990"
+    ],
+    "email": "billing@freemansporting.example",
+    "phone": "+351 215 551 212"
+  },
+  "482750274": {
+    "name": "Acme Manufacturing",
+    "addressLines": [
+      "742 Evergreen Terrace",
+      "Springfield",
+      "USA"
+    ],
+    "email": "billing@acmemfg.example",
+    "phone": "+1 (555) 010-1010"
+  },
+  "947265052": {
+    "name": "Globex Corporation",
+    "addressLines": [
+      "12 Silicon Alley",
+      "Dublin",
+      "IE"
+    ],
+    "email": "ap@globex.example",
+    "phone": "+353 1 555 0101"
+  },
+  "123193571": {
+    "name": "Initech Ltd.",
+    "addressLines": [
+      "44 Office Park",
+      "London",
+      "UK"
+    ],
+    "email": "accounts@initech.example",
+    "phone": "+44 20 7946 0999"
+  },
+  "856429137": {
+    "name": "Umbrella Healthcare",
+    "addressLines": [
+      "88 Red Queen Ave",
+      "Raccoon City"
+    ],
+    "email": "billing@umbrella.example",
+    "phone": "+1 (555) 010-1212"
+  },
+  "294758361": {
+    "name": "Soylent Foods",
+    "addressLines": [
+      "5 Green Way",
+      "Berlin",
+      "DE"
+    ],
+    "email": "ap@soylent.example",
+    "phone": "+49 30 123456"
+  },
+  "637821549": {
+    "name": "Stark Industries",
+    "addressLines": [
+      "10880 Malibu Point",
+      "California",
+      "USA"
+    ],
+    "email": "ap@stark.example",
+    "phone": "+1 (555) 010-2020"
+  },
+  "481593267": {
+    "name": "Wayne Enterprises",
+    "addressLines": [
+      "1007 Mountain Dr",
+      "Gotham"
+    ],
+    "email": "ap@wayne.example",
+    "phone": "+1 (555) 010-3030"
+  }
+}
+

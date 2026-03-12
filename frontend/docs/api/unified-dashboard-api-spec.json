@@ -1,0 +1,898 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Factora Dashboard API",
+    "description": "Comprehensive API endpoints for the Factora business dashboard including financial overview, customers, transactions timeline, and P&L predictions",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Support",
+      "email": "support@factora.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.factora.com",
+      "description": "Production server"
+    },
+    {
+      "url": "https://staging-api.factora.com",
+      "description": "Staging server"
+    }
+  ],
+  "paths": {
+    "/api/customers/{customerId}/financial-overview/metrics": {
+      "get": {
+        "summary": "Get financial metrics for a customer",
+        "description": "Returns key financial metrics including turnover, margin, EBITDA, balance, credit limit, outstanding AR, DSO, and default rate",
+        "operationId": "getFinancialMetrics",
+        "tags": ["Financial Overview"],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "description": "Customer identifier (slug format)",
+            "schema": {
+              "type": "string",
+              "example": "euromed-supplies-gmbh"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Financial metrics retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialMetricsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/{customerId}/financial-overview/charts": {
+      "get": {
+        "summary": "Get financial charts data for a customer",
+        "description": "Returns time-series data for the last 9 months including sales, cash flow, revenue, expenses, and customer concentration",
+        "operationId": "getFinancialCharts",
+        "tags": ["Financial Overview"],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "description": "Customer identifier (slug format)",
+            "schema": {
+              "type": "string",
+              "example": "euromed-supplies-gmbh"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Financial charts data retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialChartsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers": {
+      "get": {
+        "summary": "Get customers list with analytics",
+        "description": "Returns paginated list of customers with business sector analytics, onboarding trends, and revenue distribution",
+        "operationId": "getCustomers",
+        "tags": ["Customers"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number for pagination",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of customers per page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Search query for business name, VAT, or sector",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customers data retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomersResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/{customerId}/transactions-timeline": {
+      "get": {
+        "summary": "Get bank transactions timeline for a customer",
+        "description": "Returns bank transactions with KPIs including accounts, total credits, and net cash flow",
+        "operationId": "getTransactionsTimeline",
+        "tags": ["Transactions Timeline"],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "description": "Customer identifier (slug format)",
+            "schema": {
+              "type": "string",
+              "example": "euromed-supplies-gmbh"
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "description": "Start date for transactions (ISO 8601 format)",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2025-07-01"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "description": "End date for transactions (ISO 8601 format)",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2025-07-31"
+            }
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "description": "Filter by specific account number",
+            "schema": {
+              "type": "string",
+              "example": "GR12 0110 0120 0000 0001 2300 695"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transactions timeline retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionsTimelineResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/{customerId}/pl-predictions": {
+      "get": {
+        "summary": "Get P&L statement and predictions for a customer",
+        "description": "Returns comprehensive profit & loss data including KPIs, monthly trends, detailed P&L statement, and expense category breakdown",
+        "operationId": "getPLPredictions",
+        "tags": ["P&L Predictions"],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "description": "Customer identifier (slug format)",
+            "schema": {
+              "type": "string",
+              "example": "euromed-supplies-gmbh"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "description": "Year for P&L data (defaults to current year)",
+            "schema": {
+              "type": "integer",
+              "example": 2025
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "P&L predictions retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PLPredictionsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "FinancialMetricsResponse": {
+        "type": "object",
+        "required": ["metrics"],
+        "properties": {
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FinancialMetric"
+            },
+            "description": "Array of financial metrics"
+          }
+        }
+      },
+      "FinancialMetric": {
+        "type": "object",
+        "required": ["title", "value", "year", "requires"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Display name of the metric",
+            "example": "Annual Turnover"
+          },
+          "value": {
+            "type": "string",
+            "description": "Current value of the metric (formatted with currency/units)",
+            "example": "€4,748,433.00"
+          },
+          "change": {
+            "type": "string",
+            "description": "Year-over-year change description",
+            "example": "13% increase from last year"
+          },
+          "trend": {
+            "type": "string",
+            "enum": ["up", "down"],
+            "description": "Visual trend indicator",
+            "example": "up"
+          },
+          "year": {
+            "type": "string",
+            "description": "Year the metric represents",
+            "example": "2025"
+          },
+          "subtitle": {
+            "type": "string",
+            "description": "Additional context or target information",
+            "example": "Target • 20.0%"
+          },
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["bank", "erp"]
+            },
+            "description": "Integration requirements for this metric",
+            "example": ["erp"]
+          },
+          "x-requires-integration": {
+            "description": "\"bank\" requires bank integration, \"erp\" requires ERP integration"
+          }
+        }
+      },
+      "FinancialChartsResponse": {
+        "type": "object",
+        "required": ["salesData", "customerConcentration"],
+        "properties": {
+          "salesData": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlySalesData"
+            },
+            "description": "Time-series data for the last 9 months"
+          },
+          "customerConcentration": {
+            "$ref": "#/components/schemas/CustomerConcentration"
+          }
+        }
+      },
+      "MonthlySalesData": {
+        "type": "object",
+        "required": ["month", "sales", "cashFlow", "revenue", "expenses"],
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "Month abbreviation",
+            "example": "Feb"
+          },
+          "sales": {
+            "type": "number",
+            "description": "Monthly sales amount in euros",
+            "example": 200000
+          },
+          "cashFlow": {
+            "type": "number",
+            "description": "Monthly cash flow amount in euros",
+            "example": 150000
+          },
+          "revenue": {
+            "type": "number",
+            "description": "Monthly revenue amount in euros",
+            "example": 180000
+          },
+          "expenses": {
+            "type": "number",
+            "description": "Monthly expenses amount in euros",
+            "example": 120000
+          }
+        }
+      },
+      "CustomerConcentration": {
+        "type": "object",
+        "required": ["topCustomersPercentage"],
+        "properties": {
+          "topCustomersPercentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of revenue from top 5 customers",
+            "example": 53
+          }
+        }
+      },
+      "CustomersResponse": {
+        "type": "object",
+        "required": ["customers", "analytics", "pagination"],
+        "properties": {
+          "customers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Customer"
+            },
+            "description": "Array of customers"
+          },
+          "analytics": {
+            "$ref": "#/components/schemas/CustomerAnalytics"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "required": [
+          "businessName",
+          "vat",
+          "onboarded",
+          "country",
+          "type",
+          "sector"
+        ],
+        "properties": {
+          "businessName": {
+            "type": "string",
+            "description": "Legal business name",
+            "example": "Baltic Food Traders Ltd"
+          },
+          "vat": {
+            "type": "string",
+            "description": "VAT registration number",
+            "example": "947265052"
+          },
+          "onboarded": {
+            "type": "string",
+            "description": "Onboarding date and time",
+            "example": "2 July 2025, 17:22 PM"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country of registration",
+            "example": "Estonia"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["SB", "SME"],
+            "description": "Business type - SB (Small Business) or SME (Small Medium Enterprise)",
+            "example": "SB"
+          },
+          "sector": {
+            "type": "string",
+            "description": "Business sector",
+            "example": "Food & Beverages Wholesale"
+          }
+        }
+      },
+      "CustomerAnalytics": {
+        "type": "object",
+        "required": [
+          "businessSectors",
+          "onboardingData",
+          "revenueVariation",
+          "totalCustomers"
+        ],
+        "properties": {
+          "businessSectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BusinessSector"
+            },
+            "description": "Top business sectors by financed volume"
+          },
+          "onboardingData": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OnboardingData"
+            },
+            "description": "Monthly customer onboarding trends"
+          },
+          "revenueVariation": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RevenueVariation"
+            },
+            "description": "Revenue distribution by range"
+          },
+          "totalCustomers": {
+            "type": "integer",
+            "description": "Total number of customers",
+            "example": 3824
+          }
+        }
+      },
+      "BusinessSector": {
+        "type": "object",
+        "required": ["name", "percentage", "color"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Sector name",
+            "example": "Construction Materials"
+          },
+          "percentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of financed volume",
+            "example": 23
+          },
+          "color": {
+            "type": "string",
+            "description": "Hex color code for visualization",
+            "example": "#2f9a8a"
+          }
+        }
+      },
+      "OnboardingData": {
+        "type": "object",
+        "required": ["month", "value"],
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "Month abbreviation",
+            "example": "Mar"
+          },
+          "value": {
+            "type": "integer",
+            "description": "Number of customers onboarded",
+            "example": 0
+          }
+        }
+      },
+      "RevenueVariation": {
+        "type": "object",
+        "required": ["range", "value"],
+        "properties": {
+          "range": {
+            "type": "string",
+            "description": "Revenue range",
+            "example": "0-1M"
+          },
+          "value": {
+            "type": "integer",
+            "description": "Number of customers in this range",
+            "example": 1250
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "required": ["page", "limit", "total", "totalPages"],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "description": "Current page number",
+            "example": 1
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Items per page",
+            "example": 20
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of items",
+            "example": 3824
+          },
+          "totalPages": {
+            "type": "integer",
+            "description": "Total number of pages",
+            "example": 192
+          }
+        }
+      },
+      "TransactionsTimelineResponse": {
+        "type": "object",
+        "required": ["kpis", "transactions"],
+        "properties": {
+          "kpis": {
+            "$ref": "#/components/schemas/TransactionKPIs"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BankTransaction"
+            },
+            "description": "Array of bank transactions sorted by date (newest first)"
+          }
+        }
+      },
+      "TransactionKPIs": {
+        "type": "object",
+        "required": ["accounts", "totalCredits", "netCashFlow"],
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of account numbers",
+            "example": [
+              "GR12 0110 0120 0000 0001 2300 695",
+              "GR45 0171 0120 0000 0009 8765 432"
+            ]
+          },
+          "totalCredits": {
+            "type": "number",
+            "description": "Total credit amount in EUR for the period",
+            "example": 22380.0
+          },
+          "netCashFlow": {
+            "type": "number",
+            "description": "Net cash flow (credits - debits) in EUR",
+            "example": -13454.62
+          }
+        }
+      },
+      "BankTransaction": {
+        "type": "object",
+        "required": [
+          "id",
+          "date",
+          "account",
+          "description",
+          "amountEur",
+          "category"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique transaction identifier",
+            "example": "t1"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Transaction date in ISO format",
+            "example": "2025-07-28"
+          },
+          "account": {
+            "type": "string",
+            "description": "Bank account number",
+            "example": "GR12 0110 0120 0000 0001 2300 695"
+          },
+          "description": {
+            "type": "string",
+            "description": "Transaction description",
+            "example": "Card purchase - Office Supplies"
+          },
+          "amountEur": {
+            "type": "number",
+            "description": "Transaction amount in EUR (positive for credit, negative for debit)",
+            "example": -284.12
+          },
+          "category": {
+            "type": "string",
+            "enum": ["income", "expense", "transfer"],
+            "description": "Transaction category",
+            "example": "expense"
+          }
+        }
+      },
+      "PLPredictionsResponse": {
+        "type": "object",
+        "required": ["kpis", "monthlyData", "expenseCategories"],
+        "properties": {
+          "kpis": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PLKPI"
+            },
+            "description": "Key performance indicators for P&L"
+          },
+          "monthlyData": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlyPLData"
+            },
+            "description": "Monthly P&L data for trend analysis"
+          },
+          "expenseCategories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExpenseCategory"
+            },
+            "description": "Detailed expense category breakdown"
+          }
+        }
+      },
+      "PLKPI": {
+        "type": "object",
+        "required": ["label", "value"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "KPI label",
+            "example": "Total Revenue"
+          },
+          "value": {
+            "type": "number",
+            "description": "KPI value",
+            "example": 600000.0
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency symbol (if applicable)",
+            "example": "€"
+          },
+          "digits": {
+            "type": "integer",
+            "description": "Number of decimal places",
+            "example": 2
+          },
+          "suffix": {
+            "type": "string",
+            "description": "Suffix for the value (e.g., percentage)",
+            "example": "%"
+          }
+        }
+      },
+      "MonthlyPLData": {
+        "type": "object",
+        "required": ["month", "revenue", "expenses", "income", "margin"],
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "Month and year",
+            "example": "Sep 2024"
+          },
+          "revenue": {
+            "type": "number",
+            "description": "Monthly revenue in EUR",
+            "example": 250000
+          },
+          "expenses": {
+            "type": "number",
+            "description": "Monthly expenses in EUR",
+            "example": 220000
+          },
+          "income": {
+            "type": "number",
+            "description": "Monthly net income in EUR",
+            "example": 30000
+          },
+          "margin": {
+            "type": "number",
+            "description": "Profit margin percentage",
+            "example": 12.0
+          }
+        }
+      },
+      "ExpenseCategory": {
+        "type": "object",
+        "required": [
+          "category",
+          "amount",
+          "transactions",
+          "avgAmount",
+          "percentage"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Expense category name",
+            "example": "Cost of Goods Sold (COGS)"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Total amount for this category in EUR",
+            "example": 291750
+          },
+          "transactions": {
+            "type": "integer",
+            "description": "Number of transactions in this category",
+            "example": 320
+          },
+          "avgAmount": {
+            "type": "number",
+            "description": "Average transaction amount in EUR",
+            "example": 912
+          },
+          "percentage": {
+            "type": "number",
+            "description": "Percentage of total expenses",
+            "example": 55.0
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error", "message"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error code",
+            "example": "CUSTOMER_NOT_FOUND"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message",
+            "example": "Customer with ID 'euromed-supplies-gmbh' not found"
+          },
+          "details": {
+            "type": "string",
+            "description": "Additional error details",
+            "example": "Please verify the customer ID and try again"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Financial Overview",
+      "description": "Endpoints for financial overview dashboard data"
+    },
+    {
+      "name": "Customers",
+      "description": "Endpoints for customers dashboard data"
+    },
+    {
+      "name": "Transactions Timeline",
+      "description": "Endpoints for bank transactions timeline data"
+    },
+    {
+      "name": "P&L Predictions",
+      "description": "Endpoints for profit & loss statements and predictions data"
+    }
+  ]
+}

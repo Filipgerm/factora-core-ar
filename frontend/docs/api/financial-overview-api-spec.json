@@ -1,0 +1,416 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Financial Overview API",
+    "description": "API endpoints for financial overview dashboard data",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Support",
+      "email": "support@factora.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.factora.com",
+      "description": "Production server"
+    },
+    {
+      "url": "https://staging-api.factora.com",
+      "description": "Staging server"
+    }
+  ],
+  "paths": {
+    "/api/customers/{customerId}/financial-overview/metrics": {
+      "get": {
+        "summary": "Get financial metrics for a customer",
+        "description": "Returns key financial metrics including turnover, margin, EBITDA, balance, credit limit, outstanding AR, DSO, and default rate",
+        "operationId": "getFinancialMetrics",
+        "tags": ["Financial Overview"],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "description": "Customer identifier (slug format)",
+            "schema": {
+              "type": "string",
+              "example": "euromed-supplies-gmbh"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Financial metrics retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialMetricsResponse"
+                },
+                "example": {
+                  "metrics": [
+                    {
+                      "title": "Annual Turnover",
+                      "value": "€4,748,433.00",
+                      "change": "13% increase from last year",
+                      "trend": "up",
+                      "year": "2025",
+                      "requires": []
+                    },
+                    {
+                      "title": "Margin",
+                      "value": "18.5%",
+                      "subtitle": "Target • 20.0%",
+                      "year": "2025",
+                      "requires": []
+                    },
+                    {
+                      "title": "EBITDA",
+                      "value": "€635,235.00",
+                      "change": "7% increase from last year",
+                      "trend": "up",
+                      "year": "2025",
+                      "requires": []
+                    },
+                    {
+                      "title": "Balance",
+                      "value": "€1,247,832.00",
+                      "change": "8% increase from last year",
+                      "trend": "up",
+                      "year": "2025",
+                      "requires": ["bank"]
+                    },
+                    {
+                      "title": "Credit Limit",
+                      "value": "€100,000.00",
+                      "year": "2025",
+                      "requires": ["erp"]
+                    },
+                    {
+                      "title": "Outstanding AR",
+                      "value": "€274,932.23",
+                      "change": "13% increase from last year",
+                      "trend": "up",
+                      "year": "2025",
+                      "requires": ["erp"]
+                    },
+                    {
+                      "title": "DSO",
+                      "value": "38 Days",
+                      "change": "24% Decrease from last year",
+                      "trend": "down",
+                      "year": "2025",
+                      "requires": ["erp"]
+                    },
+                    {
+                      "title": "Default Rate",
+                      "value": "2.3%",
+                      "change": "0.5% decrease from last year",
+                      "trend": "down",
+                      "year": "2025",
+                      "requires": ["erp"]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/{customerId}/financial-overview/charts": {
+      "get": {
+        "summary": "Get financial charts data for a customer",
+        "description": "Returns time-series data for the last 9 months including sales, cash flow, revenue, expenses, and customer concentration",
+        "operationId": "getFinancialCharts",
+        "tags": ["Financial Overview"],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "description": "Customer identifier (slug format)",
+            "schema": {
+              "type": "string",
+              "example": "euromed-supplies-gmbh"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Financial charts data retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialChartsResponse"
+                },
+                "example": {
+                  "salesData": [
+                    {
+                      "month": "Feb",
+                      "sales": 200000,
+                      "cashFlow": 150000,
+                      "revenue": 180000,
+                      "expenses": 120000
+                    },
+                    {
+                      "month": "Mar",
+                      "sales": 180000,
+                      "cashFlow": 120000,
+                      "revenue": 165000,
+                      "expenses": 135000
+                    },
+                    {
+                      "month": "Apr",
+                      "sales": 350000,
+                      "cashFlow": 180000,
+                      "revenue": 320000,
+                      "expenses": 140000
+                    },
+                    {
+                      "month": "May",
+                      "sales": 360000,
+                      "cashFlow": 160000,
+                      "revenue": 340000,
+                      "expenses": 180000
+                    },
+                    {
+                      "month": "Jun",
+                      "sales": 340000,
+                      "cashFlow": 170000,
+                      "revenue": 315000,
+                      "expenses": 145000
+                    },
+                    {
+                      "month": "Jul",
+                      "sales": 320000,
+                      "cashFlow": 150000,
+                      "revenue": 295000,
+                      "expenses": 145000
+                    },
+                    {
+                      "month": "Aug",
+                      "sales": 300000,
+                      "cashFlow": 100000,
+                      "revenue": 280000,
+                      "expenses": 180000
+                    },
+                    {
+                      "month": "Sep",
+                      "sales": 280000,
+                      "cashFlow": 120000,
+                      "revenue": 265000,
+                      "expenses": 145000
+                    },
+                    {
+                      "month": "Oct",
+                      "sales": 260000,
+                      "cashFlow": 180000,
+                      "revenue": 245000,
+                      "expenses": 125000
+                    }
+                  ],
+                  "customerConcentration": {
+                    "topCustomersPercentage": 53
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "FinancialMetricsResponse": {
+        "type": "object",
+        "required": ["metrics"],
+        "properties": {
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FinancialMetric"
+            },
+            "description": "Array of financial metrics"
+          }
+        }
+      },
+      "FinancialMetric": {
+        "type": "object",
+        "required": ["title", "value", "year", "requires"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Display name of the metric",
+            "example": "Annual Turnover"
+          },
+          "value": {
+            "type": "string",
+            "description": "Current value of the metric (formatted with currency/units)",
+            "example": "€4,748,433.00"
+          },
+          "change": {
+            "type": "string",
+            "description": "Year-over-year change description",
+            "example": "13% increase from last year"
+          },
+          "trend": {
+            "type": "string",
+            "enum": ["up", "down"],
+            "description": "Visual trend indicator",
+            "example": "up"
+          },
+          "year": {
+            "type": "string",
+            "description": "Year the metric represents",
+            "example": "2025"
+          },
+          "subtitle": {
+            "type": "string",
+            "description": "Additional context or target information",
+            "example": "Target • 20.0%"
+          },
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["bank", "erp"]
+            },
+            "description": "Integration requirements for this metric",
+            "example": ["erp"]
+          },
+          "x-requires-integration": {
+            "description": "\"bank\" requires bank integration, \"erp\" requires ERP integration"
+          }
+        }
+      },
+      "FinancialChartsResponse": {
+        "type": "object",
+        "required": ["salesData", "customerConcentration"],
+        "properties": {
+          "salesData": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlySalesData"
+            },
+            "description": "Time-series data for the last 9 months"
+          },
+          "customerConcentration": {
+            "$ref": "#/components/schemas/CustomerConcentration"
+          }
+        }
+      },
+      "MonthlySalesData": {
+        "type": "object",
+        "required": ["month", "sales", "cashFlow", "revenue", "expenses"],
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "Month abbreviation",
+            "example": "Feb"
+          },
+          "sales": {
+            "type": "number",
+            "description": "Monthly sales amount in euros",
+            "example": 200000
+          },
+          "cashFlow": {
+            "type": "number",
+            "description": "Monthly cash flow amount in euros",
+            "example": 150000
+          },
+          "revenue": {
+            "type": "number",
+            "description": "Monthly revenue amount in euros",
+            "example": 180000
+          },
+          "expenses": {
+            "type": "number",
+            "description": "Monthly expenses amount in euros",
+            "example": 120000
+          }
+        }
+      },
+      "CustomerConcentration": {
+        "type": "object",
+        "required": ["topCustomersPercentage"],
+        "properties": {
+          "topCustomersPercentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of revenue from top 5 customers",
+            "example": 53
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error", "message"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error code",
+            "example": "CUSTOMER_NOT_FOUND"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message",
+            "example": "Customer with ID 'euromed-supplies-gmbh' not found"
+          },
+          "details": {
+            "type": "string",
+            "description": "Additional error details",
+            "example": "Please verify the customer ID and try again"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Financial Overview",
+      "description": "Endpoints for financial overview dashboard data"
+    }
+  ]
+}
