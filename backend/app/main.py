@@ -1,9 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 import uvicorn
-from pathlib import Path
 
 from app.db.postgres import connect_to_database, close_database_connection
 from app.api.routes.gemi_routes import router as companies_router
@@ -62,14 +60,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Trust proxy headers when behind nginx reverse proxy
-# This ensures X-Forwarded-* headers are properly handled
-if settings.TRUSTED_PROXIES != "*":
-    # If specific proxies are configured, use TrustedHostMiddleware
-    # For now, we trust all proxies when TRUSTED_PROXIES is "*"
-    pass
-# FastAPI/Starlette automatically handles X-Forwarded-* headers
-# when the request comes through a trusted proxy
 
 app.include_router(companies_router, prefix="/companies", tags=["External APIs"])
 app.include_router(file_router, prefix="/files", tags=["File Management"])

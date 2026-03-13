@@ -23,9 +23,16 @@ def _ensure_db(db: Optional[AsyncSession]) -> AsyncSession:
 def get_db(
     db: Annotated[Optional[AsyncSession], Depends(get_db_session)] = None,
 ) -> AsyncSession:
-    """
-    If FastAPI DI runs, it will keep 'db' as None and we resolve it internally.
-    If you call this yourself and pass a db, use that.
+    """Return the injected database session, raising 503 if unavailable.
+
+    Args:
+        db: AsyncSession provided by FastAPI dependency injection.
+
+    Returns:
+        A valid :class:`AsyncSession` instance.
+
+    Raises:
+        HTTPException: 503 if the database session is not available.
     """
     return _ensure_db(db)
 
@@ -33,23 +40,27 @@ def get_db(
 def get_user_service(
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ) -> UserService:
-    db = _ensure_db(db)  # allows manual use if you passed db explicitly
-    # Fail fast if pepper is missing/weak
+    """Create a :class:`UserService` scoped to the current request's DB session.
+
+    Args:
+        db: AsyncSession injected by :func:`get_db`.
+
+    Returns:
+        A :class:`UserService` instance with the request-scoped session.
+
+    Raises:
+        HTTPException: 500 if ``CODE_PEPPER`` is missing or shorter than 16 chars.
+        HTTPException: 503 if the database session is unavailable.
+    """
+    db = _ensure_db(db)
     if not settings.CODE_PEPPER or len(settings.CODE_PEPPER) < 16:
         raise HTTPException(
             status_code=500,
             detail="CODE_PEPPER missing or too short (>=16 chars required)",
         )
-
-    # return UserService(db, code_pepper=settings.CODE_PEPPER, rate_limiter=_limiter) Later improved version - Redis
-    return UserService(
-        db, code_pepper=settings.CODE_PEPPER
-    )  # if you’re not using Redis yet)
-
-    # return UserService(db, code_pepper=settings.CODE_PEPPER, rate_limiter=_limiter) Later improved version - Redis
-    return UserService(
-        db, code_pepper=settings.CODE_PEPPER
-    )  # if you’re not using Redis yet
+    # TODO(redis): swap for rate-limited version once Redis is integrated:
+    # return UserService(db, code_pepper=settings.CODE_PEPPER, rate_limiter=_limiter)
+    return UserService(db, code_pepper=settings.CODE_PEPPER)
 
 
 def get_user_controller(
