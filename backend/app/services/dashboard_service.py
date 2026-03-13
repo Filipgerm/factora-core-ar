@@ -28,7 +28,11 @@ from app.db.database_models import AadeInvoiceModel, AadeDocumentModel, InvoiceD
 
 
 class DashboardService:
-    """DB session is injected per-call."""
+    """Stateless service that computes all dashboard metrics from the DB.
+
+    The database session is injected per call so that the service can be
+    shared across requests without holding a long-lived connection.
+    """
 
     async def get_dashboard_pl_metrics(
         self, db: AsyncSession, request: DashboardMetricsRequest
@@ -285,7 +289,21 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> float:
-        """Sum of signed amounts (normal + fee, transfers also included for now, but to be further examined)."""
+        """Return the net cash flow (sum of all signed amounts) for the period.
+
+        Includes ``normal`` and ``fee`` mode transactions. Transfers are currently
+        included but should be reviewed before production use.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            Net cash flow as a float (positive = inflow, negative = outflow).
+        """
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
         q = (
@@ -306,7 +324,20 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> float:
-        f"""Sum of positive amounts (inflows) in the period, mode='normal' -> (to be discussed) ."""
+        """Return total revenue (sum of positive transaction amounts) for the period.
+
+        Only ``mode='normal'`` transactions are included.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            Total revenue as a non-negative float.
+        """
 
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
@@ -333,7 +364,20 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> float:
-        """ABS(sum of negative amounts) with mode='normal'-> (to be discussed) ."""
+        """Return total expenses (absolute sum of negative transaction amounts) for the period.
+
+        Only ``mode='normal'`` transactions are included.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            Total expenses as a non-negative float (absolute value of outflows).
+        """
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
         expenses_expr = case((Transaction.amount < 0, Transaction.amount), else_=0)
@@ -355,7 +399,16 @@ class DashboardService:
     async def get_net_income(
         self, db: AsyncSession, revenue: float, expenses: float
     ) -> float:
-        """Net income = revenue − expenses (expenses already absolute)."""
+        """Compute net income as revenue minus expenses.
+
+        Args:
+            db: Unused; kept for interface consistency with other metric methods.
+            revenue: Pre-computed total revenue (non-negative float).
+            expenses: Pre-computed total expenses (non-negative absolute float).
+
+        Returns:
+            Net income as ``revenue - expenses``.
+        """
         return float(revenue) - float(expenses)
 
     async def get_average_margin(
@@ -365,19 +418,41 @@ class DashboardService:
         start_date: date,
         end_date: date,
         currency: str,
-    ) -> float:
-        """Calculate profit margin percentage
+    ) -> float | None:
+        """Return the profit margin percentage for the period.
 
-        MVP: return None (no COGS). If you later add a `cogs_amount` per txn (or cost basis),
-        compute (revenue - cogs) / revenue guarded for division-by-zero.
+        MVP: returns ``None`` because COGS data is not yet available.
+        Future implementation should compute ``(revenue - cogs) / revenue``
+        guarded for division-by-zero.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            ``None`` (MVP placeholder).
         """
         return None
 
     async def _get_balance_and_currency(
         self, db: AsyncSession, customer_id: str, currency: str
     ) -> Tuple[float, str]:
-        """
-        MVP: sum balances of this customer's accounts in the requested currency (EUR).
+        """Aggregate the total balance across all of a customer's accounts.
+
+        MVP: sums balances for accounts in the requested currency only.
+        Multi-currency conversion is not yet implemented.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope accounts.
+            currency: ISO-4217 currency code to filter accounts.
+
+        Returns:
+            Tuple of ``(total_balance, currency_code)``; currency defaults to
+            the requested ``currency`` if no matching accounts are found.
         """
         q = (
             select(
@@ -405,7 +480,18 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> List[Dict[str, Any]]:
-        """Aggregate revenue by calendar month."""
+        """Aggregate revenue by calendar month within the reporting window.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            List of ``{"month": "YYYY-MM", "value": float}`` dicts sorted ascending.
+        """
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
         revenue_expr = case((Transaction.amount > 0, Transaction.amount), else_=0)
@@ -450,7 +536,19 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> List[Dict[str, Any]]:
-        """Aggregate expenses by calendar month."""
+        """Aggregate expenses by calendar month within the reporting window.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            List of ``{"month": "YYYY-MM", "value": float}`` dicts with absolute
+            (non-negative) values sorted descending by default.
+        """
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
         expenses_expr = case((Transaction.amount < 0, Transaction.amount), else_=0)

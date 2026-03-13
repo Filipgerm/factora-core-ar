@@ -353,8 +353,13 @@ class SaltEdgeService:
 
     # ---------- Helper methods for database storage ----------
 
-    async def _store_or_update_customer(self, db: AsyncSession, customer_data):
-        """Store or update a customer in the database."""
+    async def _store_or_update_customer(self, db: AsyncSession, customer_data) -> None:
+        """Upsert a SaltEdge customer into the local database.
+
+        Args:
+            db: Async database session.
+            customer_data: SaltEdge SDK customer model instance to persist.
+        """
         customer_id = customer_data.customer_id  # Use string directly
 
         # Check if customer exists
@@ -421,8 +426,15 @@ class SaltEdgeService:
 
     async def _store_or_update_account(
         self, db: AsyncSession, account_data, connection_id: str = None
-    ):
-        """Store or update a bank account in the database."""
+    ) -> None:
+        """Upsert a SaltEdge bank account into the local database.
+
+        Args:
+            db: Async database session.
+            account_data: SaltEdge SDK account model instance to persist.
+            connection_id: External SaltEdge connection ID.  If ``None``,
+                the method attempts to read it from ``account_data.connection_id``.
+        """
         account_id = account_data.id  # Use string directly
 
         # If connection_id not provided, try to get it from account_data
@@ -476,8 +488,18 @@ class SaltEdgeService:
 
         await db.commit()
 
-    async def _store_or_update_transaction(self, db: AsyncSession, transaction_data):
-        """Store or update a transaction in the database."""
+    async def _store_or_update_transaction(self, db: AsyncSession, transaction_data) -> None:
+        """Upsert a SaltEdge transaction into the local database.
+
+        Bank-specific extras (``posting_date``, ``merchant_id``, ``mcc``,
+        ``original_amount``, ``original_currency_code``) are not direct ORM
+        columns; they are persisted inside the JSONB ``extra`` field via
+        ``transaction_data.extra.model_dump()``.
+
+        Args:
+            db: Async database session.
+            transaction_data: SaltEdge SDK transaction model instance to persist.
+        """
         # Check if transaction exists by external ID
         existing = await db.execute(
             select(Transaction).where(Transaction.id == transaction_data.id)
@@ -524,8 +546,13 @@ class SaltEdgeService:
 
         await db.commit()
 
-    async def _store_or_update_consent(self, db: AsyncSession, consent_data):
-        """Store or update a consent in the database."""
+    async def _store_or_update_consent(self, db: AsyncSession, consent_data) -> None:
+        """Upsert a SaltEdge consent record into the local database.
+
+        Args:
+            db: Async database session.
+            consent_data: SaltEdge SDK consent model instance to persist.
+        """
         consent_id = consent_data.id  # Use string directly
 
         # Get connection_id - need to look up internal ID by external_id
