@@ -103,8 +103,28 @@ def verify_password(
         return False
 
 
+_ACCESS_TOKEN_TTL_HOURS = 24
+
+
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def hash_token(raw_token: str) -> str:
+    """Return a SHA-256 hex digest of *raw_token* for safe DB storage.
+
+    The raw token is returned to the client; only its hash is persisted so
+    that a database read cannot be used to forge a valid session.
+
+    Args:
+        raw_token: The raw opaque token string (e.g. from ``secrets.token_urlsafe``).
+
+    Returns:
+        A 64-character lowercase hex string.
+    """
+    import hashlib
+
+    return hashlib.sha256(raw_token.encode()).hexdigest()
 
 
 def sha256_code(code: str, *, pepper: str) -> str:
@@ -1186,17 +1206,20 @@ class UserService:
                     message="Invalid username or password.",
                 )
 
-            # 3) Happy path: issue an opaque access token (swap for JWT if desired)
+            # 3) Happy path: issue an opaque access token (swap for JWT if desired).
+            # The raw token is returned to the client; only its SHA-256 hash is
+            # stored so that a DB compromise cannot replay credentials.
             access_token = secrets.token_urlsafe(32)
             now = now_utc()
+            token_expires_at = now + timedelta(hours=_ACCESS_TOKEN_TTL_HOURS)
 
-            # Optionally persist session metadata; adjust for auth/session model
             await self.db.execute(
                 update(Sellers)
                 .where(Sellers.id == seller.id)
                 .values(
                     last_login_at=now,
-                    last_access_token=access_token,
+                    last_access_token=hash_token(access_token),
+                    access_token_expires_at=token_expires_at,
                 )
             )
             await self.db.commit()
@@ -1221,9 +1244,9 @@ class UserService:
         - Unhappy path: token not found -> return success=False (401 at route).
         """
         try:
-            # Find user by current token
+            # Look up user by the SHA-256 hash of the raw bearer token
             result = await self.db.execute(
-                select(Sellers).where(Sellers.last_access_token == token)
+                select(Sellers).where(Sellers.last_access_token == hash_token(token))
             )
             seller: Optional[Sellers] = result.scalar_one_or_none()
 
@@ -1232,11 +1255,11 @@ class UserService:
                     success=False, message="Invalid or expired token."
                 )
 
-            # Revoke token (simple approach: clear it)
+            # Revoke token and clear expiry
             await self.db.execute(
                 update(Sellers)
                 .where(Sellers.id == seller.id)
-                .values(last_access_token=None)
+                .values(last_access_token=None, access_token_expires_at=None)
             )
             await self.db.commit()
 
@@ -1273,12 +1296,14 @@ class UserService:
             reset_token = secrets.token_urlsafe(32)
             expires_at = now_utc() + timedelta(minutes=30)
 
+            hashed_token = hash_token(reset_token)
+
             # Persist token + expiry on the user
             await self.db.execute(
                 update(Sellers)
                 .where(Sellers.id == seller.id)
                 .values(
-                    password_reset_token=reset_token,
+                    password_reset_token=hashed_token,
                     password_reset_expires_at=expires_at,
                 )
             )
@@ -1312,9 +1337,13 @@ class UserService:
         Triggered after the user clicks the email link, lands on FE, and submits new password.
         """
         try:
+
+            # Technical Logic: We calculate the hash of what they sent and see if it exists in the DB.
+            incoming_hash = hash_token(request.token)
+
             # 1) Lookup the user by reset token
             result = await self.db.execute(
-                select(Sellers).where(Sellers.password_reset_token == request.token)
+                select(Sellers).where(Sellers.password_reset_token == incoming_hash)
             )
             seller: Optional[Sellers] = result.scalar_one_or_none()
 
@@ -1373,15 +1402,24 @@ class UserService:
         Unhappy paths return clear messages for the frontend.
         """
         try:
-            # 1) Authenticate via bearer token
+            # 1) Authenticate via bearer token (compare against stored SHA-256 hash)
             result = await self.db.execute(
-                select(Sellers).where(Sellers.last_access_token == token)
+                select(Sellers).where(Sellers.last_access_token == hash_token(token))
             )
             seller: Optional[Sellers] = result.scalar_one_or_none()
 
             if not seller or not seller.is_active:
                 return ServiceResponse(
                     success=False, message="Invalid authentication token."
+                )
+
+            # Enforce token expiry
+            if (
+                seller.access_token_expires_at
+                and seller.access_token_expires_at < now_utc()
+            ):
+                return ServiceResponse(
+                    success=False, message="Session expired. Please log in again."
                 )
 
             # 2) Verify current password against stored Argon2id hash
