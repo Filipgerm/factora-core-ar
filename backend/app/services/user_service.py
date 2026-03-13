@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import email
 from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
 from urllib.parse import urljoin
 from typing import Optional, Dict, Any, Literal
 import hashlib, secrets, string, re
@@ -61,12 +62,45 @@ ph = PasswordHasher(time_cost=3, memory_cost=64 * 1024, parallelism=2)
 
 
 def hash_password(password: str, *, pepper: str | None = None) -> str:
-    """
-    Returns a NON-REVERSIBLE Argon2id hash string you store in the DB.
+    """Returns an Argon2id hash string suitable for storage in the DB.
+
     Optionally mixes in a server-side pepper kept in a secrets manager.
+    Never call this for verification — use ``verify_password`` instead.
+
+    Args:
+        password: The plaintext password to hash.
+        pepper: Optional server-side secret prepended before hashing.
+
+    Returns:
+        An Argon2id hash string.
     """
     pwd = f"{pepper}{password}" if pepper else password
     return ph.hash(pwd)
+
+
+def verify_password(
+    stored_hash: str, password: str, *, pepper: str | None = None
+) -> bool:
+    """Verifies a plaintext password against an Argon2id stored hash.
+
+    Handles salt extraction internally via the Argon2 library; safe against
+    timing attacks. Returns ``False`` (never raises) on mismatch so callers
+    can use a simple boolean check.
+
+    Args:
+        stored_hash: The Argon2id hash retrieved from the database.
+        password: The plaintext password supplied by the user.
+        pepper: Optional server-side secret that was mixed in at hash time.
+
+    Returns:
+        ``True`` if the password matches, ``False`` otherwise.
+    """
+
+    pwd = f"{pepper}{password}" if pepper else password
+    try:
+        return ph.verify(stored_hash, pwd)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        return False
 
 
 def now_utc() -> datetime:
@@ -1143,10 +1177,10 @@ class UserService:
                     message="Invalid username or password.",
                 )
 
-            # 2) Verify password using the same hashing scheme as signup
-            supplied_hash = hash_password(request.password, pepper=self.code_pepper)
-            if supplied_hash != seller.password_hash:
-                # Wrong password
+            # 2) Verify password against the stored Argon2id hash
+            if not verify_password(
+                seller.password_hash, request.password, pepper=self.code_pepper
+            ):
                 return ServiceResponse(
                     success=False,
                     message="Invalid username or password.",
@@ -1350,22 +1384,24 @@ class UserService:
                     success=False, message="Invalid authentication token."
                 )
 
-            # 2) Verify current password
-            current_hash = hash_password(
-                request.current_password, pepper=self.code_pepper
-            )
-            if current_hash != seller.password_hash:
+            # 2) Verify current password against stored Argon2id hash
+            if not verify_password(
+                seller.password_hash, request.current_password, pepper=self.code_pepper
+            ):
                 return ServiceResponse(
                     success=False, message="Current password is incorrect."
                 )
 
             # 3) Prevent reusing the same password
-            new_hash = hash_password(request.new_password, pepper=self.code_pepper)
-            if new_hash == seller.password_hash:
+            if verify_password(
+                seller.password_hash, request.new_password, pepper=self.code_pepper
+            ):
                 return ServiceResponse(
                     success=False,
                     message="New password must be different from the current password.",
                 )
+
+            new_hash = hash_password(request.new_password, pepper=self.code_pepper)
 
             # 4) Update password and revoke token (force fresh login)
             now = now_utc()
