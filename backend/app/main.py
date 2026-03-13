@@ -27,14 +27,22 @@ async def lifespan(app: FastAPI):
     await close_database_connection()
 
 
-# Parse CORS origins from environment variable
-def get_cors_origins():
-    """Parse CORS origins from environment variable."""
-    cors_origins = settings.CORS_ORIGINS
-    if cors_origins == "*":
+def get_cors_origins() -> list[str]:
+    """Parse and return the list of allowed CORS origins from settings.
+
+    An empty ``CORS_ORIGINS`` string disables cross-origin access entirely
+    (safe production default).  Pass a comma-separated list or the literal
+    ``"*"`` only for development environments.
+
+    Returns:
+        List of allowed origin strings, e.g. ``["https://app.factora.eu"]``.
+    """
+    raw = settings.CORS_ORIGINS.strip()
+    if not raw:
+        return []
+    if raw == "*":
         return ["*"]
-    # Split by comma and strip whitespace
-    return [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 app = FastAPI(

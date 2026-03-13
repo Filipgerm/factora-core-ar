@@ -263,9 +263,9 @@ Add the following to your `.env` file for production SMS/email services:
 
 ```env
 # SMS Service (BREVO)
-BREVO_SMTP_API_KEY=kb938VAS05XzgrCE
-BREVO_SENDER_EMAIL=info@factora.eu
-BREVO_SENDER_EMAIL=factora
+BREVO_SMTP_API_KEY=<your-brevo-smtp-api-key>
+BREVO_SENDER_EMAIL=<your-sender-email>
+BREVO_SENDER_NAME=<your-sender-name>
 BREVO_SENDER_NUMBER=""
 ```
 

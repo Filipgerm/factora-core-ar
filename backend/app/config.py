@@ -40,8 +40,13 @@ class Settings(BaseSettings):
 
     # CORS and Proxy Configuration
     CORS_ORIGINS: str = Field(
-        default="*",
-        description="Comma-separated list of allowed CORS origins. Use '*' for all origins (development only). Example: 'https://yourdomain.com,https://www.yourdomain.com'",
+        default="",
+        description=(
+            "Comma-separated list of allowed CORS origins. "
+            "Leave empty to deny all cross-origin requests (production default). "
+            "Use 'http://localhost:3000' for local development. "
+            "Example: 'https://app.factora.eu,https://www.factora.eu'"
+        ),
     )
     TRUSTED_PROXIES: str = Field(
         default="*",
