@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class BrevoSMSClient:
+    """Thin wrapper around the Brevo (formerly Sendinblue) Transactional SMS API."""
 
     def __init__(self):
         cfg = Configuration()
@@ -17,12 +18,16 @@ class BrevoSMSClient:
         self._sms_api = TransactionalSMSApi(ApiClient(cfg))
 
     def send_sms(self, to_number: str, message: str) -> bool:
-        """
-        Send verification code via SMS
+        """Send a transactional SMS via Brevo.
 
-        @param to_number: Full phone number with country code
-        @param message: Message with Verification code to send
-        @returns: True if SMS was sent successfully, False otherwise
+        Args:
+            to_number: Full phone number with country code (E.164 format,
+                e.g. ``+306912345678``).
+            message: Message body containing the verification code or text
+                to deliver.
+
+        Returns:
+            ``True`` if the API accepted the message, ``False`` on any error.
         """
         sms = SendTransacSms(
             sender=self._sender,
@@ -40,13 +45,13 @@ class BrevoSMSClient:
             )
             logger.info(
                 "Brevo SMS sent/enqueued ok | recipient=%s | message_id=%s",
-                recipient,
+                to_number,
                 message_id,
             )
-            return {"success": True, "message_id": message_id}
+            return True
         except ApiException as e:
-            logger.error(f"Brevo API error sending SMS to {to_number}: {e}")
-            return {"success": False, "error": str(e)}
+            logger.error("Brevo API error sending SMS to %s: %s", to_number, e)
+            return False
         except Exception as e:
-            logger.error(f"Unexpected error sending SMS to {to_number}: {str(e)}")
-            return {"success": False, "error": str(e)}
+            logger.error("Unexpected error sending SMS to %s: %s", to_number, e)
+            return False
