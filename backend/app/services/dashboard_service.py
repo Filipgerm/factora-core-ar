@@ -17,7 +17,6 @@ from app.models.dashboard import (
     PartySummary,
 )
 from typing import List
-from app.models.user import ServiceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case, and_, distinct
 from decimal import Decimal
@@ -76,7 +75,9 @@ class DashboardService:
                 db=db, customer_id=request.customer_id, currency=request.currency
             )
 
-            # Monthly aggregations
+            # Monthly aggregations — fetch revenue and expenses once, then derive
+            # net_income and margin from those pre-computed lists to avoid 4 extra
+            # round-trips to the DB.
             monthly_revenue = await self.get_monthly_revenue(
                 db=db,
                 customer_id=request.customer_id,
@@ -91,19 +92,13 @@ class DashboardService:
                 end_date=end_date,
                 currency=request.currency,
             )
-            monthly_net_income = await self.get_monthly_net_income(
-                db=db,
-                customer_id=request.customer_id,
-                start_date=start_date,
-                end_date=end_date,
-                currency=request.currency,
+            monthly_net_income = self._compute_monthly_net_income(
+                monthly_revenue=monthly_revenue,
+                monthly_expenses=monthly_expenses,
             )
-            monthly_margin = await self.get_monthly_margin(
-                db=db,
-                customer_id=request.customer_id,
-                start_date=start_date,
-                end_date=end_date,
-                currency=request.currency,
+            monthly_margin = self._compute_monthly_margin(
+                monthly_revenue=monthly_revenue,
+                monthly_expenses=monthly_expenses,
             )
 
             return DashboardMetricsResponse(
@@ -121,11 +116,12 @@ class DashboardService:
                 monthly_margin=monthly_margin,
             )
 
+        except HTTPException:
+            raise
         except Exception as e:
-            return ServiceResponse(
-                success=False,
-                message=f"Internal server error: {str(e)}",
-            )
+            raise HTTPException(
+                status_code=500, detail=f"Internal server error: {str(e)}"
+            ) from e
 
     async def get_seller_metrics(
         self, db: AsyncSession, request: SellerMetricsRequest
@@ -214,10 +210,14 @@ class DashboardService:
             query = query.where(Transaction.category == request.category)
 
         if request.merchant_id:
-            query = query.where(Transaction.merchant_id == request.merchant_id)
+            # merchant_id lives in the JSONB extra column, not a direct column
+            query = query.where(
+                Transaction.extra["merchant_id"].astext == request.merchant_id
+            )
 
         if request.mcc:
-            query = query.where(Transaction.mcc == request.mcc)
+            # mcc lives in the JSONB extra column, not a direct column
+            query = query.where(Transaction.extra["mcc"].astext == str(request.mcc))
 
         # Apply ordering (newest first by default, transaction id is the tie breaker)
         query = query.order_by(Transaction.made_on.desc(), Transaction.id.desc())
@@ -487,26 +487,24 @@ class DashboardService:
             for row in results
         ]
 
-    async def get_monthly_net_income(
+    def _compute_monthly_net_income(
         self,
-        db: AsyncSession,
-        customer_id: str,
-        start_date: date,
-        end_date: date,
-        currency: str,
+        monthly_revenue: List[Dict[str, Any]],
+        monthly_expenses: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Aggregate net income (revenue - expenses) by calendar month."""
-        monthly_revenue = await self.get_monthly_revenue(
-            db, customer_id, start_date, end_date, currency
-        )
-        monthly_expenses = await self.get_monthly_expenses(
-            db, customer_id, start_date, end_date, currency
-        )
+        """Derive net income per month from pre-computed revenue and expenses lists.
 
-        # Merge the two lists by month
+        Avoids issuing additional DB queries when both lists are already available.
+
+        Args:
+            monthly_revenue: Output of :meth:`get_monthly_revenue`.
+            monthly_expenses: Output of :meth:`get_monthly_expenses`.
+
+        Returns:
+            List of ``{"month": "YYYY-MM", "value": float}`` dicts sorted by month.
+        """
         revenue_dict = {item["month"]: item["value"] for item in monthly_revenue}
         expenses_dict = {item["month"]: item["value"] for item in monthly_expenses}
-
         all_months = sorted(set(revenue_dict.keys()) | set(expenses_dict.keys()))
         return [
             {
@@ -518,28 +516,55 @@ class DashboardService:
             for month in all_months
         ]
 
-    async def get_monthly_margin(
+    def _compute_monthly_margin(
         self,
-        db: AsyncSession,
-        customer_id: str,
-        start_date: date,
-        end_date: date,
-        currency: str,
+        monthly_revenue: List[Dict[str, Any]],
+        monthly_expenses: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Aggregate margin by calendar month (currently returns None for each month)."""
-        monthly_revenue = await self.get_monthly_revenue(
-            db, customer_id, start_date, end_date, currency
-        )
-        monthly_expenses = await self.get_monthly_expenses(
-            db, customer_id, start_date, end_date, currency
-        )
+        """Derive margin per month from pre-computed revenue and expenses lists.
 
-        # For now, margin is None as per MVP
+        MVP: margin is always ``None``; reserved for future COGS-based calculation.
+
+        Args:
+            monthly_revenue: Output of :meth:`get_monthly_revenue`.
+            monthly_expenses: Output of :meth:`get_monthly_expenses`.
+
+        Returns:
+            List of ``{"month": "YYYY-MM", "value": None}`` dicts sorted by month.
+        """
         revenue_dict = {item["month"]: item["value"] for item in monthly_revenue}
         expenses_dict = {item["month"]: item["value"] for item in monthly_expenses}
-
         all_months = sorted(set(revenue_dict.keys()) | set(expenses_dict.keys()))
         return [{"month": month, "value": None} for month in all_months]
+
+    @staticmethod
+    def _apply_invoice_filters(query, request: "AadeDocumentsRequest"):
+        """Apply optional AadeDocumentsRequest filters to any SQLAlchemy select.
+
+        Centralises the five optional filter conditions so that the data query
+        and the count query in :meth:`get_aade_documents` share a single source
+        of truth.
+
+        Args:
+            query: A SQLAlchemy ``Select`` statement targeting ``AadeInvoiceModel``.
+            request: The filter / pagination request object.
+
+        Returns:
+            The query with all applicable ``WHERE`` clauses appended.
+        """
+        if request.date_from:
+            query = query.where(AadeInvoiceModel.issue_date >= request.date_from)
+        if request.date_to:
+            query = query.where(AadeInvoiceModel.issue_date <= request.date_to)
+        if request.invoice_type:
+            query = query.where(AadeInvoiceModel.invoice_type == request.invoice_type)
+        if request.issuer_vat:
+            query = query.where(AadeInvoiceModel.issuer_vat == request.issuer_vat)
+        if request.counterpart_vat:
+            query = query.where(
+                AadeInvoiceModel.counterpart_vat == request.counterpart_vat
+            )
+        return query
 
     async def get_aade_documents(
         self, db: AsyncSession, request: AadeDocumentsRequest
@@ -563,26 +588,10 @@ class DashboardService:
             .where(AadeDocumentModel.buyer_id == request.buyer_id)
         )
 
-        # Apply filters
-        if request.date_from:
-            query = query.where(AadeInvoiceModel.issue_date >= request.date_from)
+        # Apply the same optional filters to both the data query and the count
+        # query via a shared helper to avoid copy-pasting five conditions.
+        query = self._apply_invoice_filters(query, request)
 
-        if request.date_to:
-            query = query.where(AadeInvoiceModel.issue_date <= request.date_to)
-
-        if request.invoice_type:
-            query = query.where(AadeInvoiceModel.invoice_type == request.invoice_type)
-
-        if request.issuer_vat:
-            query = query.where(AadeInvoiceModel.issuer_vat == request.issuer_vat)
-
-        if request.counterpart_vat:
-            query = query.where(
-                AadeInvoiceModel.counterpart_vat == request.counterpart_vat
-            )
-
-        # Get total count before pagination
-        # Create a count query by removing order_by and pagination, then counting
         count_query = (
             select(func.count(AadeInvoiceModel.id))
             .select_from(AadeInvoiceModel)
@@ -592,28 +601,7 @@ class DashboardService:
             )
             .where(AadeDocumentModel.buyer_id == request.buyer_id)
         )
-
-        # Apply same filters to count query
-        if request.date_from:
-            count_query = count_query.where(
-                AadeInvoiceModel.issue_date >= request.date_from
-            )
-        if request.date_to:
-            count_query = count_query.where(
-                AadeInvoiceModel.issue_date <= request.date_to
-            )
-        if request.invoice_type:
-            count_query = count_query.where(
-                AadeInvoiceModel.invoice_type == request.invoice_type
-            )
-        if request.issuer_vat:
-            count_query = count_query.where(
-                AadeInvoiceModel.issuer_vat == request.issuer_vat
-            )
-        if request.counterpart_vat:
-            count_query = count_query.where(
-                AadeInvoiceModel.counterpart_vat == request.counterpart_vat
-            )
+        count_query = self._apply_invoice_filters(count_query, request)
 
         count_result = await db.execute(count_query)
         total = count_result.scalar_one()
