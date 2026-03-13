@@ -1,6 +1,6 @@
 from fastapi import UploadFile
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Union, IO, Optional, Dict, Any
 from uuid import uuid4
 import re
@@ -36,7 +36,7 @@ def _build_storage_path(filename: str) -> str:
     Date-partitioned + uuid to avoid collisions.
     e.g., 2025/10/19/uuid_filename.pdf
     """
-    today = datetime.utcnow()
+    today = datetime.now(timezone.utc)
     return f"{today:%Y/%m/%d}/{uuid4().hex}_{_secure_filename(filename)}"
 
 

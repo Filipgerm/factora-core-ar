@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from enum import Enum
 from decimal import Decimal
 
@@ -44,8 +44,8 @@ class Invoice(BaseModel):
     status: PaymentStatus
     invoice_type: InvoiceType
     description: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     # Financial analysis fields
     days_overdue: Optional[int] = None
@@ -63,8 +63,8 @@ class AccountReceivable(BaseModel):
     due_date: date
     status: PaymentStatus
     days_overdue: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class AccountPayable(BaseModel):
@@ -77,8 +77,8 @@ class AccountPayable(BaseModel):
     due_date: date
     status: PaymentStatus
     days_until_due: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class FinancialMetrics(BaseModel):
@@ -95,7 +95,7 @@ class FinancialMetrics(BaseModel):
     accounts_payable_total: Decimal = Field(..., decimal_places=2)
     cash_flow: Decimal = Field(..., decimal_places=2)
     profit_margin: Decimal = Field(..., decimal_places=2)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Customer(BaseModel):
@@ -109,7 +109,7 @@ class Customer(BaseModel):
     total_purchases: Decimal = Field(default=Decimal('0.00'), decimal_places=2)
     average_payment_days: Optional[int] = None
     last_purchase_date: Optional[date] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Supplier(BaseModel):
@@ -122,7 +122,7 @@ class Supplier(BaseModel):
     total_purchases: Decimal = Field(default=Decimal('0.00'), decimal_places=2)
     average_payment_days: Optional[int] = None
     last_purchase_date: Optional[date] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ChatbotQuery(BaseModel):
@@ -139,7 +139,7 @@ class ChatbotResponse(BaseModel):
     data_sources: List[str] = []
     calculations: Optional[Dict[str, Any]] = None
     suggestions: Optional[List[str]] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class FinancialAnalysisRequest(BaseModel):
@@ -157,4 +157,4 @@ class FinancialAnalysisResponse(BaseModel):
     summary: str
     insights: List[str]
     recommendations: List[str]
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
