@@ -491,7 +491,10 @@ class SaltEdgeService:
         existing = existing.scalar_one_or_none()
 
         if existing:
-            # Update existing transaction
+            # Update existing transaction — only write columns that exist on the
+            # ORM model.  Bank-specific extras (posting_date, merchant_id, mcc,
+            # original_amount, original_currency_code, …) are stored in the
+            # JSONB `extra` column and must not be set as direct attributes.
             existing.status = transaction_data.status
             existing.mode = transaction_data.mode
             existing.duplicated = transaction_data.duplicated
@@ -500,32 +503,15 @@ class SaltEdgeService:
                 if transaction_data.made_on
                 else None
             )
-            existing.posting_date = (
-                date.fromisoformat(transaction_data.posting_date)
-                if getattr(transaction_data, "posting_date", None)
-                else None
-            )
             existing.amount = transaction_data.amount
             existing.currency_code = transaction_data.currency_code
             existing.category = getattr(transaction_data, "category", None)
-            existing.merchant_id = getattr(transaction_data, "merchant_id", None)
-            existing.mcc = getattr(transaction_data, "mcc", None)
             existing.description = getattr(transaction_data, "description", None)
-            existing.original_amount = getattr(
-                transaction_data, "original_amount", None
-            )
-            existing.original_currency_code = getattr(
-                transaction_data, "original_currency_code", None
-            )
             existing.extra = transaction_data.extra.model_dump(mode="json")
         else:
-            # Get account_id from transaction data
-            account_id = transaction_data.account_id  # Use string directly
-
-            # Create new transaction
             transaction = Transaction(
                 id=transaction_data.id,
-                account_id=account_id,
+                account_id=transaction_data.account_id,
                 status=transaction_data.status,
                 mode=transaction_data.mode,
                 duplicated=transaction_data.duplicated,
@@ -534,21 +520,10 @@ class SaltEdgeService:
                     if transaction_data.made_on
                     else None
                 ),
-                posting_date=(
-                    date.fromisoformat(transaction_data.posting_date)
-                    if getattr(transaction_data, "posting_date", None)
-                    else None
-                ),
                 amount=transaction_data.amount,
                 currency_code=transaction_data.currency_code,
                 category=getattr(transaction_data, "category", None),
-                merchant_id=getattr(transaction_data, "merchant_id", None),
-                mcc=getattr(transaction_data, "mcc", None),
                 description=getattr(transaction_data, "description", None),
-                original_amount=getattr(transaction_data, "original_amount", None),
-                original_currency_code=getattr(
-                    transaction_data, "original_currency_code", None
-                ),
                 extra=transaction_data.extra.model_dump(mode="json"),
             )
             db.add(transaction)
