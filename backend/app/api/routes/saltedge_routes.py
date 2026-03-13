@@ -2,7 +2,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Body, HTTPException, Path, Query
 from typing import Optional, Dict, Any
 
-from app.config import Settings as AppSettings
+from app.config import settings
 from app.services.saltedge_service import SaltEdgeService
 from app.controllers.saltedge_controller import SaltEdgeController
 from app.db.postgres import get_db_session
@@ -39,8 +39,12 @@ router = APIRouter()
 
 
 def get_controller() -> SaltEdgeController:
-    app_settings = AppSettings()
-    service = SaltEdgeService(app_settings)
+    """Provide a ``SaltEdgeController`` wired to the global settings singleton.
+
+    Returns:
+        A fully initialised :class:`SaltEdgeController` instance.
+    """
+    service = SaltEdgeService(settings)
     return SaltEdgeController(service)
 
 
