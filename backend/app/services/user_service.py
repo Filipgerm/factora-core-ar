@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import email
 from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
 from urllib.parse import urljoin
 from typing import Optional, Dict, Any, Literal
 import hashlib, secrets, string, re
@@ -61,16 +62,69 @@ ph = PasswordHasher(time_cost=3, memory_cost=64 * 1024, parallelism=2)
 
 
 def hash_password(password: str, *, pepper: str | None = None) -> str:
-    """
-    Returns a NON-REVERSIBLE Argon2id hash string you store in the DB.
+    """Returns an Argon2id hash string suitable for storage in the DB.
+
     Optionally mixes in a server-side pepper kept in a secrets manager.
+    Never call this for verification — use ``verify_password`` instead.
+
+    Args:
+        password: The plaintext password to hash.
+        pepper: Optional server-side secret prepended before hashing.
+
+    Returns:
+        An Argon2id hash string.
     """
     pwd = f"{pepper}{password}" if pepper else password
     return ph.hash(pwd)
 
 
+def verify_password(
+    stored_hash: str, password: str, *, pepper: str | None = None
+) -> bool:
+    """Verifies a plaintext password against an Argon2id stored hash.
+
+    Handles salt extraction internally via the Argon2 library; safe against
+    timing attacks. Returns ``False`` (never raises) on mismatch so callers
+    can use a simple boolean check.
+
+    Args:
+        stored_hash: The Argon2id hash retrieved from the database.
+        password: The plaintext password supplied by the user.
+        pepper: Optional server-side secret that was mixed in at hash time.
+
+    Returns:
+        ``True`` if the password matches, ``False`` otherwise.
+    """
+
+    pwd = f"{pepper}{password}" if pepper else password
+    try:
+        return ph.verify(stored_hash, pwd)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        return False
+
+
+_ACCESS_TOKEN_TTL_HOURS = 24
+
+
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def hash_token(raw_token: str) -> str:
+    """Return a SHA-256 hex digest of *raw_token* for safe DB storage.
+
+    The raw token is returned to the client; only its hash is persisted so
+    that a database read cannot be used to forge a valid session.
+
+    Args:
+        raw_token: The raw opaque token string (e.g. from ``secrets.token_urlsafe``).
+
+    Returns:
+        A 64-character lowercase hex string.
+    """
+    import hashlib
+
+    return hashlib.sha256(raw_token.encode()).hexdigest()
 
 
 def sha256_code(code: str, *, pepper: str) -> str:
@@ -1143,26 +1197,29 @@ class UserService:
                     message="Invalid username or password.",
                 )
 
-            # 2) Verify password using the same hashing scheme as signup
-            supplied_hash = hash_password(request.password, pepper=self.code_pepper)
-            if supplied_hash != seller.password_hash:
-                # Wrong password
+            # 2) Verify password against the stored Argon2id hash
+            if not verify_password(
+                seller.password_hash, request.password, pepper=self.code_pepper
+            ):
                 return ServiceResponse(
                     success=False,
                     message="Invalid username or password.",
                 )
 
-            # 3) Happy path: issue an opaque access token (swap for JWT if desired)
+            # 3) Happy path: issue an opaque access token (swap for JWT if desired).
+            # The raw token is returned to the client; only its SHA-256 hash is
+            # stored so that a DB compromise cannot replay credentials.
             access_token = secrets.token_urlsafe(32)
             now = now_utc()
+            token_expires_at = now + timedelta(hours=_ACCESS_TOKEN_TTL_HOURS)
 
-            # Optionally persist session metadata; adjust for auth/session model
             await self.db.execute(
                 update(Sellers)
                 .where(Sellers.id == seller.id)
                 .values(
                     last_login_at=now,
-                    last_access_token=access_token,
+                    last_access_token=hash_token(access_token),
+                    access_token_expires_at=token_expires_at,
                 )
             )
             await self.db.commit()
@@ -1187,9 +1244,9 @@ class UserService:
         - Unhappy path: token not found -> return success=False (401 at route).
         """
         try:
-            # Find user by current token
+            # Look up user by the SHA-256 hash of the raw bearer token
             result = await self.db.execute(
-                select(Sellers).where(Sellers.last_access_token == token)
+                select(Sellers).where(Sellers.last_access_token == hash_token(token))
             )
             seller: Optional[Sellers] = result.scalar_one_or_none()
 
@@ -1198,11 +1255,11 @@ class UserService:
                     success=False, message="Invalid or expired token."
                 )
 
-            # Revoke token (simple approach: clear it)
+            # Revoke token and clear expiry
             await self.db.execute(
                 update(Sellers)
                 .where(Sellers.id == seller.id)
-                .values(last_access_token=None)
+                .values(last_access_token=None, access_token_expires_at=None)
             )
             await self.db.commit()
 
@@ -1239,12 +1296,14 @@ class UserService:
             reset_token = secrets.token_urlsafe(32)
             expires_at = now_utc() + timedelta(minutes=30)
 
+            hashed_token = hash_token(reset_token)
+
             # Persist token + expiry on the user
             await self.db.execute(
                 update(Sellers)
                 .where(Sellers.id == seller.id)
                 .values(
-                    password_reset_token=reset_token,
+                    password_reset_token=hashed_token,
                     password_reset_expires_at=expires_at,
                 )
             )
@@ -1278,9 +1337,13 @@ class UserService:
         Triggered after the user clicks the email link, lands on FE, and submits new password.
         """
         try:
+
+            # Technical Logic: We calculate the hash of what they sent and see if it exists in the DB.
+            incoming_hash = hash_token(request.token)
+
             # 1) Lookup the user by reset token
             result = await self.db.execute(
-                select(Sellers).where(Sellers.password_reset_token == request.token)
+                select(Sellers).where(Sellers.password_reset_token == incoming_hash)
             )
             seller: Optional[Sellers] = result.scalar_one_or_none()
 
@@ -1339,9 +1402,9 @@ class UserService:
         Unhappy paths return clear messages for the frontend.
         """
         try:
-            # 1) Authenticate via bearer token
+            # 1) Authenticate via bearer token (compare against stored SHA-256 hash)
             result = await self.db.execute(
-                select(Sellers).where(Sellers.last_access_token == token)
+                select(Sellers).where(Sellers.last_access_token == hash_token(token))
             )
             seller: Optional[Sellers] = result.scalar_one_or_none()
 
@@ -1350,22 +1413,33 @@ class UserService:
                     success=False, message="Invalid authentication token."
                 )
 
-            # 2) Verify current password
-            current_hash = hash_password(
-                request.current_password, pepper=self.code_pepper
-            )
-            if current_hash != seller.password_hash:
+            # Enforce token expiry
+            if (
+                seller.access_token_expires_at
+                and seller.access_token_expires_at < now_utc()
+            ):
+                return ServiceResponse(
+                    success=False, message="Session expired. Please log in again."
+                )
+
+            # 2) Verify current password against stored Argon2id hash
+            if not verify_password(
+                seller.password_hash, request.current_password, pepper=self.code_pepper
+            ):
                 return ServiceResponse(
                     success=False, message="Current password is incorrect."
                 )
 
             # 3) Prevent reusing the same password
-            new_hash = hash_password(request.new_password, pepper=self.code_pepper)
-            if new_hash == seller.password_hash:
+            if verify_password(
+                seller.password_hash, request.new_password, pepper=self.code_pepper
+            ):
                 return ServiceResponse(
                     success=False,
                     message="New password must be different from the current password.",
                 )
+
+            new_hash = hash_password(request.new_password, pepper=self.code_pepper)
 
             # 4) Update password and revoke token (force fresh login)
             now = now_utc()

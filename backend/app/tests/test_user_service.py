@@ -1,918 +1,313 @@
-# tests/test_user_service.py
+"""Unit tests for UserService authentication logic.
+
+Tests use a mocked SQLAlchemy AsyncSession (no real database).
+Each test section covers a distinct area of the auth surface.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import hmac, hashlib
-import datetime as dt
-import importlib
-from types import SimpleNamespace
 
-# If you have the real model, prefer:
-from models.user import (
-    PhoneVerificationRequest,
-    PhoneVerificationCodeRequest,
-    EmailVerificationResponse,
-    EmailVerificationRequest,
-    EmailVerificationCodeRequest,
-    EmailVerificationCodeResponse,
-    BusinessCountryRequest,
-    BusinessInfoRequest,
-    ShareholderInfo,
-    ShareholderInfoRequest,
+from app.services.user_service import (
+    UserService,
+    hash_password,
+    verify_password,
+    hash_token,
+    now_utc,
 )
-from app.services.user_service import UserService
-
-# For demo, we use a tiny stub with the same attributes:
-# class PhoneVerificationRequest:
-#     def __init__(self, full_phone_number: str, onboarding_session_id: str | None):
-#         self.full_phone_number = full_phone_number
-#         self.onboarding_session_id = onboarding_session_id
-
-
-# test ensure_onboarding_session
-@pytest.mark.asyncio
-async def test_ensure_onboarding_session_creates_new(svc, fake_db):
-    sess_id = await svc.ensure_onboarding_session(
-        phone_number=None, existing_session_id=None
-    )
-    assert sess_id == "sess_fixed"  # we monkeypatched token_urlsafe
-    assert len(fake_db["onboarding_sessions"].docs) == 1
-    doc = fake_db["onboarding_sessions"].docs[0]
-    assert doc["_id"] == "sess_fixed"
-    assert doc["status"] == "draft"
-
-
-@pytest.mark.asyncio
-async def test_ensure_onboarding_session_reuses_existing(svc, fake_db):
-    sess_id = await svc.ensure_onboarding_session(
-        existing_session_id="reused", phone_number=None
-    )
-    assert sess_id == "reused"
-    # one update call to "touch" the session
-    updates = fake_db["onboarding_sessions"].updates
-    assert updates and updates[0][0] == {"_id": "reused"}
-
-
-# Test veriphy_phone_number
-@pytest.mark.asyncio
-async def test_verify_phone_happy_path(svc, fake_db):
-    req = PhoneVerificationRequest(
-        country_code="+30", phone_number="6948347822", onboarding_session_id="sess123"
-    )
-    resp = await svc.verify_phone_number(req)
-
-    assert resp.success is True
-    assert resp.message.lower().startswith("verification code sent")
-    assert resp.onboarding_session_id == "sess123"
-    assert resp.verification_id  # set by _create_verification_session
-
-    # DB side-effects happened?
-    verif_coll = fake_db["verification_sessions"]
-    assert len(verif_coll.docs) == 1
-    doc = verif_coll.docs[0]
-    assert doc["onboarding_session_id"] == "sess123"
-    assert doc["channel"] == "phone"
-    assert doc["target"] == "+306948347822"
-    assert "code_hash" in doc
-
-    # session step updated?
-    sess_coll = fake_db["onboarding_sessions"]
-    assert sess_coll.updates  # one update_one call recorded
-    _flt, update = sess_coll.updates[0]
-    assert update["$set"]["step"] == "phone_code_sent"
-
-
-@pytest.mark.asyncio
-async def test_verify_phone_missing_session_id(svc):
-    req = PhoneVerificationRequest(
-        country_code="+30", phone_number="6948347822", onboarding_session_id=None
-    )
-    resp = await svc.verify_phone_number(req)
-    assert resp.success is False
-    assert "Onboarding session id is required" in resp.message
-
-
-@pytest.mark.asyncio
-async def test_verify_phone_invalid_number(svc):
-    req = PhoneVerificationRequest(
-        country_code="+30", phone_number="122285684345", onboarding_session_id="sess123"
-    )
-    resp = await svc.verify_phone_number(req)
-    assert resp.success is False
-    assert "Invalid phone number format" in resp.message
-
-
-@pytest.mark.asyncio
-async def test_verify_phone_invalid_number_including_letters(svc):
-    req = PhoneVerificationRequest(
-        country_code="+30", phone_number="1234adsdf5", onboarding_session_id="sess123"
-    )
-    resp = await svc.verify_phone_number(req)
-    assert resp.success is False
-    assert "Invalid phone number format" in resp.message
-
-
-@pytest.mark.asyncio
-async def test_verify_phone_sms_failure(fake_db, fake_sms_fail, monkeypatch):
-
-    svc = UserService(db=fake_db, code_pepper="pepper123")
-    svc.notification_service = fake_sms_fail
-
-    # determinism
-    async def _fixed_code(_len=4):
-        return "1234"
-
-    monkeypatch.setattr(svc, "_generate_code", _fixed_code)
-
-    req = PhoneVerificationRequest(
-        country_code="+30", phone_number="6948347822", onboarding_session_id="sess123"
-    )
-    resp = await svc.verify_phone_number(req)
-    assert resp.success is False
-    assert "Failed to send verification code" in resp.message
-
-
-# test verify_phone_code
-@pytest.mark.asyncio
-async def test_verify_phone_code_happy_path(svc, fake_db):
-    now = dt.datetime.now(dt.timezone.utc)
-    expires = now + dt.timedelta(minutes=10)
-
-    code = "8989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["verification_sessions"].insert_one(
-        {
-            "verification_id": "verif123",
-            "channel": "phone",
-            "onboarding_session_id": "sess123",
-            "target": "+306948347822",
-            "step": "phone_code_sent",
-            "attempts": 0,
-            "max_attempts": 5,
-            "code_hash": code_hash,
-            "sent_at": now,
-            "last_sent_at": now,
-            "expires_at": expires,
-            "used_at": None,
-        }
-    )
-
-    req = PhoneVerificationCodeRequest(
-        verification_id="verif123",
-        code=code,
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_phone_code(req)
-
-    assert resp.success is True
-    assert resp.message.lower().startswith("phone number verified")
-    assert resp.onboarding_session_id == "sess123"
-
-    # DB side-effects happened?
-    verif_coll = fake_db["verification_sessions"]
-    assert len(verif_coll.docs) == 1
-    doc = verif_coll.docs[0]
-    assert doc["onboarding_session_id"] == "sess123"
-    assert doc["channel"] == "phone"
-    assert doc["target"] == "+306948347822"
-    assert doc["attempts"] == 1
-    assert doc["used_at"] == now
-    assert doc["expires_at"] == expires
-    assert "code_hash" in doc
-
-    # onboarding session step updated?
-    sess_coll = fake_db["onboarding_sessions"]
-    assert sess_coll.updates  # one update_one call recorded
-    assert len(sess_coll.updates) == 1
-    _flt, update = sess_coll.updates[0]
-    assert _flt == {"_id": "sess123"}  # correct target session
-    assert "$set" in update
-    assert update["$set"]["step"] == "phone_verified"
-    assert update["$set"]["phone.verified"] is True
-    assert "phone.verified_at" in update["$set"]
-    assert "updated_at" in update["$set"]
-
-
-@pytest.mark.asyncio
-async def test_verify_phone_code_expired(svc, fake_db, monkeypatch):
-
-    mod = importlib.import_module(svc.__class__.__module__)
-    fixed_now = dt.datetime(2025, 1, 1, 12, 0, tzinfo=dt.timezone.utc)
-    monkeypatch.setattr(mod, "now_utc", lambda: fixed_now)
-
-    code = "8989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["verification_sessions"].insert_one(
-        {
-            "verification_id": "verif123",
-            "channel": "phone",
-            "onboarding_session_id": "sess123",
-            "target": "+306948347822",
-            "step": "phone_code_sent",
-            "attempts": 0,
-            "max_attempts": 5,
-            "code_hash": code_hash,
-            "sent_at": fixed_now - dt.timedelta(minutes=2),
-            "last_sent_at": fixed_now - dt.timedelta(minutes=2),
-            "expires_at": fixed_now - dt.timedelta(minutes=2),
-            "used_at": None,
-        }
-    )
-
-    req = PhoneVerificationCodeRequest(
-        verification_id="verif123",
-        code=code,
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_phone_code(req)
-
-    assert resp.success is False
-    assert resp.message.lower().startswith("invalid or expired")
-
-
-@pytest.mark.asyncio
-async def test_verify_phone_code_expired_edge_case(svc, fake_db, monkeypatch):
-
-    mod = importlib.import_module(svc.__class__.__module__)
-    fixed_now = dt.datetime(2025, 1, 1, 12, 0, tzinfo=dt.timezone.utc)
-    monkeypatch.setattr(mod, "now_utc", lambda: fixed_now)
-
-    code = "8989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["verification_sessions"].insert_one(
-        {
-            "verification_id": "verif123",
-            "channel": "phone",
-            "onboarding_session_id": "sess123",
-            "target": "+306948347822",
-            "step": "phone_code_sent",
-            "attempts": 0,
-            "max_attempts": 5,
-            "code_hash": code_hash,
-            "sent_at": fixed_now,
-            "last_sent_at": fixed_now,
-            "expires_at": fixed_now,
-            "used_at": None,
-        }
-    )
-
-    req = PhoneVerificationCodeRequest(
-        verification_id="verif123",
-        code=code,
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_phone_code(req)
-
-    assert resp.success is False
-    assert resp.message.lower().startswith("invalid or expired")
-
-
-@pytest.mark.asyncio
-async def test_verify_phone_code_already_used(svc, fake_db, monkeypatch):
-    now = dt.datetime.now(dt.timezone.utc)
-    expires = now + dt.timedelta(minutes=10)
-
-    used_at = dt.datetime(2025, 1, 1, 12, 0, tzinfo=dt.timezone.utc)
-    code = "8989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["verification_sessions"].insert_one(
-        {
-            "verification_id": "verif123",
-            "channel": "phone",
-            "onboarding_session_id": "sess123",
-            "target": "+306948347822",
-            "step": "phone_code_sent",
-            "attempts": 0,
-            "max_attempts": 5,
-            "code_hash": code_hash,
-            "sent_at": now,
-            "last_sent_at": now,
-            "expires_at": expires,
-            "used_at": used_at,
-        }
-    )
-
-    req = PhoneVerificationCodeRequest(
-        verification_id="verif123",
-        code=code,
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_phone_code(req)
-
-    assert resp.success is False
-    assert resp.message.lower().startswith("invalid or expired")
-
-
-@pytest.mark.asyncio
-async def test_verify_phone_code_too_many_attempts(svc, fake_db, monkeypatch):
-    now = dt.datetime.now(dt.timezone.utc)
-    expires = now + dt.timedelta(minutes=10)
-
-    attempts = 6
-    code = "8989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["verification_sessions"].insert_one(
-        {
-            "verification_id": "verif123",
-            "channel": "phone",
-            "onboarding_session_id": "sess123",
-            "target": "+306948347822",
-            "step": "phone_code_sent",
-            "attempts": attempts,
-            "max_attempts": 5,
-            "code_hash": code_hash,
-            "sent_at": now,
-            "last_sent_at": now,
-            "expires_at": expires,
-            "used_at": None,
-        }
-    )
-
-    req = PhoneVerificationCodeRequest(
-        verification_id="verif123",
-        code=code,
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_phone_code(req)
-
-    assert resp.success is False
-    assert resp.message.lower().startswith("too many attempts")
-
-
-@pytest.mark.asyncio
-async def test_verify_phone_code_incorrect_code(svc, fake_db, monkeypatch):
-    now = dt.datetime.now(dt.timezone.utc)
-    expires = now + dt.timedelta(minutes=3)
-
-    code = "8989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["verification_sessions"].insert_one(
-        {
-            "verification_id": "verif123",
-            "channel": "phone",
-            "onboarding_session_id": "sess123",
-            "target": "+306948347822",
-            "step": "phone_code_sent",
-            "attempts": 0,
-            "max_attempts": 5,
-            "code_hash": code_hash,
-            "sent_at": now,
-            "last_sent_at": now,
-            "expires_at": expires,
-            "used_at": None,
-        }
-    )
-
-    req = PhoneVerificationCodeRequest(
-        verification_id="verif123",
-        code="wron",
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_phone_code(req)
-
-    assert resp.success is False
-    assert resp.message.lower().startswith("incorrect verification code")
-
-
-# async def test_verify_phone_code_code_already_used(svc, fake_db, monkeypatch):
-
-
-# test verify_email
-@pytest.mark.asyncio
-async def test_verify_email_happy_path(svc, fake_db, monkeypatch):
-    now = dt.datetime.now(dt.timezone.utc)
-    expires = now + dt.timedelta(minutes=15)
-
-    phone_number = "+306911110000"
-    code = "8989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["onboarding_sessions"].insert_one(
-        {
-            "_id": "sess123",
-            "status": "draft",
-            "step": "email_code_sent",
-            "phone": {
-                "number_e164": phone_number,
-                "verified": True,
-                "verified_at": None,
-            },
-            "email": {"address": None, "verified": False, "verified_at": None},
-            "data": {},
-            "created_at": expires,
-            "updated_at": None,
-        }
-    )
-
-    req = EmailVerificationRequest(
-        email="test_email@example.com",
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_email(req)
-
-    assert resp.success is True
-    assert resp.message.lower().startswith("verification code sent")
-    assert resp.onboarding_session_id == "sess123"
-    assert resp.verification_id == "sess_fixed"
-
-    # DB side-effects happened?
-    verif_coll = fake_db["verification_sessions"]
-    assert len(verif_coll.docs) == 1
-    doc = verif_coll.docs[0]
-    assert doc["onboarding_session_id"] == "sess123"
-    assert doc["channel"] == "email"
-    assert doc["target"] == "test_email@example.com"
-    assert doc["attempts"] == 0
-    assert doc["used_at"] == None
-    assert doc["expires_at"] is not None
-    assert "code_hash" in doc
-
-    # onboarding session step updated?
-    sess_coll = fake_db["onboarding_sessions"]
-    assert sess_coll.updates  # one update_one call recorded
-    assert len(sess_coll.updates) == 2
-
-    _flt, update = sess_coll.updates[0]
-    assert _flt == {"_id": "sess123"}  # correct target session
-    assert "$set" in update
-    assert update["$set"]["step"] == "email_started"
-    assert update["$set"]["email.address"] == "test_email@example.com"
-    assert "updated_at" in update["$set"]
-
-    _flt2, update2 = sess_coll.updates[1]
-    assert update2["$set"]["step"] == "email_code_sent"
-
-
-# test verify_email
-@pytest.mark.asyncio
-async def test_verify_email_code_happy_path(svc, fake_db, monkeypatch):
-    now = dt.datetime.now(dt.timezone.utc)
-    expires = now + dt.timedelta(minutes=15)
-
-    email = "test_email@example.com"
-    code = "898989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["verification_sessions"].insert_one(
-        {
-            "verification_id": "sess_fixed",
-            "channel": "email",
-            "onboarding_session_id": "sess123",
-            "target": email,
-            "step": "email_code_sent",
-            "attempts": 0,
-            "max_attempts": 5,
-            "code_hash": code_hash,
-            "sent_at": now,
-            "last_sent_at": now,
-            "expires_at": expires,
-            "used_at": None,
-        }
-    )
-
-    req = EmailVerificationCodeRequest(
-        verification_id="sess_fixed",
-        code=code,
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_email_code(req)
-
-    assert resp.success is True
-    assert resp.message.lower().startswith("email verified successfully")
-    assert resp.onboarding_session_id == "sess123"
-
-    # DB side-effects happened?
-    verif_coll = fake_db["verification_sessions"]
-    assert len(verif_coll.docs) == 1
-    doc = verif_coll.docs[0]
-    assert doc["onboarding_session_id"] == "sess123"
-    assert doc["channel"] == "email"
-    assert doc["target"] == "test_email@example.com"
-    assert doc["attempts"] == 1
-    assert doc["used_at"] is not None
-    assert doc["expires_at"] is not None
-    assert "code_hash" in doc
-
-    assert len(verif_coll.updates) == 2
-    _flt2, update2 = verif_coll.updates[1]
-    assert update2["$set"]["used_at"] is not None
-
-
-@pytest.mark.asyncio
-async def test_verify_email_code_expired_code(svc, fake_db, monkeypatch):
-    mod = importlib.import_module(svc.__class__.__module__)
-    fixed_now = dt.datetime(2025, 9, 6, 16, 21, 11, 820948, tzinfo=dt.timezone.utc)
-    monkeypatch.setattr(mod, "now_utc", lambda: fixed_now)
-
-    expires = fixed_now + dt.timedelta(minutes=15)
-
-    email = "test_email@example.com"
-    code = "898989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["verification_sessions"].insert_one(
-        {
-            "verification_id": "sess_fixed",
-            "channel": "email",
-            "onboarding_session_id": "sess123",
-            "target": email,
-            "step": "email_code_sent",
-            "attempts": 0,
-            "max_attempts": 5,
-            "code_hash": code_hash,
-            "sent_at": fixed_now,
-            "last_sent_at": fixed_now,
-            "expires_at": fixed_now - dt.timedelta(minutes=2),
-            "used_at": None,
-        }
-    )
-
-    req = EmailVerificationCodeRequest(
-        verification_id="sess_fixed",
-        code=code,
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_email_code(req)
-
-    assert resp.success is False
-    assert resp.message.lower().startswith("invalid or expired")
-
-
-@pytest.mark.asyncio
-async def test_verify_email_too_many_attempts(svc, fake_db, monkeypatch):
-    now = dt.datetime.now(dt.timezone.utc)
-    expires = now + dt.timedelta(minutes=15)
-
-    attempts = 6
-    email = "test_email@example.com"
-    code = "898989"
-    code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-    await fake_db["verification_sessions"].insert_one(
-        {
-            "verification_id": "sess_fixed",
-            "channel": "email",
-            "onboarding_session_id": "sess123",
-            "target": email,
-            "step": "email_code_sent",
-            "attempts": attempts,
-            "max_attempts": 5,
-            "code_hash": code_hash,
-            "sent_at": now,
-            "last_sent_at": now,
-            "expires_at": expires,
-            "used_at": None,
-        }
-    )
-
-    req = EmailVerificationCodeRequest(
-        verification_id="sess_fixed",
-        code=code,
-        onboarding_session_id="sess123",
-    )
-    resp = await svc.verify_email_code(req)
-
-    assert resp.success is False
-    assert resp.message.lower().startswith("too many attempts. please")
-
-
-# @pytest.mark.asyncio
-# async def test_verify_email_second_attempt(svc, fake_db, monkeypatch):
-#     now = dt.datetime.now(dt.timezone.utc)
-#     expires = now + dt.timedelta(minutes=15)
-
-#     email = "test_email@example.com"
-#     code = "898989"
-#     code_hash = svc._test_hash(code)  # -> "TESTHASH:8989"
-
-#     await fake_db["verification_sessions"].insert_one({
-#         "verification_id": "sess_fixed",
-#         "channel": "email",
-#         "onboarding_session_id": "sess123",
-#         "target": email,
-#         "step": "email_code_sent",
-#         "attempts": 0,
-#         "max_attempts": 5,
-#         "code_hash": code_hash,
-#         "sent_at": now,
-#         "last_sent_at": now,
-#         "expires_at": expires,
-#         "used_at": None,
-#     })
-
-#     req = EmailVerificationCodeRequest(
-#         verification_id="sess_fixed",
-#         code = code,
-#         onboarding_session_id="sess123",
-#     )
-#     resp = await svc.verify_email_code(req)
-#     fake_db["verification_sessions"]["used_at"] = None
-#     resp2 = await svc.verify_email_code(req)
-
-#     verif_coll = fake_db["verification_sessions"]
-#     # count the $inc attempts updates for this verification_id
-#     inc_calls = [
-#         upd for flt, upd in verif_coll.updates
-#         if flt.get("verification_id") == req.verification_id
-#         and "$inc" in upd
-#         and upd["$inc"].get("attempts") == 1
-#     ]
-#     assert len(inc_calls) == 2  # attempts incremented twice
-
-#     # onboarding_sessions should be updated once (on first successful verify)
-#     sess_coll = fake_db["onboarding_sessions"]
-#     assert len(sess_coll.updates) == 1
-#     flt, upd = sess_coll.updates[0]
-#     assert flt == {"_id": "sess123"}
-#     assert upd["$set"]["step"] == "email_verified"
-#     assert upd["$set"]["email.verified"] is True
-
-
-# ---------- set_business_country ----------
-
-
-@pytest.mark.asyncio
-async def test_set_business_country_happy_path(svc, fake_db, monkeypatch):
-    # Freeze now_utc for deterministic assertions
-    mod = importlib.import_module(svc.__class__.__module__)
-    fixed_now = dt.datetime(2025, 1, 1, 12, 0, tzinfo=dt.timezone.utc)
-    monkeypatch.setattr(mod, "now_utc", lambda: fixed_now)
-
-    await fake_db["onboarding_sessions"].insert_one(
-        {
-            "_id": "sess123",
-            "data": {},
-            "step": "start",
-            "updated_at": None,
-        }
-    )
-
-    req = BusinessCountryRequest(onboarding_session_id="sess123", country="GR")
-
-    resp = await svc.set_business_country(req)
-    assert resp["success"] is True
-    assert resp["message"] == "Business country set to GR"
-
-    # Assert the update_one call on onboarding_sessions
-    sess_coll = fake_db["onboarding_sessions"]
-    assert len(sess_coll.updates) == 1
-    flt, update = sess_coll.updates[0]
-    assert flt == {"_id": "sess123"}
-    assert update["$set"]["data.business_country"] == "GR"
-    assert update["$set"]["step"] == "business_country_set"
-    assert update["$set"]["updated_at"] == fixed_now
-
-
-@pytest.mark.asyncio
-async def test_set_business_country_session_not_found(svc, fake_db, monkeypatch):
-    # Force update_one to report no match
-    async def no_match(_flt, _upd):
-        return SimpleNamespace(matched_count=0, modified_count=0)
-
-    monkeypatch.setattr(svc.sessions_collection, "update_one", no_match)
-
-    await fake_db["onboarding_sessions"].insert_one(
-        {
-            "_id": "sess123",
-            "data": {},
-            "step": "start",
-            "updated_at": None,
-        }
-    )
-
-    req = BusinessCountryRequest(onboarding_session_id="missing", country="GR")
-    resp = await svc.set_business_country(req)
-    assert resp["success"] is False
-    assert resp["message"] == "Onboarding session not found"
-
-
-# ---------- set_business_info ----------
-
-
-@pytest.mark.asyncio
-async def test_set_business_info_happy_path(svc, fake_db, monkeypatch):
-    # Freeze time for deterministic assertions
-    mod = importlib.import_module(svc.__class__.__module__)
-    fixed_now = dt.datetime(2025, 1, 1, 12, 30, tzinfo=dt.timezone.utc)
-    monkeypatch.setattr(mod, "now_utc", lambda: fixed_now)
-
-    # Seed the session so the update can match
-    await fake_db["onboarding_sessions"].insert_one(
-        {
-            "_id": "sess123",
-            "data": {},
-            "step": "start",
-            "updated_at": None,
-        }
-    )
-
-    req = BusinessInfoRequest(
-        onboarding_session_id="sess123",
-        company_name="Acme SA",
-        company_vat="EL123456789",
-        company_gemi_number="123456789000",
-        company_type="SA",
-        company_zip="10558",
-        company_municipality="Athens",
-        company_city="Athens",
-        company_street="Example",
-        company_street_number="1",
-        company_phone="+302108765432",
-        company_email="info@example.com",
-        company_objective="Retail",
-        company_status="active",
-        company_gemi_office="Athens",
-    )
-
-    resp = await svc.set_business_info(req)
-    assert resp["success"] is True
-    # (message contains a dict; don't assert exact string formatting)
-
-    sess_coll = fake_db["onboarding_sessions"]
-    assert len(sess_coll.updates) == 1
-    flt, update = sess_coll.updates[0]
-    assert flt == {"_id": "sess123"}
-    assert "$set" in update
-    assert update["$set"]["step"] == "business_info_set"
-    assert update["$set"]["updated_at"] == fixed_now
-
-    expected_info = {
-        "company_name": "Acme SA",
-        "company_vat": "EL123456789",
-        "company_gemi_number": "123456789000",
-        "company_type": "SA",
-        "company_zip": "10558",
-        "company_municipality": "Athens",
-        "company_city": "Athens",
-        "company_street": "Example",
-        "company_street_number": "1",
-        "company_phone": "+302108765432",
-        "company_email": "info@example.com",
-        "company_objective": "Retail",
-        "company_status": "active",
-        "company_gemi_office": "Athens",
-    }
-    assert update["$set"]["data.business_info"] == expected_info
-
-
-# ---------- set_business_info (missing session id raises) ----------
-
-
-@pytest.mark.asyncio
-async def test_set_business_info_missing_session_id_raises(svc, fake_db):
-    with pytest.raises(ValueError):
-        await svc.set_business_info(
-            BusinessInfoRequest(
-                # onboarding_session_id omitted on purpose
-                company_name="Acme SA",
-                company_vat="EL123456789",
-                company_gemi_number="123456789000",
-                company_type="SA",
-                company_zip="10558",
-                company_municipality="Athens",
-                company_city="Athens",
-                company_street="Example",
-                company_street_number="1",
-                company_phone="+302108765432",
-                company_email="info@example.com",
-                company_objective="Retail",
-                company_status="active",
-                company_gemi_office="Athens",
-            )
+from app.models.user import LoginRequest, SignUpRequest, ChangePasswordRequest
+
+from app.tests.conftest import PEPPER, make_db_session, make_seller
+
+
+# ---------------------------------------------------------------------------
+# hash_password / verify_password
+# ---------------------------------------------------------------------------
+
+
+class TestPasswordHashing:
+    """verify_password must correctly compare against Argon2 stored hashes."""
+
+    def test_verify_correct_password(self):
+        stored = hash_password("correct_pass", pepper=PEPPER)
+        assert verify_password(stored, "correct_pass", pepper=PEPPER) is True
+
+    def test_verify_wrong_password(self):
+        stored = hash_password("correct_pass", pepper=PEPPER)
+        assert verify_password(stored, "wrong_pass", pepper=PEPPER) is False
+
+    def test_verify_without_pepper(self):
+        stored = hash_password("pass", pepper=None)
+        assert verify_password(stored, "pass", pepper=None) is True
+
+    def test_verify_pepper_mismatch(self):
+        stored = hash_password("pass", pepper="pepper_a")
+        assert verify_password(stored, "pass", pepper="pepper_b") is False
+
+    def test_two_hashes_of_same_password_are_unequal(self):
+        """Argon2 uses random salts — two hash() calls must produce different strings."""
+        h1 = hash_password("same_pass", pepper=PEPPER)
+        h2 = hash_password("same_pass", pepper=PEPPER)
+        assert h1 != h2
+
+    def test_verify_handles_invalid_hash_gracefully(self):
+        """Passing garbage as stored_hash must return False, not raise."""
+        assert verify_password("not_a_valid_argon2_hash", "pass") is False
+
+
+# ---------------------------------------------------------------------------
+# hash_token
+# ---------------------------------------------------------------------------
+
+
+class TestHashToken:
+    """hash_token must return a deterministic 64-char SHA-256 hex digest."""
+
+    def test_known_digest(self):
+        import hashlib
+        raw = "my_raw_token"
+        expected = hashlib.sha256(raw.encode()).hexdigest()
+        assert hash_token(raw) == expected
+
+    def test_returns_64_hex_chars(self):
+        result = hash_token("any_token")
+        assert len(result) == 64
+        assert all(c in "0123456789abcdef" for c in result)
+
+    def test_same_input_same_output(self):
+        assert hash_token("tok") == hash_token("tok")
+
+    def test_different_inputs_different_outputs(self):
+        assert hash_token("tok_a") != hash_token("tok_b")
+
+
+# ---------------------------------------------------------------------------
+# login
+# ---------------------------------------------------------------------------
+
+
+class TestLogin:
+    """UserService.login must verify password via ph.verify(), not hash comparison."""
+
+    @pytest.mark.asyncio
+    async def test_login_happy_path(self, svc: UserService, db: AsyncMock):
+        """Login with correct credentials returns success and a raw access token."""
+        seller = make_seller(username="alice", password="GoodPass1!", pepper=PEPPER)
+        db.execute.return_value.scalar_one_or_none.return_value = seller
+
+        req = LoginRequest(username="alice", password="GoodPass1!")
+        result = await svc.login(req)
+
+        assert result.success is True
+        assert result.access_token is not None
+        assert result.username == "alice"
+        # The DB update must store the HASH of the token, not the raw token
+        call_args = db.execute.call_args_list
+        # find the update statement call — last execute before commit
+        db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_login_wrong_password(self, svc: UserService, db: AsyncMock):
+        """Login with incorrect password returns success=False without enumeration."""
+        seller = make_seller(username="alice", password="GoodPass1!", pepper=PEPPER)
+        db.execute.return_value.scalar_one_or_none.return_value = seller
+
+        req = LoginRequest(username="alice", password="WrongPass!")
+        result = await svc.login(req)
+
+        assert result.success is False
+        assert "Invalid username or password" in result.message
+        db.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_login_unknown_user(self, svc: UserService, db: AsyncMock):
+        """Login with non-existent username returns success=False."""
+        db.execute.return_value.scalar_one_or_none.return_value = None
+
+        req = LoginRequest(username="ghost", password="SomePass!")
+        result = await svc.login(req)
+
+        assert result.success is False
+        assert "Invalid username or password" in result.message
+
+    @pytest.mark.asyncio
+    async def test_login_stores_token_hash_not_raw(self, svc: UserService, db: AsyncMock):
+        """The raw bearer token returned to the client must NOT equal what is stored.
+
+        We verify this by inspecting the SQLAlchemy Update statement that was
+        passed to ``db.execute`` — specifically the ``last_access_token`` bind
+        parameter must equal ``hash_token(raw_token)``, not the raw token.
+        """
+        seller = make_seller(username="bob", password="Pass1234!", pepper=PEPPER)
+        db.execute.return_value.scalar_one_or_none.return_value = seller
+
+        req = LoginRequest(username="bob", password="Pass1234!")
+        result = await svc.login(req)
+
+        assert result.success is True
+        raw_token = result.access_token
+        expected_hash = hash_token(raw_token)
+
+        # db.execute is called twice: first SELECT, then UPDATE.
+        # Extract the UPDATE statement (second call) and inspect its params.
+        assert db.execute.call_count == 2
+        update_stmt = db.execute.call_args_list[1].args[0]
+
+        # Compile the statement to extract bind params
+        compiled = update_stmt.compile(compile_kwargs={"literal_binds": False})
+        params = compiled.params
+
+        assert params.get("last_access_token") == expected_hash, (
+            "Stored token hash must be SHA-256 of the raw token, not the raw token"
+        )
+        assert params.get("last_access_token") != raw_token, (
+            "Raw bearer token must never be persisted"
         )
 
 
-# ---------- set_business_info (session not found) ----------
+# ---------------------------------------------------------------------------
+# logout
+# ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_set_business_info_session_not_found(svc, fake_db, monkeypatch):
-    # Force update to report no match regardless of data
-    async def no_match(_flt, _upd):
-        return SimpleNamespace(matched_count=0, modified_count=0)
+class TestLogout:
+    """UserService.logout must look up users by token hash."""
 
-    monkeypatch.setattr(svc.sessions_collection, "update_one", no_match)
+    @pytest.mark.asyncio
+    async def test_logout_happy_path(self, svc: UserService, db: AsyncMock):
+        """Logout with a valid token clears the stored hash."""
+        raw_token = "my_valid_raw_token"
+        seller = make_seller(access_token_raw=raw_token)
+        db.execute.return_value.scalar_one_or_none.return_value = seller
 
-    req = BusinessInfoRequest(
-        onboarding_session_id="missing",
-        company_name="Acme SA",
-        company_vat="EL123456789",
-        company_gemi_number="123456789000",
-        company_type="SA",
-        company_zip="10558",
-        company_municipality="Athens",
-        company_city="Athens",
-        company_street="Example",
-        company_street_number="1",
-        company_phone="+302108765432",
-        company_email="info@example.com",
-        company_objective="Retail",
-        company_status="active",
-        company_gemi_office="Athens",
-    )
+        result = await svc.logout(raw_token)
 
-    resp = await svc.set_business_info(req)
-    assert resp["success"] is False
-    assert resp["message"] == "Onboarding session not found"
+        assert result.success is True
+        db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_logout_invalid_token(self, svc: UserService, db: AsyncMock):
+        """Logout with an unrecognised token returns success=False."""
+        db.execute.return_value.scalar_one_or_none.return_value = None
+
+        result = await svc.logout("unknown_token")
+
+        assert result.success is False
+        db.commit.assert_not_awaited()
 
 
-# ---------- update_shareholders ----------
+# ---------------------------------------------------------------------------
+# change_password
+# ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_update_shareholders_happy_path(svc, fake_db, monkeypatch):
-    # Freeze time
-    mod = importlib.import_module(svc.__class__.__module__)
-    fixed_now = dt.datetime(2025, 1, 1, 13, 0, tzinfo=dt.timezone.utc)
-    monkeypatch.setattr(mod, "now_utc", lambda: fixed_now)
+class TestChangePassword:
+    """change_password must verify the current password before updating."""
 
-    # Deterministic id for shareholders missing id
-    import secrets
+    @pytest.mark.asyncio
+    async def test_change_password_happy_path(self, svc: UserService, db: AsyncMock):
+        """Correct current password + valid new password succeeds."""
+        raw_token = "session_token_xyz"
+        seller = make_seller(
+            password="OldPass123!",
+            pepper=PEPPER,
+            access_token_raw=raw_token,
+            access_token_expires_at=now_utc() + timedelta(hours=1),
+        )
+        db.execute.return_value.scalar_one_or_none.return_value = seller
 
-    monkeypatch.setattr(secrets, "token_urlsafe", lambda n: "sh_fixed")
+        req = ChangePasswordRequest(
+            current_password="OldPass123!", new_password="NewPass456!", confirm_password="NewPass456!"
+        )
+        result = await svc.change_password(raw_token, req)
 
-    # Seed the session so update matches
-    await fake_db["onboarding_sessions"].insert_one(
-        {
-            "_id": "sess123",
-            "data": {},
-            "step": "start",
-            "updated_at": None,
-        }
-    )
+        assert result.success is True
+        db.commit.assert_awaited()
 
-    req = ShareholderInfoRequest(
-        onboarding_session_id="sess123",
-        shareholders=[
-            ShareholderInfo(  # has explicit id + mixed-case email to test lowercasing
-                id="sh_1",
-                first_name="Alice",
-                last_name="Papadopoulos",
-                email="Alice@Example.com",
-            ),
-            ShareholderInfo(  # no id + no email → becomes None
-                id=None,
-                first_name="Bob",
-                last_name="Georgiou",
-                email=None,
-            ),
-        ],
-    )
+    @pytest.mark.asyncio
+    async def test_change_password_wrong_current(self, svc: UserService, db: AsyncMock):
+        """Incorrect current password returns success=False."""
+        raw_token = "session_token_xyz"
+        seller = make_seller(
+            password="OldPass123!",
+            pepper=PEPPER,
+            access_token_raw=raw_token,
+            access_token_expires_at=now_utc() + timedelta(hours=1),
+        )
+        db.execute.return_value.scalar_one_or_none.return_value = seller
 
-    resp = await svc.update_shareholders(req)
-    assert resp["success"] is True
+        req = ChangePasswordRequest(
+            current_password="WrongOldPass!", new_password="NewPass456!", confirm_password="NewPass456!"
+        )
+        result = await svc.change_password(raw_token, req)
 
-    sess_coll = fake_db["onboarding_sessions"]
-    # exactly one update_one issued by the method
-    assert len(sess_coll.updates) == 1
-    flt, update = sess_coll.updates[0]
+        assert result.success is False
+        assert "Current password is incorrect" in result.message
+        db.commit.assert_not_awaited()
 
-    assert flt == {"_id": "sess123"}
-    assert "$set" in update
-    assert update["$set"]["step"] == "shareholders_updated"
-    assert update["$set"]["updated_at"] == fixed_now
+    @pytest.mark.asyncio
+    async def test_change_password_reuse_rejected(self, svc: UserService, db: AsyncMock):
+        """New password identical to current password is rejected."""
+        raw_token = "session_token_xyz"
+        seller = make_seller(
+            password="SamePass123!",
+            pepper=PEPPER,
+            access_token_raw=raw_token,
+            access_token_expires_at=now_utc() + timedelta(hours=1),
+        )
+        db.execute.return_value.scalar_one_or_none.return_value = seller
 
-    payload = update["$set"]["data.shareholders"]
-    assert isinstance(payload, list) and len(payload) == 2
+        req = ChangePasswordRequest(
+            current_password="SamePass123!", new_password="SamePass123!", confirm_password="SamePass123!"
+        )
+        result = await svc.change_password(raw_token, req)
 
-    sh1, sh2 = payload
+        assert result.success is False
+        assert "different from the current" in result.message
 
-    # 1) preserves id; email lowercased; timestamps set
-    assert sh1["_id"] == "sh_1"
-    assert sh1["first_name"] == "Alice"
-    assert sh1["last_name"] == "Papadopoulos"
-    assert sh1["email"] == "alice@example.com"
-    assert sh1["created_at"] == fixed_now
-    assert sh1["updated_at"] == fixed_now
+    @pytest.mark.asyncio
+    async def test_change_password_expired_session(self, svc: UserService, db: AsyncMock):
+        """Expired access token returns success=False before checking passwords."""
+        raw_token = "expired_token"
+        seller = make_seller(
+            password="OldPass123!",
+            pepper=PEPPER,
+            access_token_raw=raw_token,
+            access_token_expires_at=now_utc() - timedelta(hours=1),
+        )
+        db.execute.return_value.scalar_one_or_none.return_value = seller
 
-    # 2) generates id; None email propagated; timestamps set
-    assert sh2["_id"] == "sh_fixed"
-    assert sh2["first_name"] == "Bob"
-    assert sh2["last_name"] == "Georgiou"
-    assert sh2["email"] is None
-    assert sh2["created_at"] == fixed_now
-    assert sh2["updated_at"] == fixed_now
+        req = ChangePasswordRequest(
+            current_password="OldPass123!", new_password="NewPass456!", confirm_password="NewPass456!"
+        )
+        result = await svc.change_password(raw_token, req)
+
+        assert result.success is False
+        assert "expired" in result.message.lower()
 
 
-@pytest.mark.asyncio
-async def test_update_shareholders_session_not_found(svc, fake_db, monkeypatch):
-    # Force the collection to report no match
-    async def no_match(_flt, _upd):
-        return SimpleNamespace(matched_count=0, modified_count=0)
+# ---------------------------------------------------------------------------
+# sign_up
+# ---------------------------------------------------------------------------
 
-    monkeypatch.setattr(svc.sessions_collection, "update_one", no_match)
 
-    req = ShareholderInfoRequest(
-        onboarding_session_id="missing",
-        shareholders=[
-            ShareholderInfo(id=None, first_name="A", last_name="B", email=None)
-        ],
-    )
+class TestSignUp:
+    """UserService.sign_up basic validation guard tests."""
 
-    resp = await svc.update_shareholders(req)
-    assert resp["success"] is False
-    assert resp["message"] == "Onboarding session not found"
+    @pytest.mark.asyncio
+    async def test_signup_duplicate_username(self, svc: UserService, db: AsyncMock):
+        """Signing up with an existing username returns success=False."""
+        existing = make_seller(username="taken")
+        # First execute (username check) finds a match
+        db.execute.return_value.scalar_one_or_none.return_value = existing
+
+        req = SignUpRequest(
+            username="taken",
+            password="UniquePass1!",
+            email="taken@example.com",
+        )
+        result = await svc.sign_up(req)
+
+        assert result.success is False

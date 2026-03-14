@@ -21,7 +21,7 @@ from packages.aade.models.e3_info import (
     RequestE3InfoQuery,
     RequestE3InfoResponse,
 )
-from app.config import Settings as AppSettings
+from app.config import settings
 from packages.aade import AadeClient, API as MyDataAPI
 from app.services.mydata_service import MyDataService
 from app.controllers.mydata_controller import MyDataController
@@ -33,14 +33,13 @@ router = APIRouter()
 # -----------------------------
 # Dependency Injection
 # -----------------------------
-def get_aade_client(settings: AppSettings) -> AadeClient:
-    """Get configured AADE HTTP client."""
-    return AadeClient(settings)
-
-
 def get_mydata_controller() -> MyDataController:
-    app_settings = AppSettings()
-    service = MyDataService(app_settings)
+    """Provide a ``MyDataController`` wired to the global settings singleton.
+
+    Returns:
+        A fully initialised :class:`MyDataController` instance.
+    """
+    service = MyDataService(settings)
     return MyDataController(service)
 
 

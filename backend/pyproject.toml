@@ -28,20 +28,27 @@ dependencies = [
     "python-dateutil",
     "pytz",
     "tzdata",
-    "python-multipart",
     "email-validator",
     "sib_api_v3_sdk",
     "phonenumbers",
+    "argon2-cffi>=23.1.0",
+    "tenacity>=8.2.0",
+    "certifi",
+]
+
+[dependency-groups]
+dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-anyio",
     "pytest-mock",
     "pytest-cov",
     "asgi-lifespan",
-    "argon2-cffi>=23.1.0",
-    "tenacity>=8.2.0",
-    "certifi",
+    "httpx",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.setuptools.packages.find]
 where = ["."]

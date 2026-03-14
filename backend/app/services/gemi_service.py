@@ -194,5 +194,5 @@ class GemiService:
                 "status": descr(company.get("status")) or "",
                 "gemi_office": descr(company.get("gemiOffice")) or "",
             }
-        items.append(item)
+            items.append(item)
         return items

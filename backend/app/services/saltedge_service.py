@@ -353,8 +353,13 @@ class SaltEdgeService:
 
     # ---------- Helper methods for database storage ----------
 
-    async def _store_or_update_customer(self, db: AsyncSession, customer_data):
-        """Store or update a customer in the database."""
+    async def _store_or_update_customer(self, db: AsyncSession, customer_data) -> None:
+        """Upsert a SaltEdge customer into the local database.
+
+        Args:
+            db: Async database session.
+            customer_data: SaltEdge SDK customer model instance to persist.
+        """
         customer_id = customer_data.customer_id  # Use string directly
 
         # Check if customer exists
@@ -381,54 +386,55 @@ class SaltEdgeService:
 
         await db.commit()
 
-    async def _store_or_update_connection(self, db: AsyncSession, connection_data):
-        """Store or update a connection in the database."""
-        connection_id = connection_data.id  # Use string directly
+    async def _store_or_update_connection(self, db: AsyncSession, connection_data) -> None:
+        """Upsert a SaltEdge connection into the local database.
 
-        # Get customer_id from external_customer_id
-        customer_id = connection_data.customer_id  # Use string directly
+        Args:
+            db: Async database session.
+            connection_data: SaltEdge SDK ``Connection`` model instance to persist.
+        """
+        connection_id = connection_data.id
+        customer_id = connection_data.customer_id
 
-        # Check if connection exists
+        last_attempt_raw = getattr(connection_data, "last_attempt", None)
+        holder_info_raw = getattr(connection_data, "holder_info", None)
+
+        fields: Dict[str, Any] = {
+            "external_id": connection_data.id,
+            "external_customer_id": connection_data.customer_id,
+            "customer_identifier": getattr(connection_data, "customer_identifier", None),
+            "customer_id": customer_id,
+            "provider_code": connection_data.provider_code,
+            "provider_name": connection_data.provider_name,
+            "country_code": connection_data.country_code,
+            "status": connection_data.status.value,
+            "categorization": connection_data.categorization.value,
+            "last_consent_id": getattr(connection_data, "last_consent_id", None),
+            "automatic_refresh": getattr(connection_data, "automatic_refresh", False),
+            "last_attempt": last_attempt_raw.model_dump(mode="json") if last_attempt_raw else None,
+            "holder_info": holder_info_raw.model_dump(mode="json") if holder_info_raw else None,
+        }
+
         existing = await db.get(ConnectionModel, connection_id)
-
         if existing:
-            # Update existing connection
-            existing.external_id = connection_data.id
-            existing.external_customer_id = connection_data.customer_id
-            existing.customer_id = customer_id
-            existing.status = connection_data.status.value
-            existing.categorization = connection_data.categorization.value
-            # Update other fields
+            for attr, value in fields.items():
+                setattr(existing, attr, value)
         else:
-            # Create new connection
-            connection = ConnectionModel(
-                id=connection_id,
-                external_id=connection_data.id,
-                external_customer_id=connection_data.customer_id,
-                customer_identifier=getattr(
-                    connection_data, "customer_identifier", None
-                ),
-                customer_id=customer_id,
-                provider_code=connection_data.provider_code,
-                provider_name=connection_data.provider_name,
-                country_code=connection_data.country_code,
-                status=connection_data.status.value,
-                categorization=connection_data.categorization.value,
-                last_consent_id=getattr(connection_data, "last_consent_id", None),
-                automatic_refresh=getattr(connection_data, "automatic_refresh", False),
-                last_attempt=getattr(connection_data, "last_attempt", None)
-                and connection_data.last_attempt.model_dump(mode="json"),
-                holder_info=getattr(connection_data, "holder_info", None)
-                and connection_data.holder_info.model_dump(mode="json"),
-            )
-            db.add(connection)
+            db.add(ConnectionModel(id=connection_id, **fields))
 
         await db.commit()
 
     async def _store_or_update_account(
         self, db: AsyncSession, account_data, connection_id: str = None
-    ):
-        """Store or update a bank account in the database."""
+    ) -> None:
+        """Upsert a SaltEdge bank account into the local database.
+
+        Args:
+            db: Async database session.
+            account_data: SaltEdge SDK account model instance to persist.
+            connection_id: External SaltEdge connection ID.  If ``None``,
+                the method attempts to read it from ``account_data.connection_id``.
+        """
         account_id = account_data.id  # Use string directly
 
         # If connection_id not provided, try to get it from account_data
@@ -482,8 +488,18 @@ class SaltEdgeService:
 
         await db.commit()
 
-    async def _store_or_update_transaction(self, db: AsyncSession, transaction_data):
-        """Store or update a transaction in the database."""
+    async def _store_or_update_transaction(self, db: AsyncSession, transaction_data) -> None:
+        """Upsert a SaltEdge transaction into the local database.
+
+        Bank-specific extras (``posting_date``, ``merchant_id``, ``mcc``,
+        ``original_amount``, ``original_currency_code``) are not direct ORM
+        columns; they are persisted inside the JSONB ``extra`` field via
+        ``transaction_data.extra.model_dump()``.
+
+        Args:
+            db: Async database session.
+            transaction_data: SaltEdge SDK transaction model instance to persist.
+        """
         # Check if transaction exists by external ID
         existing = await db.execute(
             select(Transaction).where(Transaction.id == transaction_data.id)
@@ -491,7 +507,10 @@ class SaltEdgeService:
         existing = existing.scalar_one_or_none()
 
         if existing:
-            # Update existing transaction
+            # Update existing transaction — only write columns that exist on the
+            # ORM model.  Bank-specific extras (posting_date, merchant_id, mcc,
+            # original_amount, original_currency_code, …) are stored in the
+            # JSONB `extra` column and must not be set as direct attributes.
             existing.status = transaction_data.status
             existing.mode = transaction_data.mode
             existing.duplicated = transaction_data.duplicated
@@ -500,32 +519,15 @@ class SaltEdgeService:
                 if transaction_data.made_on
                 else None
             )
-            existing.posting_date = (
-                date.fromisoformat(transaction_data.posting_date)
-                if getattr(transaction_data, "posting_date", None)
-                else None
-            )
             existing.amount = transaction_data.amount
             existing.currency_code = transaction_data.currency_code
             existing.category = getattr(transaction_data, "category", None)
-            existing.merchant_id = getattr(transaction_data, "merchant_id", None)
-            existing.mcc = getattr(transaction_data, "mcc", None)
             existing.description = getattr(transaction_data, "description", None)
-            existing.original_amount = getattr(
-                transaction_data, "original_amount", None
-            )
-            existing.original_currency_code = getattr(
-                transaction_data, "original_currency_code", None
-            )
             existing.extra = transaction_data.extra.model_dump(mode="json")
         else:
-            # Get account_id from transaction data
-            account_id = transaction_data.account_id  # Use string directly
-
-            # Create new transaction
             transaction = Transaction(
                 id=transaction_data.id,
-                account_id=account_id,
+                account_id=transaction_data.account_id,
                 status=transaction_data.status,
                 mode=transaction_data.mode,
                 duplicated=transaction_data.duplicated,
@@ -534,29 +536,23 @@ class SaltEdgeService:
                     if transaction_data.made_on
                     else None
                 ),
-                posting_date=(
-                    date.fromisoformat(transaction_data.posting_date)
-                    if getattr(transaction_data, "posting_date", None)
-                    else None
-                ),
                 amount=transaction_data.amount,
                 currency_code=transaction_data.currency_code,
                 category=getattr(transaction_data, "category", None),
-                merchant_id=getattr(transaction_data, "merchant_id", None),
-                mcc=getattr(transaction_data, "mcc", None),
                 description=getattr(transaction_data, "description", None),
-                original_amount=getattr(transaction_data, "original_amount", None),
-                original_currency_code=getattr(
-                    transaction_data, "original_currency_code", None
-                ),
                 extra=transaction_data.extra.model_dump(mode="json"),
             )
             db.add(transaction)
 
         await db.commit()
 
-    async def _store_or_update_consent(self, db: AsyncSession, consent_data):
-        """Store or update a consent in the database."""
+    async def _store_or_update_consent(self, db: AsyncSession, consent_data) -> None:
+        """Upsert a SaltEdge consent record into the local database.
+
+        Args:
+            db: Async database session.
+            consent_data: SaltEdge SDK consent model instance to persist.
+        """
         consent_id = consent_data.id  # Use string directly
 
         # Get connection_id - need to look up internal ID by external_id
@@ -616,177 +612,76 @@ class SaltEdgeService:
 
         await db.commit()
 
-    async def _store_or_update_provider(self, db: AsyncSession, provider_data):
-        """Store or update a provider in the database."""
-        # Check if provider exists by code (since code is the primary key)
+    @staticmethod
+    def _build_provider_fields(provider_data) -> Dict[str, Any]:
+        """Extract all writable ``ProviderModel`` fields from an SDK provider object.
+
+        Centralises the field mapping so that :meth:`_store_or_update_provider`
+        can share it between the create and update paths without duplication.
+
+        Args:
+            provider_data: A SaltEdge SDK ``Provider`` Pydantic model instance.
+
+        Returns:
+            Dict mapping ``ProviderModel`` column names to their values.
+        """
+        g = lambda attr, default=None: getattr(provider_data, attr, default)  # noqa: E731
+        return {
+            "name": provider_data.name,
+            "country_code": provider_data.country_code,
+            "bic_codes": g("bic_codes"),
+            "identification_codes": g("identification_codes"),
+            "dynamic_registration_code": g("dynamic_registration_code"),
+            "group_code": g("group_code"),
+            "group_name": g("group_name"),
+            "hub": g("hub"),
+            "status": provider_data.status,
+            "mode": provider_data.mode,
+            "regulated": provider_data.regulated,
+            "logo_url": g("logo_url"),
+            "timezone": g("timezone"),
+            "supported_iframe_embedding": provider_data.supported_iframe_embedding,
+            "optional_interactivity": g("optional_interactivity"),
+            "customer_notified_on_sign_in": provider_data.customer_notified_on_sign_in,
+            "automatic_fetch": g("automatic_fetch"),
+            "custom_pendings_period": g("custom_pendings_period"),
+            "holder_info": g("holder_info"),
+            "instruction_for_connections": g("instruction_for_connections"),
+            "interactive_for_connections": g("interactive_for_connections"),
+            "max_consent_days": g("max_consent_days"),
+            "max_fetch_interval": g("max_fetch_interval"),
+            "fetch_policies": g("fetch_policies"),
+            "max_interactive_delay": g("max_interactive_delay"),
+            "refresh_timeout": g("refresh_timeout"),
+            "supported_account_extra_fields": g("supported_account_extra_fields"),
+            "supported_account_natures": g("supported_account_natures"),
+            "supported_account_types": g("supported_account_types"),
+            "supported_fetch_scopes": g("supported_fetch_scopes"),
+            "supported_transaction_extra_fields": g("supported_transaction_extra_fields"),
+            "payment_templates": g("payment_templates"),
+            "instruction_for_payments": g("instruction_for_payments"),
+            "interactive_for_payments": g("interactive_for_payments"),
+            "no_funds_rejection_supported": g("no_funds_rejection_supported"),
+            "required_payment_fields": g("required_payment_fields"),
+            "supported_payment_fields": g("supported_payment_fields"),
+            "credentials_fields": g("credentials_fields"),
+            "interactive_fields": g("interactive_fields"),
+        }
+
+    async def _store_or_update_provider(self, db: AsyncSession, provider_data) -> None:
+        """Upsert a SaltEdge provider into the local database.
+
+        Args:
+            db: Async database session.
+            provider_data: SaltEdge SDK ``Provider`` model instance to persist.
+        """
+        fields = self._build_provider_fields(provider_data)
         existing = await db.get(ProviderModel, provider_data.code)
 
         if existing:
-            # Update existing provider - update all fields
-            existing.name = provider_data.name
-            existing.country_code = provider_data.country_code
-            existing.bic_codes = getattr(provider_data, "bic_codes", None)
-            existing.identification_codes = getattr(
-                provider_data, "identification_codes", None
-            )
-            existing.dynamic_registration_code = getattr(
-                provider_data, "dynamic_registration_code", None
-            )
-            existing.group_code = getattr(provider_data, "group_code", None)
-            existing.group_name = getattr(provider_data, "group_name", None)
-            existing.hub = getattr(provider_data, "hub", None)
-            existing.status = provider_data.status
-            existing.mode = provider_data.mode
-            existing.regulated = provider_data.regulated
-            existing.logo_url = getattr(provider_data, "logo_url", None)
-            existing.timezone = getattr(provider_data, "timezone", None)
-            existing.supported_iframe_embedding = (
-                provider_data.supported_iframe_embedding
-            )
-            existing.optional_interactivity = getattr(
-                provider_data, "optional_interactivity", None
-            )
-            existing.customer_notified_on_sign_in = (
-                provider_data.customer_notified_on_sign_in
-            )
-            existing.automatic_fetch = getattr(provider_data, "automatic_fetch", None)
-            existing.custom_pendings_period = getattr(
-                provider_data, "custom_pendings_period", None
-            )
-            existing.holder_info = getattr(provider_data, "holder_info", None)
-            existing.instruction_for_connections = getattr(
-                provider_data, "instruction_for_connections", None
-            )
-            existing.interactive_for_connections = getattr(
-                provider_data, "interactive_for_connections", None
-            )
-            existing.max_consent_days = getattr(provider_data, "max_consent_days", None)
-            existing.max_fetch_interval = getattr(
-                provider_data, "max_fetch_interval", None
-            )
-            existing.fetch_policies = getattr(provider_data, "fetch_policies", None)
-            existing.max_interactive_delay = getattr(
-                provider_data, "max_interactive_delay", None
-            )
-            existing.refresh_timeout = getattr(provider_data, "refresh_timeout", None)
-            existing.supported_account_extra_fields = getattr(
-                provider_data, "supported_account_extra_fields", None
-            )
-            existing.supported_account_natures = getattr(
-                provider_data, "supported_account_natures", None
-            )
-            existing.supported_account_types = getattr(
-                provider_data, "supported_account_types", None
-            )
-            existing.supported_fetch_scopes = getattr(
-                provider_data, "supported_fetch_scopes", None
-            )
-            existing.supported_transaction_extra_fields = getattr(
-                provider_data, "supported_transaction_extra_fields", None
-            )
-            existing.payment_templates = getattr(
-                provider_data, "payment_templates", None
-            )
-            existing.instruction_for_payments = getattr(
-                provider_data, "instruction_for_payments", None
-            )
-            existing.interactive_for_payments = getattr(
-                provider_data, "interactive_for_payments", None
-            )
-            existing.no_funds_rejection_supported = getattr(
-                provider_data, "no_funds_rejection_supported", None
-            )
-            existing.required_payment_fields = getattr(
-                provider_data, "required_payment_fields", None
-            )
-            existing.supported_payment_fields = getattr(
-                provider_data, "supported_payment_fields", None
-            )
-            existing.credentials_fields = getattr(
-                provider_data, "credentials_fields", None
-            )
-            existing.interactive_fields = getattr(
-                provider_data, "interactive_fields", None
-            )
+            for attr, value in fields.items():
+                setattr(existing, attr, value)
         else:
-            # Create new provider
-            provider = ProviderModel(
-                id=provider_data.code,  # code is the primary key
-                code=provider_data.code,
-                name=provider_data.name,
-                country_code=provider_data.country_code,
-                bic_codes=getattr(provider_data, "bic_codes", None),
-                identification_codes=getattr(
-                    provider_data, "identification_codes", None
-                ),
-                dynamic_registration_code=getattr(
-                    provider_data, "dynamic_registration_code", None
-                ),
-                group_code=getattr(provider_data, "group_code", None),
-                group_name=getattr(provider_data, "group_name", None),
-                hub=getattr(provider_data, "hub", None),
-                status=provider_data.status,
-                mode=provider_data.mode,
-                regulated=provider_data.regulated,
-                logo_url=getattr(provider_data, "logo_url", None),
-                timezone=getattr(provider_data, "timezone", None),
-                supported_iframe_embedding=provider_data.supported_iframe_embedding,
-                optional_interactivity=getattr(
-                    provider_data, "optional_interactivity", None
-                ),
-                customer_notified_on_sign_in=provider_data.customer_notified_on_sign_in,
-                automatic_fetch=getattr(provider_data, "automatic_fetch", None),
-                custom_pendings_period=getattr(
-                    provider_data, "custom_pendings_period", None
-                ),
-                holder_info=getattr(provider_data, "holder_info", None),
-                instruction_for_connections=getattr(
-                    provider_data, "instruction_for_connections", None
-                ),
-                interactive_for_connections=getattr(
-                    provider_data, "interactive_for_connections", None
-                ),
-                max_consent_days=getattr(provider_data, "max_consent_days", None),
-                max_fetch_interval=getattr(provider_data, "max_fetch_interval", None),
-                fetch_policies=getattr(provider_data, "fetch_policies", None),
-                max_interactive_delay=getattr(
-                    provider_data, "max_interactive_delay", None
-                ),
-                refresh_timeout=getattr(provider_data, "refresh_timeout", None),
-                supported_account_extra_fields=getattr(
-                    provider_data, "supported_account_extra_fields", None
-                ),
-                supported_account_natures=getattr(
-                    provider_data, "supported_account_natures", None
-                ),
-                supported_account_types=getattr(
-                    provider_data, "supported_account_types", None
-                ),
-                supported_fetch_scopes=getattr(
-                    provider_data, "supported_fetch_scopes", None
-                ),
-                supported_transaction_extra_fields=getattr(
-                    provider_data, "supported_transaction_extra_fields", None
-                ),
-                payment_templates=getattr(provider_data, "payment_templates", None),
-                instruction_for_payments=getattr(
-                    provider_data, "instruction_for_payments", None
-                ),
-                interactive_for_payments=getattr(
-                    provider_data, "interactive_for_payments", None
-                ),
-                no_funds_rejection_supported=getattr(
-                    provider_data, "no_funds_rejection_supported", None
-                ),
-                required_payment_fields=getattr(
-                    provider_data, "required_payment_fields", None
-                ),
-                supported_payment_fields=getattr(
-                    provider_data, "supported_payment_fields", None
-                ),
-                credentials_fields=getattr(provider_data, "credentials_fields", None),
-                interactive_fields=getattr(provider_data, "interactive_fields", None),
-            )
-            db.add(provider)
+            db.add(ProviderModel(id=provider_data.code, code=provider_data.code, **fields))
 
         await db.commit()

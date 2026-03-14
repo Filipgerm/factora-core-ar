@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator, ValidationInfo
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -146,7 +146,7 @@ class OnboardingUser(BaseModel):
     country_code: str
     email: EmailStr
     business_country: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_onboarding_complete: bool = False
 
 

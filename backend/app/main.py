@@ -1,9 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 import uvicorn
-from pathlib import Path
 
 from app.db.postgres import connect_to_database, close_database_connection
 from app.api.routes.gemi_routes import router as companies_router
@@ -27,14 +25,22 @@ async def lifespan(app: FastAPI):
     await close_database_connection()
 
 
-# Parse CORS origins from environment variable
-def get_cors_origins():
-    """Parse CORS origins from environment variable."""
-    cors_origins = settings.CORS_ORIGINS
-    if cors_origins == "*":
+def get_cors_origins() -> list[str]:
+    """Parse and return the list of allowed CORS origins from settings.
+
+    An empty ``CORS_ORIGINS`` string disables cross-origin access entirely
+    (safe production default).  Pass a comma-separated list or the literal
+    ``"*"`` only for development environments.
+
+    Returns:
+        List of allowed origin strings, e.g. ``["https://app.factora.eu"]``.
+    """
+    raw = settings.CORS_ORIGINS.strip()
+    if not raw:
+        return []
+    if raw == "*":
         return ["*"]
-    # Split by comma and strip whitespace
-    return [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 app = FastAPI(
@@ -54,14 +60,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Trust proxy headers when behind nginx reverse proxy
-# This ensures X-Forwarded-* headers are properly handled
-if settings.TRUSTED_PROXIES != "*":
-    # If specific proxies are configured, use TrustedHostMiddleware
-    # For now, we trust all proxies when TRUSTED_PROXIES is "*"
-    pass
-# FastAPI/Starlette automatically handles X-Forwarded-* headers
-# when the request comes through a trusted proxy
 
 app.include_router(companies_router, prefix="/companies", tags=["External APIs"])
 app.include_router(file_router, prefix="/files", tags=["File Management"])

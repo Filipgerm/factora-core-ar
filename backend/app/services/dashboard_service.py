@@ -17,7 +17,6 @@ from app.models.dashboard import (
     PartySummary,
 )
 from typing import List
-from app.models.user import ServiceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case, and_, distinct
 from decimal import Decimal
@@ -29,7 +28,11 @@ from app.db.database_models import AadeInvoiceModel, AadeDocumentModel, InvoiceD
 
 
 class DashboardService:
-    """DB session is injected per-call."""
+    """Stateless service that computes all dashboard metrics from the DB.
+
+    The database session is injected per call so that the service can be
+    shared across requests without holding a long-lived connection.
+    """
 
     async def get_dashboard_pl_metrics(
         self, db: AsyncSession, request: DashboardMetricsRequest
@@ -76,7 +79,9 @@ class DashboardService:
                 db=db, customer_id=request.customer_id, currency=request.currency
             )
 
-            # Monthly aggregations
+            # Monthly aggregations — fetch revenue and expenses once, then derive
+            # net_income and margin from those pre-computed lists to avoid 4 extra
+            # round-trips to the DB.
             monthly_revenue = await self.get_monthly_revenue(
                 db=db,
                 customer_id=request.customer_id,
@@ -91,19 +96,13 @@ class DashboardService:
                 end_date=end_date,
                 currency=request.currency,
             )
-            monthly_net_income = await self.get_monthly_net_income(
-                db=db,
-                customer_id=request.customer_id,
-                start_date=start_date,
-                end_date=end_date,
-                currency=request.currency,
+            monthly_net_income = self._compute_monthly_net_income(
+                monthly_revenue=monthly_revenue,
+                monthly_expenses=monthly_expenses,
             )
-            monthly_margin = await self.get_monthly_margin(
-                db=db,
-                customer_id=request.customer_id,
-                start_date=start_date,
-                end_date=end_date,
-                currency=request.currency,
+            monthly_margin = self._compute_monthly_margin(
+                monthly_revenue=monthly_revenue,
+                monthly_expenses=monthly_expenses,
             )
 
             return DashboardMetricsResponse(
@@ -121,11 +120,12 @@ class DashboardService:
                 monthly_margin=monthly_margin,
             )
 
+        except HTTPException:
+            raise
         except Exception as e:
-            return ServiceResponse(
-                success=False,
-                message=f"Internal server error: {str(e)}",
-            )
+            raise HTTPException(
+                status_code=500, detail=f"Internal server error: {str(e)}"
+            ) from e
 
     async def get_seller_metrics(
         self, db: AsyncSession, request: SellerMetricsRequest
@@ -214,10 +214,14 @@ class DashboardService:
             query = query.where(Transaction.category == request.category)
 
         if request.merchant_id:
-            query = query.where(Transaction.merchant_id == request.merchant_id)
+            # merchant_id lives in the JSONB extra column, not a direct column
+            query = query.where(
+                Transaction.extra["merchant_id"].astext == request.merchant_id
+            )
 
         if request.mcc:
-            query = query.where(Transaction.mcc == request.mcc)
+            # mcc lives in the JSONB extra column, not a direct column
+            query = query.where(Transaction.extra["mcc"].astext == str(request.mcc))
 
         # Apply ordering (newest first by default, transaction id is the tie breaker)
         query = query.order_by(Transaction.made_on.desc(), Transaction.id.desc())
@@ -285,7 +289,21 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> float:
-        """Sum of signed amounts (normal + fee, transfers also included for now, but to be further examined)."""
+        """Return the net cash flow (sum of all signed amounts) for the period.
+
+        Includes ``normal`` and ``fee`` mode transactions. Transfers are currently
+        included but should be reviewed before production use.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            Net cash flow as a float (positive = inflow, negative = outflow).
+        """
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
         q = (
@@ -306,7 +324,20 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> float:
-        f"""Sum of positive amounts (inflows) in the period, mode='normal' -> (to be discussed) ."""
+        """Return total revenue (sum of positive transaction amounts) for the period.
+
+        Only ``mode='normal'`` transactions are included.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            Total revenue as a non-negative float.
+        """
 
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
@@ -333,7 +364,20 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> float:
-        """ABS(sum of negative amounts) with mode='normal'-> (to be discussed) ."""
+        """Return total expenses (absolute sum of negative transaction amounts) for the period.
+
+        Only ``mode='normal'`` transactions are included.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            Total expenses as a non-negative float (absolute value of outflows).
+        """
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
         expenses_expr = case((Transaction.amount < 0, Transaction.amount), else_=0)
@@ -355,7 +399,16 @@ class DashboardService:
     async def get_net_income(
         self, db: AsyncSession, revenue: float, expenses: float
     ) -> float:
-        """Net income = revenue − expenses (expenses already absolute)."""
+        """Compute net income as revenue minus expenses.
+
+        Args:
+            db: Unused; kept for interface consistency with other metric methods.
+            revenue: Pre-computed total revenue (non-negative float).
+            expenses: Pre-computed total expenses (non-negative absolute float).
+
+        Returns:
+            Net income as ``revenue - expenses``.
+        """
         return float(revenue) - float(expenses)
 
     async def get_average_margin(
@@ -365,19 +418,41 @@ class DashboardService:
         start_date: date,
         end_date: date,
         currency: str,
-    ) -> float:
-        """Calculate profit margin percentage
+    ) -> float | None:
+        """Return the profit margin percentage for the period.
 
-        MVP: return None (no COGS). If you later add a `cogs_amount` per txn (or cost basis),
-        compute (revenue - cogs) / revenue guarded for division-by-zero.
+        MVP: returns ``None`` because COGS data is not yet available.
+        Future implementation should compute ``(revenue - cogs) / revenue``
+        guarded for division-by-zero.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            ``None`` (MVP placeholder).
         """
         return None
 
     async def _get_balance_and_currency(
         self, db: AsyncSession, customer_id: str, currency: str
     ) -> Tuple[float, str]:
-        """
-        MVP: sum balances of this customer's accounts in the requested currency (EUR).
+        """Aggregate the total balance across all of a customer's accounts.
+
+        MVP: sums balances for accounts in the requested currency only.
+        Multi-currency conversion is not yet implemented.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope accounts.
+            currency: ISO-4217 currency code to filter accounts.
+
+        Returns:
+            Tuple of ``(total_balance, currency_code)``; currency defaults to
+            the requested ``currency`` if no matching accounts are found.
         """
         q = (
             select(
@@ -405,7 +480,18 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> List[Dict[str, Any]]:
-        """Aggregate revenue by calendar month."""
+        """Aggregate revenue by calendar month within the reporting window.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            List of ``{"month": "YYYY-MM", "value": float}`` dicts sorted ascending.
+        """
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
         revenue_expr = case((Transaction.amount > 0, Transaction.amount), else_=0)
@@ -450,7 +536,19 @@ class DashboardService:
         end_date: date,
         currency: str,
     ) -> List[Dict[str, Any]]:
-        """Aggregate expenses by calendar month."""
+        """Aggregate expenses by calendar month within the reporting window.
+
+        Args:
+            db: Async database session.
+            customer_id: Internal customer identifier to scope transactions.
+            start_date: Inclusive start of the reporting window.
+            end_date: Inclusive end of the reporting window.
+            currency: ISO-4217 currency code used to filter accounts.
+
+        Returns:
+            List of ``{"month": "YYYY-MM", "value": float}`` dicts with absolute
+            (non-negative) values sorted descending by default.
+        """
         filters = self._base_tx_filters(customer_id, start_date, end_date, currency)
 
         expenses_expr = case((Transaction.amount < 0, Transaction.amount), else_=0)
@@ -487,26 +585,24 @@ class DashboardService:
             for row in results
         ]
 
-    async def get_monthly_net_income(
+    def _compute_monthly_net_income(
         self,
-        db: AsyncSession,
-        customer_id: str,
-        start_date: date,
-        end_date: date,
-        currency: str,
+        monthly_revenue: List[Dict[str, Any]],
+        monthly_expenses: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Aggregate net income (revenue - expenses) by calendar month."""
-        monthly_revenue = await self.get_monthly_revenue(
-            db, customer_id, start_date, end_date, currency
-        )
-        monthly_expenses = await self.get_monthly_expenses(
-            db, customer_id, start_date, end_date, currency
-        )
+        """Derive net income per month from pre-computed revenue and expenses lists.
 
-        # Merge the two lists by month
+        Avoids issuing additional DB queries when both lists are already available.
+
+        Args:
+            monthly_revenue: Output of :meth:`get_monthly_revenue`.
+            monthly_expenses: Output of :meth:`get_monthly_expenses`.
+
+        Returns:
+            List of ``{"month": "YYYY-MM", "value": float}`` dicts sorted by month.
+        """
         revenue_dict = {item["month"]: item["value"] for item in monthly_revenue}
         expenses_dict = {item["month"]: item["value"] for item in monthly_expenses}
-
         all_months = sorted(set(revenue_dict.keys()) | set(expenses_dict.keys()))
         return [
             {
@@ -518,28 +614,55 @@ class DashboardService:
             for month in all_months
         ]
 
-    async def get_monthly_margin(
+    def _compute_monthly_margin(
         self,
-        db: AsyncSession,
-        customer_id: str,
-        start_date: date,
-        end_date: date,
-        currency: str,
+        monthly_revenue: List[Dict[str, Any]],
+        monthly_expenses: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Aggregate margin by calendar month (currently returns None for each month)."""
-        monthly_revenue = await self.get_monthly_revenue(
-            db, customer_id, start_date, end_date, currency
-        )
-        monthly_expenses = await self.get_monthly_expenses(
-            db, customer_id, start_date, end_date, currency
-        )
+        """Derive margin per month from pre-computed revenue and expenses lists.
 
-        # For now, margin is None as per MVP
+        MVP: margin is always ``None``; reserved for future COGS-based calculation.
+
+        Args:
+            monthly_revenue: Output of :meth:`get_monthly_revenue`.
+            monthly_expenses: Output of :meth:`get_monthly_expenses`.
+
+        Returns:
+            List of ``{"month": "YYYY-MM", "value": None}`` dicts sorted by month.
+        """
         revenue_dict = {item["month"]: item["value"] for item in monthly_revenue}
         expenses_dict = {item["month"]: item["value"] for item in monthly_expenses}
-
         all_months = sorted(set(revenue_dict.keys()) | set(expenses_dict.keys()))
         return [{"month": month, "value": None} for month in all_months]
+
+    @staticmethod
+    def _apply_invoice_filters(query, request: "AadeDocumentsRequest"):
+        """Apply optional AadeDocumentsRequest filters to any SQLAlchemy select.
+
+        Centralises the five optional filter conditions so that the data query
+        and the count query in :meth:`get_aade_documents` share a single source
+        of truth.
+
+        Args:
+            query: A SQLAlchemy ``Select`` statement targeting ``AadeInvoiceModel``.
+            request: The filter / pagination request object.
+
+        Returns:
+            The query with all applicable ``WHERE`` clauses appended.
+        """
+        if request.date_from:
+            query = query.where(AadeInvoiceModel.issue_date >= request.date_from)
+        if request.date_to:
+            query = query.where(AadeInvoiceModel.issue_date <= request.date_to)
+        if request.invoice_type:
+            query = query.where(AadeInvoiceModel.invoice_type == request.invoice_type)
+        if request.issuer_vat:
+            query = query.where(AadeInvoiceModel.issuer_vat == request.issuer_vat)
+        if request.counterpart_vat:
+            query = query.where(
+                AadeInvoiceModel.counterpart_vat == request.counterpart_vat
+            )
+        return query
 
     async def get_aade_documents(
         self, db: AsyncSession, request: AadeDocumentsRequest
@@ -563,26 +686,10 @@ class DashboardService:
             .where(AadeDocumentModel.buyer_id == request.buyer_id)
         )
 
-        # Apply filters
-        if request.date_from:
-            query = query.where(AadeInvoiceModel.issue_date >= request.date_from)
+        # Apply the same optional filters to both the data query and the count
+        # query via a shared helper to avoid copy-pasting five conditions.
+        query = self._apply_invoice_filters(query, request)
 
-        if request.date_to:
-            query = query.where(AadeInvoiceModel.issue_date <= request.date_to)
-
-        if request.invoice_type:
-            query = query.where(AadeInvoiceModel.invoice_type == request.invoice_type)
-
-        if request.issuer_vat:
-            query = query.where(AadeInvoiceModel.issuer_vat == request.issuer_vat)
-
-        if request.counterpart_vat:
-            query = query.where(
-                AadeInvoiceModel.counterpart_vat == request.counterpart_vat
-            )
-
-        # Get total count before pagination
-        # Create a count query by removing order_by and pagination, then counting
         count_query = (
             select(func.count(AadeInvoiceModel.id))
             .select_from(AadeInvoiceModel)
@@ -592,28 +699,7 @@ class DashboardService:
             )
             .where(AadeDocumentModel.buyer_id == request.buyer_id)
         )
-
-        # Apply same filters to count query
-        if request.date_from:
-            count_query = count_query.where(
-                AadeInvoiceModel.issue_date >= request.date_from
-            )
-        if request.date_to:
-            count_query = count_query.where(
-                AadeInvoiceModel.issue_date <= request.date_to
-            )
-        if request.invoice_type:
-            count_query = count_query.where(
-                AadeInvoiceModel.invoice_type == request.invoice_type
-            )
-        if request.issuer_vat:
-            count_query = count_query.where(
-                AadeInvoiceModel.issuer_vat == request.issuer_vat
-            )
-        if request.counterpart_vat:
-            count_query = count_query.where(
-                AadeInvoiceModel.counterpart_vat == request.counterpart_vat
-            )
+        count_query = self._apply_invoice_filters(count_query, request)
 
         count_result = await db.execute(count_query)
         total = count_result.scalar_one()
