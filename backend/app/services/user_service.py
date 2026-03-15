@@ -1,10 +1,16 @@
-from datetime import datetime, timedelta, timezone
-import email
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
-from urllib.parse import urljoin
+"""UserService — buyer onboarding flow (phone/email OTP, KYC, finalization).
+
+Auth methods (login, logout, sign_up, refresh_tokens, forgot_password,
+reset_password, change_password) are inherited from
+:class:`~app.services.auth_service.AuthService`.
+"""
+
+from __future__ import annotations
+
+from datetime import timedelta
 from typing import Optional, Dict, Any, Literal
 import hashlib, secrets, string, re
+
 from app.models.user import (
     ServiceResponse,
     PhoneVerificationRequest,
@@ -19,11 +25,6 @@ from app.models.user import (
     OnboardingUser,
     ShareholderInfoRequest,
     BusinessInfoRequest,
-    SignUpRequest,
-    LoginRequest,
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    ChangePasswordRequest,
     SendOnboardingLinkRequest,
 )
 from app.services.notification_service import NotificationService
@@ -39,11 +40,10 @@ from sqlalchemy import (
     literal,
     cast,
 )
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.postgresql import JSONB
 from app.db.database_models import (
     OnboardingSession,
-    SellerSessions,
     VerificationSession,
     Sellers,
     Buyers,
@@ -59,112 +59,26 @@ from app.core.security.jwt import (
     hash_jti,
     REFRESH_TOKEN_TTL_DAYS,
 )
-from app.core.exceptions import (
-    AuthenticationError,
-    ConflictError,
-    ValidationError,
-    FactoraError,
-)
+from app.core.security.hashing import hash_token, sha256_code, now_utc
 
 FRONTEND_BASE_URL = settings.FRONTEND_BASE_URL
 
 
 Channel = Literal["phone", "email"]
-ph = PasswordHasher(time_cost=3, memory_cost=64 * 1024, parallelism=2)
+
+from app.services.auth_service import AuthService  # noqa: E402
 
 
-def hash_password(password: str, *, pepper: str | None = None) -> str:
-    """Returns an Argon2id hash string suitable for storage in the DB.
+class UserService(AuthService):
+    """Unified service for seller auth and buyer onboarding.
 
-    Optionally mixes in a server-side pepper kept in a secrets manager.
-    Never call this for verification — use ``verify_password`` instead.
-
-    Args:
-        password: The plaintext password to hash.
-        pepper: Optional server-side secret prepended before hashing.
-
-    Returns:
-        An Argon2id hash string.
+    Auth methods (login, logout, sign_up, etc.) are inherited from
+    :class:`AuthService`.  Onboarding methods live directly in this class.
+    This class is the primary injection target for :class:`UserController`.
     """
-    pwd = f"{pepper}{password}" if pepper else password
-    return ph.hash(pwd)
-
-
-def verify_password(
-    stored_hash: str, password: str, *, pepper: str | None = None
-) -> bool:
-    """Verifies a plaintext password against an Argon2id stored hash.
-
-    Handles salt extraction internally via the Argon2 library; safe against
-    timing attacks. Returns ``False`` (never raises) on mismatch so callers
-    can use a simple boolean check.
-
-    Args:
-        stored_hash: The Argon2id hash retrieved from the database.
-        password: The plaintext password supplied by the user.
-        pepper: Optional server-side secret that was mixed in at hash time.
-
-    Returns:
-        ``True`` if the password matches, ``False`` otherwise.
-    """
-
-    pwd = f"{pepper}{password}" if pepper else password
-    try:
-        return ph.verify(stored_hash, pwd)
-    except (VerifyMismatchError, VerificationError, InvalidHashError):
-        return False
-
-
-_ACCESS_TOKEN_TTL_HOURS = 24
-
-
-def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def hash_token(raw_token: str) -> str:
-    """Return a SHA-256 hex digest of *raw_token* for safe DB storage.
-
-    The raw token is returned to the client; only its hash is persisted so
-    that a database read cannot be used to forge a valid session.
-
-    Args:
-        raw_token: The raw opaque token string (e.g. from ``secrets.token_urlsafe``).
-
-    Returns:
-        A 64-character lowercase hex string.
-    """
-    import hashlib
-
-    return hashlib.sha256(raw_token.encode()).hexdigest()
-
-
-def sha256_code(code: str, *, pepper: str) -> str:
-    """Hash the verification code with a server-side pepper."""
-    h = hashlib.sha256()
-    h.update(f"{pepper}:{code}".encode("utf-8"))
-    return h.hexdigest()
-
-
-def _validate_password(password: str) -> None:
-    if not password or len(password) < 8:
-        raise ValueError("Password must be at least 8 characters.")
-    # Keep a reasonable baseline; adjust to your policy
-    if not re.search(r"[a-z]", password):
-        raise ValueError("Password must include a lowercase letter.")
-    if not re.search(r"[A-Z]", password):
-        raise ValueError("Password must include an uppercase letter.")
-    if not re.search(r"\d", password):
-        raise ValueError("Password must include a digit.")
-
-
-class UserService:
-    """Service class for handling user onboarding business logic"""
 
     def __init__(self, db: AsyncSession, *, code_pepper: str):
-        self.db = db
-        self.notification_service = NotificationService()
-        self.code_pepper = code_pepper
+        super().__init__(db, code_pepper=code_pepper)
 
     async def _generate_code(self, length: int = 4) -> str:
         """Generate a random numeric verification code"""
@@ -1191,404 +1105,3 @@ class UserService:
                 message=f"Failed to finalize onboarding: {str(e)}",
                 onboarding_session_id=onboarding_session_id,
             )
-
-    async def sign_up(self, request: SignUpRequest) -> Dict[str, Any]:
-        """
-        Create a new seller with hashed password and unique email/username.
-        """
-        try:
-
-            # Optional preflight to give a clearer error than raw IntegrityError:
-            exists = await self.db.execute(
-                select(Sellers.id).where(Sellers.email == request.email)
-            )
-            if exists.scalar_one_or_none():
-                raise ConflictError("Email already in use.")
-
-            result = await self.db.execute(
-                insert(Sellers)
-                .values(
-                    username=request.username,
-                    email=request.email,
-                    password_hash=hash_password(
-                        request.password, pepper=self.code_pepper
-                    ),
-                    is_active=True,
-                )
-                .returning(Sellers.id, Sellers.username, Sellers.email)
-            )
-
-            # created = result.first()
-            # print(created)
-            await self.db.commit()
-            return ServiceResponse(
-                success=True,
-                message="Seller created successfully.",
-            )
-
-        except IntegrityError:
-            # Someone else grabbed the same email between our check and commit
-            await self.db.rollback()
-            return ServiceResponse(success=False, message="Email already in use.")
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
-
-    async def login(
-        self,
-        request: LoginRequest,
-        user_agent: str | None = None,
-        ip_address: str | None = None,
-    ) -> Dict[str, Any]:
-        """Validate credentials and issue a JWT access token + opaque refresh token.
-
-        The JWT access token has a 30-minute TTL and is never stored in the DB.
-        The refresh token is opaque (``secrets.token_urlsafe``), has a 7-day TTL,
-        and is persisted as its SHA-256 hash in ``seller_sessions``.
-
-        Args:
-            request: Validated ``LoginRequest`` containing ``username`` and
-                ``password``.
-            user_agent: Optional ``User-Agent`` header value for session audit.
-            ip_address: Optional real client IP for session audit.
-
-        Returns:
-            ``ServiceResponse`` with ``access_token`` (JWT), ``refresh_token``
-            (opaque), and ``token_type="bearer"`` on success.
-        """
-        try:
-            # 1) Lookup by username
-            result = await self.db.execute(
-                select(Sellers).where(Sellers.username == request.username)
-            )
-            seller: Optional[Sellers] = result.scalar_one_or_none()
-
-            # Using AuthenticationError for 401 Unauthorized mapping
-            if not seller:
-                raise AuthenticationError("Invalid username or password.")
-
-            # 2) Verify password against the stored Argon2id hash
-            if not verify_password(
-                seller.password_hash, request.password, pepper=self.code_pepper
-            ):
-                raise AuthenticationError("Invalid username or password.")
-
-            if not seller.is_active:
-                raise AuthenticationError(
-                    "Account is disabled. Please contact support."
-                )
-
-            # 3) Issue a short-lived JWT access token.
-            #    The raw JWT is returned to the client; we store only the SHA-256
-            #    hash of its jti claim for optional forced revocation.
-            access_token, jti = encode_access_token(seller.id)
-
-            # 4) Issue an opaque refresh token.
-            #    Only the SHA-256 hash is persisted so DB breach ≠ token exposure.
-            raw_refresh_token, refresh_hash = generate_refresh_token()
-            now = now_utc()
-            refresh_expires_at = now + timedelta(days=REFRESH_TOKEN_TTL_DAYS)
-
-            # Persist the new session row
-            session = SellerSessions(
-                seller_id=seller.id,
-                refresh_token_hash=refresh_hash,
-                jti_hash=hash_jti(jti),
-                expires_at=refresh_expires_at,
-                created_at=now,
-                last_used_at=now,
-                user_agent=user_agent,
-                ip_address=ip_address,
-            )
-            self.db.add(session)
-
-            # Update last_login_at on the seller row
-            await self.db.execute(
-                update(Sellers).where(Sellers.id == seller.id).values(last_login_at=now)
-            )
-            await self.db.commit()
-
-            return ServiceResponse(
-                success=True,
-                message="Login successful.",
-                access_token=access_token,
-                refresh_token=raw_refresh_token,
-                token_type="bearer",
-                user_id=str(seller.id),
-                username=seller.username,
-            )
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
-
-    async def logout(self, refresh_token: str) -> Dict[str, Any]:
-        """Revoke the seller's refresh token, ending the session.
-
-        The JWT access token will expire naturally after 30 minutes.  Passing
-        the refresh token ensures that no new access tokens can be issued for
-        this session.
-
-        Args:
-            refresh_token: The raw opaque refresh token previously issued at
-                login.
-
-        Returns:
-            ``ServiceResponse`` indicating success or an invalid token.
-        """
-        try:
-            token_hash = hash_token(refresh_token)
-
-            # Delete the session row — no further refresh is possible
-            await self.db.execute(
-                delete(SellerSessions).where(
-                    SellerSessions.refresh_token_hash == token_hash
-                )
-            )
-            await self.db.commit()
-
-            return ServiceResponse(success=True, message="Logged out successfully.")
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
-
-    async def refresh_tokens(
-        self,
-        refresh_token: str,
-        user_agent: str | None = None,
-        ip_address: str | None = None,
-    ) -> Dict[str, Any]:
-        """Exchange a valid refresh token atomically to prevent race conditions."""
-        try:
-            token_hash = hash_token(refresh_token)
-            now = now_utc()
-
-            # We delete the row and return its data in a single operation.
-            # If two requests arrive simultaneously, Postgres locks the row.
-            # The first request deletes it and gets the data. The second request gets None.
-            result = await self.db.execute(
-                delete(SellerSessions)
-                .where(
-                    SellerSessions.refresh_token_hash == token_hash,
-                    SellerSessions.expires_at > now,
-                )
-                .returning(
-                    SellerSessions.seller_id,
-                    SellerSessions.user_agent,
-                    SellerSessions.ip_address,
-                )
-            )
-            consumed_session = result.first()
-
-            if not consumed_session:
-                # We do not need a separate SELECT. If it didn't delete, it's invalid.
-                raise AuthenticationError("Invalid or expired refresh token.")
-
-            seller_id, old_user_agent, old_ip_address = consumed_session
-
-            # Verify the seller still exists and is active
-            seller_result = await self.db.execute(
-                select(Sellers).where(
-                    Sellers.id == seller_id,
-                    Sellers.is_active.is_(True),
-                )
-            )
-            seller: Optional[Sellers] = seller_result.scalar_one_or_none()
-
-            if not seller:
-                # The session is already deleted by the RETURNING clause above.
-                await self.db.commit()
-                raise AuthenticationError("Account not found or disabled.")
-
-            # Issue new tokens (rotation)
-            new_access_token, new_jti = encode_access_token(seller.id)
-            new_raw_refresh, new_refresh_hash = generate_refresh_token()
-            new_expires_at = now + timedelta(days=REFRESH_TOKEN_TTL_DAYS)
-
-            # Insert the fresh session
-            new_session = SellerSessions(
-                seller_id=seller.id,
-                refresh_token_hash=new_refresh_hash,
-                jti_hash=hash_jti(new_jti),
-                expires_at=new_expires_at,
-                created_at=now,
-                last_used_at=now,
-                user_agent=user_agent or old_user_agent,
-                ip_address=ip_address or old_ip_address,
-            )
-            self.db.add(new_session)
-
-            # The transaction guarantees that if anything failed above, the deleted
-            # old session is rolled back safely.
-            await self.db.commit()
-
-            return ServiceResponse(
-                success=True,
-                message="Tokens refreshed.",
-                access_token=new_access_token,
-                refresh_token=new_raw_refresh,
-                token_type="bearer",
-                user_id=str(seller.id),
-                username=seller.username,
-            )
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            raise FactoraError(f"Database error during token refresh: {str(e)}")
-
-    async def forgot_password(self, request: ForgotPasswordRequest) -> Dict[str, Any]:
-        """
-        Generate a password reset token and email it if the account exists.
-        Always return a generic success message to avoid user enumeration.
-        """
-        try:
-            reset_token = secrets.token_urlsafe(32)
-            hashed_token = hash_token(reset_token)
-            expires_at = now_utc() + timedelta(minutes=30)
-
-            result = await self.db.execute(
-                update(Sellers)
-                .where(Sellers.email == request.email, Sellers.is_active.is_(True))
-                .values(
-                    password_reset_token=hashed_token,
-                    password_reset_expires_at=expires_at,
-                )
-                .returning(Sellers.email)
-            )
-            updated_password_email = result.scalar_one_or_none()
-            await self.db.commit()
-
-            if updated_password_email:
-                # Build reset URL the frontend will handle.
-                base_url = FRONTEND_BASE_URL.rstrip("/")
-                reset_url = f"{base_url}/auth/reset-password?token={reset_token}"
-                try:
-                    await self.notification_service.send_password_reset_email(
-                        email=updated_password_email, reset_url=reset_url
-                    )
-                except Exception as e:
-                    print(f"ERROR sending password reset email: {e}")
-
-            return ServiceResponse(
-                success=True,
-                message="If an account exists for the provided email, a password reset link has been sent.",
-            )
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
-
-    async def reset_password(self, request: ResetPasswordRequest) -> Dict[str, Any]:
-        """Validate token and set new password atomically."""
-        try:
-            incoming_hash = hash_token(request.token)
-            now = now_utc()
-            new_hash = hash_password(request.new_password, pepper=self.code_pepper)
-
-            # We attempt to update the password ONLY IF the token matches, is not expired,
-            # and the user is active. We return the user data if successful.
-            result = await self.db.execute(
-                update(Sellers)
-                .where(
-                    Sellers.password_reset_token == incoming_hash,
-                    Sellers.password_reset_expires_at > now,
-                    Sellers.is_active.is_(True),
-                )
-                .values(
-                    password_hash=new_hash,
-                    password_reset_token=None,
-                    password_reset_expires_at=None,
-                    updated_at=now,
-                )
-                .returning(Sellers.id, Sellers.username)
-            )
-
-            updated_seller = result.first()
-
-            if not updated_seller:
-                # If the query affected 0 rows, the token was invalid, expired, or used.
-                raise AuthenticationError("Invalid or expired reset token.")
-
-            seller_id, username = updated_seller
-
-            # Global Logout: Secure the account
-            await self.db.execute(
-                delete(SellerSessions).where(SellerSessions.seller_id == seller_id)
-            )
-            await self.db.commit()
-
-            return ServiceResponse(
-                success=True,
-                message="Password reset successful.",
-                user_id=str(seller_id),
-                username=username,
-            )
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            raise FactoraError(f"Database error during password reset: {str(e)}")
-
-    async def change_password(
-        self, seller_id: str, request: ChangePasswordRequest
-    ) -> Dict[str, Any]:
-        """Change the seller's password after verifying the current one.
-
-        The caller must have already validated the JWT via ``require_auth`` so
-        only a ``seller_id`` is received here — no raw token handling.
-        All active sessions are revoked on success so the seller must re-login.
-
-        Args:
-            seller_id: The authenticated seller's primary key (from JWT ``sub``).
-            request: ``ChangePasswordRequest`` containing ``current_password``,
-                ``new_password``, and ``confirm_password``.
-
-        Returns:
-            ``ServiceResponse`` indicating success or the specific failure reason.
-        """
-        try:
-            result = await self.db.execute(
-                select(Sellers).where(
-                    Sellers.id == seller_id, Sellers.is_active.is_(True)
-                )
-            )
-            seller: Optional[Sellers] = result.scalar_one_or_none()
-
-            if not seller:
-                raise AuthenticationError("Account not found or disabled.")
-
-            if not verify_password(
-                seller.password_hash, request.current_password, pepper=self.code_pepper
-            ):
-                raise AuthenticationError("Current password is incorrect.")
-
-            if verify_password(
-                seller.password_hash, request.new_password, pepper=self.code_pepper
-            ):
-                raise ValidationError("New password must be different from current.")
-
-            new_hash = hash_password(request.new_password, pepper=self.code_pepper)
-            now = now_utc()
-
-            # Update password and revoke all sessions (force fresh login)
-            await self.db.execute(
-                update(Sellers)
-                .where(Sellers.id == seller.id)
-                .values(password_hash=new_hash, updated_at=now)
-            )
-            await self.db.execute(
-                delete(SellerSessions).where(SellerSessions.seller_id == seller.id)
-            )
-            await self.db.commit()
-
-            return ServiceResponse(
-                success=True,
-                message="Password changed successfully. Please log in again.",
-                user_id=str(seller.id),
-                username=seller.username,
-            )
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
