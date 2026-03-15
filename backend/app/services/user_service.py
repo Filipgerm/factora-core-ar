@@ -310,12 +310,15 @@ class UserService:
 
             await self.db.commit()
 
-            # Generate secure onboarding token (expires in 48 hours)
-            token = secrets.token_urlsafe(32)
+            # Generate secure onboarding token (expires in 48 hours).
+            # The raw token is embedded in the emailed URL so the buyer can click
+            # it.  Only its SHA-256 hash is stored in the DB so a database breach
+            # cannot expose a usable invitation token.
+            raw_token = secrets.token_urlsafe(32)
             expires_at = now_utc() + timedelta(hours=48)
 
             onboarding_token = OnboardingToken(
-                token=token,
+                token=hash_token(raw_token),
                 buyer_id=buyer_id,
                 expires_at=expires_at,
                 used_at=None,
@@ -324,12 +327,10 @@ class UserService:
             self.db.add(onboarding_token)
             await self.db.commit()
 
-            # Generate onboarding link with secure token
-            # PRODUCTION
-            # onboarding_url = f"https://factora.yourdomain.com/onboarding/start-onboarding-session?token={token}"
-
-            # DEVELOPMENT
-            onboarding_url = f"{NGROK_DEV_BASE_URL}/onboarding/start-onboarding-session?token={token}"
+            # Build the invitation URL using the raw (unhashed) token so the
+            # recipient can supply it back.  FRONTEND_BASE_URL is the canonical
+            # frontend origin for all environments.
+            onboarding_url = f"{NGROK_DEV_BASE_URL}/onboarding?token={raw_token}"
 
             # Send email with link
             email_sent = await self.notification_service.send_onboarding_email(
@@ -353,16 +354,26 @@ class UserService:
             )
 
     async def start_onboarding_session(self, token: str) -> Dict[str, Any]:
-        """
-        Start an onboarding session using a secure token
+        """Start an onboarding session by validating an invitation token.
+
+        The raw token arriving from the query string is hashed before the DB
+        lookup so that only the SHA-256 digest is compared — the plaintext is
+        never used as a search key.
+
+        Args:
+            token: The raw invitation token from the buyer's email link.
+
+        Returns:
+            ServiceResponse with ``onboarding_session_id`` on success.
         """
         try:
             now = now_utc()
+            token_hash = hash_token(token)
 
-            # Validate token
+            # Validate token using its hash — never store or compare raw tokens.
             result = await self.db.execute(
                 select(OnboardingToken).where(
-                    OnboardingToken.token == token,
+                    OnboardingToken.token == token_hash,
                     OnboardingToken.used_at.is_(None),
                     OnboardingToken.expires_at > now,
                 )
@@ -387,10 +398,10 @@ class UserService:
                     message="Buyer not found",
                 )
 
-            # Mark token as used
+            # Mark token as used (single-use enforcement)
             await self.db.execute(
                 update(OnboardingToken)
-                .where(OnboardingToken.token == token)
+                .where(OnboardingToken.token == token_hash)
                 .values(used_at=now)
             )
 
