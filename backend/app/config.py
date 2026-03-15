@@ -36,7 +36,16 @@ class Settings(BaseSettings):
     SALTEDGE_APP_ID: str = Field(..., description="Saltedge app id")
     SALTEDGE_SECRET: str = Field(..., description="Saltedge API key")
     CODE_PEPPER: str = Field(..., description="Code pepper for hashing")
-    # BREVO_SENDER_NUMBER: str
+
+    # --- JWT Authentication ---
+    JWT_SECRET_KEY: str = Field(
+        ...,
+        description=(
+            "Secret key for signing JWT access tokens (HS256). "
+            "Must be at least 32 random bytes. "
+            "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+        ),
+    )
 
     # CORS and Proxy Configuration
     CORS_ORIGINS: str = Field(
@@ -50,7 +59,19 @@ class Settings(BaseSettings):
     )
     TRUSTED_PROXIES: str = Field(
         default="*",
-        description="Comma-separated list of trusted proxy IPs. Use '*' to trust all proxies (when behind nginx). Example: '127.0.0.1,172.16.0.0/12'",
+        description=(
+            "Comma-separated list of trusted proxy IPs/CIDRs. "
+            "Use '*' to trust all (only for local dev). "
+            "Example: '172.16.0.0/12' covers the Docker bridge network."
+        ),
+    )
+    ALLOWED_HOSTS: str = Field(
+        default="*",
+        description=(
+            "Comma-separated list of allowed Host header values. "
+            "Use '*' to allow all (only for local dev). "
+            "Example: 'app.factora.eu,api.factora.eu'"
+        ),
     )
 
     model_config = {

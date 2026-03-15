@@ -35,7 +35,9 @@ _TEST_ENV = {
     "SALTEDGE_APP_ID": "test-saltedge-app-id",
     "SALTEDGE_SECRET": "test-saltedge-secret",
     "CODE_PEPPER": "test_pepper_123456",
+    "JWT_SECRET_KEY": "test-jwt-secret-key-for-unit-tests-only-not-for-production",
     "CORS_ORIGINS": "",
+    "ALLOWED_HOSTS": "*",
 }
 
 for _key, _val in _TEST_ENV.items():
