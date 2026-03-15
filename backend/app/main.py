@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from app.db.postgres import connect_to_database, close_database_connection
+from app.api.routes.auth_routes import router as auth_router
 from app.api.routes.gemi_routes import router as companies_router
 from app.api.routes.file_routes import router as file_router
 from app.api.routes.onboarding_routes import router as onboarding_router
@@ -61,10 +62,10 @@ app.add_middleware(
 )
 
 
+app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(companies_router, prefix="/companies", tags=["External APIs"])
 app.include_router(file_router, prefix="/files", tags=["File Management"])
 app.include_router(onboarding_router, prefix="/onboarding", tags=["Onboarding"])
-# app.include_router(chatbot_router, prefix="/chatbot", tags=["AI Chatbot"])
 app.include_router(saltedge_router, prefix="/saltedge", tags=["Saltedge"])
 app.include_router(aade_router, prefix="/aade", tags=["AADE"])
 app.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard"])

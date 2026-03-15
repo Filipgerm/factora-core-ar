@@ -435,6 +435,44 @@ class UserService:
                 message=f"Failed to start onboarding session: {str(e)}",
             )
 
+    async def get_onboarding_session_state(self, session_id: str) -> Dict[str, Any]:
+        """Return the current step and verification flags for an onboarding session.
+
+        Called by the frontend on page load when a session_id is stored in
+        localStorage so the buyer can resume from where they left off.
+
+        Args:
+            session_id: The onboarding session primary key.
+
+        Returns:
+            ServiceResponse with ``step``, ``phone_verified``, and
+            ``email_verified`` populated on success.
+        """
+        try:
+            result = await self.db.execute(
+                select(OnboardingSession).where(OnboardingSession.id == session_id)
+            )
+            session: Optional[OnboardingSession] = result.scalar_one_or_none()
+            if not session:
+                return ServiceResponse(
+                    success=False,
+                    message="Onboarding session not found.",
+                )
+            return ServiceResponse(
+                success=True,
+                message="Session state retrieved.",
+                onboarding_session_id=session_id,
+                step=session.step,
+                phone_verified=session.phone_verified,
+                email_verified=session.email_verified,
+                status=session.status,
+            )
+        except Exception as e:
+            return ServiceResponse(
+                success=False,
+                message=f"Failed to retrieve session state: {str(e)}",
+            )
+
     async def verify_phone_number(
         self, request: PhoneVerificationRequest
     ) -> PhoneVerificationResponse:

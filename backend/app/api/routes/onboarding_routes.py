@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends, Header, status
-from typing import Optional, Annotated
+from fastapi import APIRouter, HTTPException, Depends, status
+from typing import Annotated
 from app.controllers.user_controller import UserController
 from app.models.user import (
     ServiceResponse,
@@ -10,18 +10,11 @@ from app.models.user import (
     BusinessCountryRequest,
     BusinessInfoRequest,
     ShareholderInfoRequest,
-    SignUpRequest,
-    LoginRequest,
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    ChangePasswordRequest,
     SendOnboardingLinkRequest,
 )
 from app.dependencies import get_user_controller
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-router = APIRouter()
-bearer_scheme = HTTPBearer(auto_error=True)
+router = APIRouter(tags=["Onboarding"])
 
 
 @router.post("/send-onboarding-link", response_model=ServiceResponse)
@@ -226,16 +219,17 @@ async def set_shareholder_info(
 async def create_user(
     onboarding_session_id: str,
     user_controller: Annotated[UserController, Depends(get_user_controller)],
-):
-    """
-    Complete onboarding and create final user record
+) -> ServiceResponse:
+    """Complete onboarding and create the final buyer record.
 
-    @param onboarding_session_id: The onboarding session ID to complete
-    @returns: Response with user creation result:
+    Args:
+        onboarding_session_id: The ID of the completed onboarding session.
 
-    - success: bool - whether the operation succeeded
-    - message: str - explanation
-    - user_id: str - the created user ID (if successful)
+    Returns:
+        ``ServiceResponse`` with the new buyer's ID on success.
+
+    Raises:
+        HTTPException: 400 if required verification steps are incomplete.
     """
     response = await user_controller.create_business(onboarding_session_id)
     if not response.success:
@@ -245,124 +239,31 @@ async def create_user(
     return response
 
 
-@router.post("/signup", response_model=ServiceResponse)
-async def sign_up(
-    req: SignUpRequest,
+@router.get("/session/{session_id}", response_model=ServiceResponse)
+async def get_session_state(
+    session_id: str,
     user_controller: Annotated[UserController, Depends(get_user_controller)],
-):
-    """
-    Sign up a new user
+) -> ServiceResponse:
+    """Return the current step and verification state of an onboarding session.
 
-    @param req: Sign-up request containing username, email, and password
-    @returns: Response with signup result:
+    Called by the frontend on page load when ``onboarding_session_id`` is
+    stored in localStorage, allowing the buyer to resume from where they left
+    off without re-clicking the invitation link.
 
-    - success: bool - whether the operation succeeded
-    - message: str - explanation of the signup result
-    - onboarding_session_id: optional - if linked to an onboarding session
-    """
-    response: ServiceResponse = await user_controller.sign_up(req)
-    if not response.success:
-        raise HTTPException(
-            status_code=400, detail=response.message or "User signup failed"
-        )
-    return response
-
-
-@router.post("/login", response_model=ServiceResponse)
-async def login(
-    req: LoginRequest,
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-):
-    """
-    Log in with username and password.
+    Args:
+        session_id: The onboarding session primary key.
 
     Returns:
-    - success: bool
-    - message: str
-    - access_token: optional bearer token on success
-    - token_type: always 'bearer' when access_token is present
-    - user_id / username: included on success for convenience
+        ``ServiceResponse`` with ``step``, ``phone_verified``,
+        ``email_verified``, and ``status``.
+
+    Raises:
+        HTTPException: 404 if the session does not exist.
     """
-    response: ServiceResponse = await user_controller.login(req)
+    response = await user_controller.get_onboarding_session_state(session_id)
     if not response.success:
-        # Unhappy path: bubble up a 401 so the frontend can ask for credentials again
         raise HTTPException(
-            status_code=401, detail=response.message or "Invalid credentials"
-        )
-    return response
-
-
-@router.post("/logout", response_model=ServiceResponse)
-async def logout(
-    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    user_controller: Annotated[UserController, Depends(get_user_controller)] = None,
-):
-    """
-    Logout by revoking the current bearer token.
-    Reads the Authorization header (no dedicated auth module yet).
-    """
-    response: ServiceResponse = await user_controller.logout(creds.credentials)
-    if not response.success:
-        # surface 401 if token is missing/invalid so the frontend can clean up local session
-        raise HTTPException(status_code=401, detail=response.message or "Invalid token")
-    return response
-
-
-@router.post("/forgot-password", response_model=ServiceResponse)
-async def forgot_password(
-    req: ForgotPasswordRequest,
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-):
-    """
-    Start the password reset flow by sending a reset email if the account exists.
-    Always returns a generic success message to prevent user enumeration.
-    """
-    response: ServiceResponse = await user_controller.forgot_password(req)
-    if not response.success:
-        # Database or internal errors become 500; we don't reveal account existence
-        raise HTTPException(
-            status_code=500, detail=response.message or "Internal error"
-        )
-    return response
-
-
-@router.post("/reset-password", response_model=ServiceResponse)
-async def reset_password(
-    req: ResetPasswordRequest,
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-):
-    """
-    Complete password reset:
-    - Frontend extracts `token` from the reset link query string
-    - Frontend posts { token, new_password, confirm_password } here
-    """
-    response: ServiceResponse = await user_controller.reset_password(req)
-    if not response.success:
-        raise HTTPException(status_code=400, detail=response.message or "Reset failed")
-    return response
-
-
-@router.post("/change-password", response_model=ServiceResponse)
-async def change_password(
-    req: ChangePasswordRequest,
-    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    user_controller: Annotated[UserController, Depends(get_user_controller)] = None,
-):
-    """
-    Change password for the authenticated user.
-    Requires a valid Bearer token in the Authorization header.
-    """
-    response: ServiceResponse = await user_controller.change_password(
-        token=creds.credentials, req=req
-    )
-    if not response.success:
-        # 401 for invalid/absent token; 400 for bad current password or validation issues
-        code = (
-            status.HTTP_401_UNAUTHORIZED
-            if response.message == "Invalid authentication token."
-            else status.HTTP_400_BAD_REQUEST
-        )
-        raise HTTPException(
-            status_code=code, detail=response.message or "Change password failed"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=response.message or "Session not found",
         )
     return response

@@ -21,6 +21,10 @@ class ServiceResponse(BaseModel):
 
     # Onboarding flow
     onboarding_session_id: Optional[str] = None
+    step: Optional[str] = None
+    phone_verified: Optional[bool] = None
+    email_verified: Optional[bool] = None
+    status: Optional[str] = None
 
 
 class PhoneVerificationRequest(BaseModel):

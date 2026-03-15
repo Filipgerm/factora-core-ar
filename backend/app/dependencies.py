@@ -4,13 +4,21 @@ Centralizes all dependency injection to avoid circular imports.
 """
 
 from typing import Optional, Annotated
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.postgres import get_db_session
 from app.services.user_service import UserService
 from app.services.notification_service import NotificationService
 from app.controllers.user_controller import UserController
+from app.core.security.jwt import decode_access_token
+from app.core.exceptions import AuthenticationError
+
+# ---------------------------------------------------------------------------
+# Reusable bearer scheme for protected routes
+# ---------------------------------------------------------------------------
+_bearer_scheme = HTTPBearer(auto_error=True)
 
 
 # --- low-level factory (can be called directly) ---
@@ -73,3 +81,33 @@ def get_notification_service(
     svc: Annotated[Optional[NotificationService], Depends(lambda: None)] = None,
 ) -> NotificationService:
     return svc or NotificationService()
+
+
+# ---------------------------------------------------------------------------
+# JWT authentication dependency
+# ---------------------------------------------------------------------------
+
+
+def require_auth(
+    creds: Annotated[HTTPAuthorizationCredentials, Depends(_bearer_scheme)],
+) -> dict:
+    """Validate the JWT access token from the Authorization header.
+
+    This dependency is used on every route that requires an authenticated
+    seller.  It decodes and verifies the JWT; on success it returns the
+    full payload dict so route handlers can read ``payload["sub"]`` for the
+    seller ID.
+
+    Args:
+        creds: Bearer credentials extracted from the Authorization header.
+
+    Returns:
+        The validated JWT payload dict (contains ``sub``, ``jti``, ``exp``).
+
+    Raises:
+        HTTPException: 401 if the token is missing, expired, or invalid.
+    """
+    try:
+        return decode_access_token(creds.credentials)
+    except AuthenticationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
