@@ -31,7 +31,7 @@ _TEST_ENV = {
     "BREVO_SENDER_NAME": "Test Sender",
     "AADE_USERNAME": "test-aade-user",
     "AADE_SUBSCRIPTION_KEY": "test-aade-key",
-    "NGROK_DEV_BASE_URL": "https://test.ngrok.io",
+    "FRONTEND_BASE_URL": "https://test.factora.example.com",
     "SALTEDGE_APP_ID": "test-saltedge-app-id",
     "SALTEDGE_SECRET": "test-saltedge-secret",
     "CODE_PEPPER": "test_pepper_123456",

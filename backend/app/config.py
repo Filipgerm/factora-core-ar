@@ -1,76 +1,118 @@
-from pydantic_settings import BaseSettings
-from pydantic import Field
-import os
-from dotenv import load_dotenv
+from __future__ import annotations
 
-# Load environment variables before anything else
+from typing import Literal
+
+from dotenv import load_dotenv
+from pydantic import Field, computed_field
+from pydantic_settings import BaseSettings
+
+# Load environment variables before Settings is instantiated
 load_dotenv()
 
 
 class Settings(BaseSettings):
+    """Application settings loaded from environment variables / .env file.
+
+    All fields marked ``...`` (no default) are required.  Optional fields
+    have sensible defaults that are safe to use in production.
+
+    See ``.env.example`` for the full list with explanations.
+    """
+
+    # --- Database ---
     SUPABASE_URI: str = Field(
-        ..., description="Supabase database URI for PostgreSQL connection"
+        ..., description="Supabase async PostgreSQL URI (asyncpg driver, port 5432)"
     )
     SUPABASE_URI_SHARED_POOLER: str = Field(
-        ..., description="Supabase database IPv4 URL for PostgreSQL connection"
+        ..., description="Supabase pooled URI (asyncpg driver, port 6543)"
     )
-    SUPABASE_URL: str = Field(
-        ..., description="Supabase project URL for client initialization"
-    )
-    SUPABASE_SECRET_KEY: str = Field(..., description="Supabase service role key")
+    SUPABASE_URL: str = Field(..., description="Supabase project URL")
+    SUPABASE_SECRET_KEY: str = Field(..., description="Supabase service-role key")
     ALEMBIC_DATABASE_URL: str = Field(
-        ...,
-        description="Supabase service role key for alembic migrations: port changed",
+        ..., description="Synchronous URI for Alembic migrations (psycopg driver)"
     )
     SUPABASE_BUCKET: str = Field(..., description="Supabase storage bucket name")
-    GEMH_API_KEY: str = Field(..., description="GEMI API key")
-    BREVO_API_KEY: str = Field(..., description="Brevo API key")
-    BREVO_SMTP_KEY: str = Field(..., description="Brevo SMTP key")
-    BREVO_SENDER_EMAIL: str = Field(..., description="Brevo sender email")
-    BREVO_SENDER_NAME: str = Field(..., description="Brevo sender name")
-    AADE_USERNAME: str = Field(..., description="AADE username")
-    AADE_SUBSCRIPTION_KEY: str = Field(..., description="AADE api key")
-    NGROK_DEV_BASE_URL: str = Field(
-        ..., description="Ngrok base url for reset password functionality"
-    )
-    SALTEDGE_APP_ID: str = Field(..., description="Saltedge app id")
-    SALTEDGE_SECRET: str = Field(..., description="Saltedge API key")
-    CODE_PEPPER: str = Field(..., description="Code pepper for hashing")
 
-    # --- JWT Authentication ---
+    # --- External integrations ---
+    GEMH_API_KEY: str = Field(..., description="Greek Business Registry (GEMI) API key")
+    BREVO_API_KEY: str = Field(..., description="Brevo REST API key")
+    BREVO_SMTP_KEY: str = Field(..., description="Brevo SMTP API key")
+    BREVO_SENDER_EMAIL: str = Field(..., description="Verified Brevo sender address")
+    BREVO_SENDER_NAME: str = Field(..., description="Display name for outbound email/SMS")
+    AADE_USERNAME: str = Field(..., description="AADE/myDATA account username")
+    AADE_SUBSCRIPTION_KEY: str = Field(..., description="AADE/myDATA subscription key")
+    SALTEDGE_APP_ID: str = Field(..., description="SaltEdge application ID")
+    SALTEDGE_SECRET: str = Field(..., description="SaltEdge API secret")
+
+    # --- Security ---
+    CODE_PEPPER: str = Field(
+        ..., description="Server-side pepper for Argon2 hashes (>= 16 random chars)"
+    )
     JWT_SECRET_KEY: str = Field(
         ...,
         description=(
-            "Secret key for signing JWT access tokens (HS256). "
-            "Must be at least 32 random bytes. "
-            "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            "HS256 signing key for JWT access tokens. "
+            "Must be >= 32 random bytes. "
+            "Generate: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
         ),
     )
 
-    # CORS and Proxy Configuration
+    # --- URLs ---
+    FRONTEND_BASE_URL: str = Field(
+        ...,
+        description=(
+            "Canonical frontend URL used in outbound email links (password reset, "
+            "onboarding invitations). "
+            "Production: https://app.factora.eu  "
+            "Development: https://<ngrok-subdomain>.ngrok-free.app or http://localhost:3000"
+        ),
+    )
+
+    # --- Environment / Demo Mode ---
+    ENVIRONMENT: Literal["production", "development", "demo"] = Field(
+        default="production",
+        description=(
+            "Runtime environment.  Controls external API call behaviour and UI signals. "
+            "  'production'  — real API calls, real emails, real data. "
+            "  'development' — real API calls, local URLs. "
+            "  'demo'        — all external calls return static fixtures; "
+            "                  emails are logged, not sent; X-Demo-Mode header added."
+        ),
+    )
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def demo_mode(self) -> bool:
+        """Return True when the app is running in demo mode.
+
+        In demo mode all external API calls (AADE, SaltEdge, GEMI, Brevo) are
+        intercepted and return static fixture responses so a demonstration can
+        be run without real credentials or live data.
+        """
+        return self.ENVIRONMENT == "demo"
+
+    # --- CORS and Proxy Configuration ---
     CORS_ORIGINS: str = Field(
         default="",
         description=(
-            "Comma-separated list of allowed CORS origins. "
-            "Leave empty to deny all cross-origin requests (production default). "
-            "Use 'http://localhost:3000' for local development. "
-            "Example: 'https://app.factora.eu,https://www.factora.eu'"
+            "Comma-separated allowed CORS origins. "
+            "Leave empty (production default) to deny all cross-origin requests. "
+            "Development: http://localhost:3000  "
+            "Example: https://app.factora.eu,https://www.factora.eu"
         ),
     )
     TRUSTED_PROXIES: str = Field(
         default="*",
         description=(
-            "Comma-separated list of trusted proxy IPs/CIDRs. "
-            "Use '*' to trust all (only for local dev). "
-            "Example: '172.16.0.0/12' covers the Docker bridge network."
+            "Comma-separated trusted proxy IPs/CIDRs for ProxyHeadersMiddleware. "
+            "Use '*' in dev; '172.16.0.0/12' for Docker bridge in production."
         ),
     )
     ALLOWED_HOSTS: str = Field(
         default="*",
         description=(
-            "Comma-separated list of allowed Host header values. "
-            "Use '*' to allow all (only for local dev). "
-            "Example: 'app.factora.eu,api.factora.eu'"
+            "Comma-separated allowed Host header values for TrustedHostMiddleware. "
+            "Use '*' in dev; 'app.factora.eu,api.factora.eu' in production."
         ),
     )
 
@@ -78,7 +120,7 @@ class Settings(BaseSettings):
         "env_file": ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
-        "extra": "ignore",  # Ignore extra fields in env file
+        "extra": "ignore",
     }
 
 
@@ -87,15 +129,8 @@ try:
     settings = Settings()
 except Exception as e:
     print(f"❌ Failed to load settings: {e}")
-    print("Make sure you have a .env file with all required environment variables:")
-    print("- SUPABASE_URI")
-    print("- SUPABASE_URL")
-    print("- SUPABASE_SECRET_KEY")
-    print("- SUPABASE_BUCKET")
-    print("- GEMH_API_KEY")
-    print("- BREVO_API_KEY")
-    print("- BREVO_SMTP_KEY")
-    print("- BREVO_SENDER_EMAIL")
-    print("- BREVO_SENDER_NAME")
-    print("- CODE_PEPPER")
+    print(
+        "Make sure you have a .env file with all required variables. "
+        "See backend/.env.example for the full list."
+    )
     raise

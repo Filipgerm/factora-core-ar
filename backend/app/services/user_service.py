@@ -66,7 +66,7 @@ from app.core.exceptions import (
     FactoraError,
 )
 
-NGROK_DEV_BASE_URL = settings.NGROK_DEV_BASE_URL
+FRONTEND_BASE_URL = settings.FRONTEND_BASE_URL
 
 
 Channel = Literal["phone", "email"]
@@ -342,7 +342,7 @@ class UserService:
             # Build the invitation URL using the raw (unhashed) token so the
             # recipient can supply it back.  FRONTEND_BASE_URL is the canonical
             # frontend origin for all environments.
-            onboarding_url = f"{NGROK_DEV_BASE_URL}/onboarding?token={raw_token}"
+            onboarding_url = f"{FRONTEND_BASE_URL}/onboarding?token={raw_token}"
 
             # Send email with link
             email_sent = await self.notification_service.send_onboarding_email(
@@ -1462,10 +1462,8 @@ class UserService:
 
             if updated_password_email:
                 # Build reset URL the frontend will handle.
-                reset_url = urljoin(
-                    settings.NGROK_DEV_BASE_URL,
-                    f"/onboarding/reset-password?token={reset_token}",
-                )
+                base_url = FRONTEND_BASE_URL.rstrip("/")
+                reset_url = f"{base_url}/auth/reset-password?token={reset_token}"
                 try:
                     await self.notification_service.send_password_reset_email(
                         email=updated_password_email, reset_url=reset_url
