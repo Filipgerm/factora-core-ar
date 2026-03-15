@@ -8,6 +8,7 @@ import re
 import asyncio
 
 from app.clients.gemi_client import GemiApiClient
+from app.core.demo import demo_fixture
 from app.scripts.extract_filename import extract_filename
 
 DEFAULT_DOWNLOAD_CONCURRENCY = 5
@@ -45,6 +46,7 @@ class GemiService:
         check = total % 11 % 10
         return check == int(afm[8])
 
+    @demo_fixture("gemi_company")
     async def fetch_and_store_company_documents(self, afm: str) -> Dict[str, Any]:
         # 1) Search by AFM
         data = await self.client.search_companies_by_afm(afm)

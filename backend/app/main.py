@@ -35,6 +35,7 @@ from app.api.routes.onboarding_routes import router as onboarding_router
 from app.api.routes.saltedge_routes import router as saltedge_router
 from app.config import settings
 from app.db.postgres import close_database_connection, connect_to_database
+from app.middleware.demo import DemoModeMiddleware
 from app.middleware.request_id import RequestIDMiddleware
 
 
@@ -174,6 +175,32 @@ else:
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
     )
+
+# 3. TrustedHostMiddleware — prevents Host-header injection attacks.
+# Validates the Host: header against ALLOWED_HOSTS before any route logic runs.
+# In production set ALLOWED_HOSTS=app.factora.eu,api.factora.eu
+allowed_hosts = get_allowed_hosts()
+if allowed_hosts != ["*"]:
+    # Only activate when specific hosts are configured to avoid false positives
+    # in local dev or CI environments where the host is unpredictable.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
+
+# 2. ProxyHeadersMiddleware — reads X-Forwarded-For and X-Forwarded-Proto
+# set by nginx so that:
+#   - request.client.host == real browser IP (needed for rate limiting & logs)
+#   - request.url.scheme  == "https"          (needed for redirect URLs, Secure cookies)
+# trusted_hosts restricts which proxy IPs we trust to set these headers.
+# Docker bridge network is 172.16.0.0/12 by default; use "*" only in dev.
+trusted_proxies = get_trusted_proxies()
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=trusted_proxies)
+
+# 1b. DemoModeMiddleware — adds X-Demo-Mode: true to every response when
+# ENVIRONMENT=demo so the frontend can show a demo banner.
+app.add_middleware(DemoModeMiddleware)
+
+# 1. RequestIDMiddleware — innermost, runs last on request / first on response.
+# Injects X-Request-ID so all log lines for a request share a traceable ID.
+app.add_middleware(RequestIDMiddleware)
 
 # ---------------------------------------------------------------------------
 # Routers

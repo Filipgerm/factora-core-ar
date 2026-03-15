@@ -8,56 +8,88 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationService:
-    """Service for sending SMS and email notifications"""
+    """Service for sending SMS and email notifications.
+
+    In demo mode (``ENVIRONMENT=demo``) all outbound messages are suppressed:
+    the content is logged at INFO level instead of being dispatched to Brevo.
+    This allows demonstrations without spamming real email addresses or phone
+    numbers while ensuring the onboarding/auth flows complete successfully.
+    """
 
     def __init__(self):
-        # In production, initialize actual SMS/email service clients here
         self.email_client = BrevoEmailClient()
         self.sms_client = BrevoSMSClient()
 
-    async def send_verification_email(self, email: str, code: str) -> bool:
-        # HTML Used Only in Case of not Template Email
-        # html = f"""
-        # <html>
-        # <body>
-        #     <h2>Factora Email Verification</h2>
-        #     <p>Your verification code is: <strong>{code}</strong></p>
-        #     <p>This code will expire in 15 minutes.</p>
-        # </body>
-        # </html>
-        # """
+    def _is_demo(self) -> bool:
+        return settings.demo_mode
 
-        template_id = 1  # Brevo template number that we currently use.
-        subject = "Factora Email Verification"
-        params = {"subject": subject, "code": code}
+    async def send_verification_email(self, email: str, code: str) -> bool:
+        """Send an email verification code to the given address.
+
+        Args:
+            email: Recipient email address.
+            code: One-time verification code.
+
+        Returns:
+            ``True`` on success (or in demo mode where the send is suppressed).
+        """
+        if self._is_demo():
+            logger.info("[DEMO] send_verification_email to %s — code: %s", email, code)
+            return True
+        template_id = 1
+        params = {"subject": "Factora Email Verification", "code": code}
         return self.email_client.send_template_email(email, template_id, params)
 
     async def send_password_reset_email(self, email: str, reset_url: str) -> bool:
+        """Send a password-reset email containing a one-time link.
+
+        Args:
+            email: Seller's email address.
+            reset_url: Full URL to the frontend reset-password page with token.
+
+        Returns:
+            ``True`` on success (or in demo mode where the send is suppressed).
         """
-        Send a password reset email that contains a button/link to the reset page.
-        Prefer a dedicated Brevo template so you can style the button.
-        The template should expose a variable like {{ reset_url }}.
-        """
-        template_id = 3  # <-- create this in Brevo
-        subject = "Reset your Factora password"
-        params = {
-            "subject": subject,
-            "reset_url": reset_url,
-        }
-        # NGROK has been used for the url to be able to forward traffic from the public ip of the host to the internet
-        # and back to the docker containers ip. This works but the url for NGROK needs to be adjusted when we use cloud and not localhost.
-        # NGROK operates as a public reverse proxy. IN Paid NGROK plans, the ngrok url can be hidden and display our domain.
-        # NGROK should be mostly used for local testing.
-        # In PRODUCTION, use the our domain url , for example : https://app.yourdomain.com
+        if self._is_demo():
+            logger.info(
+                "[DEMO] send_password_reset_email to %s — url: %s", email, reset_url
+            )
+            return True
+        template_id = 3
+        params = {"subject": "Reset your Factora password", "reset_url": reset_url}
         return self.email_client.send_template_email(email, template_id, params)
 
     async def send_onboarding_email(self, email: str, onboarding_url: str) -> bool:
+        """Send a buyer onboarding invitation email with a one-time link.
 
-        template_id = 4  # Brevo template number that we currently use.
-        subject = "Factora Onboarding Invitation"
-        params = {"subject": subject, "onboarding_url": onboarding_url}
+        Args:
+            email: Buyer's email address.
+            onboarding_url: Full invitation URL including the hashed token.
+
+        Returns:
+            ``True`` on success (or in demo mode where the send is suppressed).
+        """
+        if self._is_demo():
+            logger.info(
+                "[DEMO] send_onboarding_email to %s — url: %s", email, onboarding_url
+            )
+            return True
+        template_id = 4
+        params = {"subject": "Factora Onboarding Invitation", "onboarding_url": onboarding_url}
         return self.email_client.send_template_email(email, template_id, params)
 
     async def send_verification_sms(self, phone: str, code: str) -> bool:
+        """Send an SMS with an OTP verification code.
+
+        Args:
+            phone: E.164 formatted phone number.
+            code: One-time numeric code.
+
+        Returns:
+            ``True`` on success (or in demo mode where the send is suppressed).
+        """
+        if self._is_demo():
+            logger.info("[DEMO] send_verification_sms to %s — code: %s", phone, code)
+            return True
         message = f"Your Factora SMS verification code is: {code}"
         return self.sms_client.send_sms(phone, message)

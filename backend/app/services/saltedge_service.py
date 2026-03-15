@@ -5,6 +5,7 @@ from sqlalchemy import select
 from datetime import datetime, date
 
 from app.config import Settings
+from app.core.demo import demo_fixture
 from packages.saltedge import SaltEdgeClient
 from packages.saltedge.models.accounts import (
     AccountsResponse,
@@ -52,6 +53,7 @@ class SaltEdgeService:
         self.app_settings = app_settings
 
     # ---------- Accounts ----------
+    @demo_fixture("saltedge_accounts")
     async def list_accounts(
         self,
         db: AsyncSession,
@@ -228,6 +230,7 @@ class SaltEdgeService:
         return self._api.customers.delete(customer_id=customer_id)
 
     # ---------- Transactions ----------
+    @demo_fixture("saltedge_transactions")
     async def list_transactions(
         self,
         db: AsyncSession,

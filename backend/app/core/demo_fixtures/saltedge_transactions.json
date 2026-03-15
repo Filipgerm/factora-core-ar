@@ -1,0 +1,45 @@
+{
+  "_comment": "Static fixture for SaltEdge transaction lookups in demo mode",
+  "data": [
+    {
+      "id": "demo-txn-001",
+      "mode": "normal",
+      "status": "posted",
+      "made_on": "2024-03-10",
+      "amount": -250.00,
+      "currency_code": "EUR",
+      "description": "ΕΚΔΟΣΗ ΤΙΜΟΛΟΓΙΟΥ 0001",
+      "category": "business_services",
+      "account_id": "demo-account-001",
+      "extra": {"merchant_id": null, "type": "debit"}
+    },
+    {
+      "id": "demo-txn-002",
+      "mode": "normal",
+      "status": "posted",
+      "made_on": "2024-03-12",
+      "amount": 1240.00,
+      "currency_code": "EUR",
+      "description": "ΕΙΣΠΡΑΞΗ ΑΠΟ ΠΕΛΑΤΗ DEMO A.E.",
+      "category": "income",
+      "account_id": "demo-account-001",
+      "extra": {"merchant_id": null, "type": "credit"}
+    },
+    {
+      "id": "demo-txn-003",
+      "mode": "normal",
+      "status": "posted",
+      "made_on": "2024-03-15",
+      "amount": -85.50,
+      "currency_code": "EUR",
+      "description": "ΔΕΗ ΛΟΓΑΡΙΑΣΜΟΣ",
+      "category": "utilities",
+      "account_id": "demo-account-001",
+      "extra": {"merchant_id": null, "type": "debit"}
+    }
+  ],
+  "meta": {
+    "next_id": null,
+    "next_page": null
+  }
+}
