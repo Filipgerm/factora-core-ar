@@ -160,10 +160,8 @@ class Sellers(Base):
     # Status + auth/session metadata (seller-only)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    last_access_token: Mapped[Optional[str]] = mapped_column(String(255))
-    access_token_expires_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True)
-    )
+    # last_access_token / access_token_expires_at removed — sessions now live
+    # in the seller_sessions table (one row per active session).
 
     # Password reset (seller-only)
     password_reset_token: Mapped[Optional[str]] = mapped_column(String(255))
@@ -186,6 +184,56 @@ class Sellers(Base):
 
     buyers: Mapped[List["Buyers"]] = relationship(
         secondary="seller_buyers", back_populates="sellers"
+    )
+
+
+# ---------------------------
+# SellerSessions: JWT refresh-token store for sellers
+#
+# One row per active session.  The JWT access token itself is stateless
+# (30-min TTL) and is NOT stored here.  The refresh token is opaque and is
+# persisted as its SHA-256 hash so a DB breach cannot replay it.
+#
+# jti_hash: SHA-256 of the JWT's `jti` claim — used only for immediate forced
+#           logout (e.g. admin revocation, password change).  Normally NULL
+#           because JWTs expire on their own after 30 minutes.
+# ---------------------------
+class SellerSessions(Base):
+    """Stores one refresh-token per seller session for JWT-based auth."""
+
+    __tablename__ = "seller_sessions"
+
+    id: Mapped[str] = mapped_column(
+        primary_key=True, default=lambda: uuid.uuid4().hex
+    )
+    seller_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("sellers.id", ondelete="CASCADE"), index=True
+    )
+
+    # SHA-256 of the opaque refresh token returned to the client.
+    refresh_token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+
+    # SHA-256 of the current JWT's `jti` claim — enables forced revocation
+    # without waiting for the 30-min access token TTL to expire.
+    jti_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    # When the refresh token expires (7-day TTL by default).
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+    # Audit metadata
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=text("now()")
+    )
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    user_agent: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+
+    __table_args__ = (
+        Index("ix_seller_sessions_expires_at", "expires_at"),
     )
 
 
