@@ -1,0 +1,29 @@
+{
+  "_comment": "Static fixture for GEMI business registry lookups in demo mode",
+  "data": {
+    "gemi_number": "000000001",
+    "vat_number": "123456789",
+    "company_name": "DEMO ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ",
+    "trade_name": "DEMO AE",
+    "legal_form": "ΑΕ",
+    "status": "ACTIVE",
+    "registration_date": "2015-06-01",
+    "address": {
+      "street": "Δεμοκρίτου",
+      "number": "1",
+      "city": "Αθήνα",
+      "postal_code": "10671",
+      "region": "ΑΤΤΙΚΗ",
+      "country": "GR"
+    },
+    "activity": {
+      "main_code": "6201",
+      "description": "Δραστηριότητες προγραμματισμού ηλεκτρονικών υπολογιστών"
+    },
+    "share_capital": 50000.00,
+    "shareholders": [
+      {"name": "DEMO ΙΔΙΟΚΤΗΤΗΣ", "percentage": 60.0, "nationality": "GR"},
+      {"name": "DEMO ΣΥΝΕΤΑΙΡΟΣ", "percentage": 40.0, "nationality": "GR"}
+    ]
+  }
+}

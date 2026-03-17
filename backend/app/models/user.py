@@ -5,17 +5,26 @@ from enum import Enum
 
 
 class ServiceResponse(BaseModel):
-    """Standard service response envelope"""
+    """Standard service response envelope used across all service methods."""
 
     success: bool
     message: Optional[str] = None
 
-    # Optional fields used across flows; keep them optional so the same model fits all endpoints.
-    onboarding_session_id: Optional[str] = None  # mentioned in your signup docstring
-    access_token: Optional[str] = None
-    token_type: Optional[str] = None
+    # Auth fields (login / refresh)
+    access_token: Optional[str] = None    # Short-lived JWT (30 min)
+    refresh_token: Optional[str] = None   # Opaque refresh token (7 days)
+    token_type: Optional[str] = None      # Always "bearer" when tokens are present
+
+    # User identity
     user_id: Optional[str] = None
     username: Optional[str] = None
+
+    # Onboarding flow
+    onboarding_session_id: Optional[str] = None
+    step: Optional[str] = None
+    phone_verified: Optional[bool] = None
+    email_verified: Optional[bool] = None
+    status: Optional[str] = None
 
 
 class PhoneVerificationRequest(BaseModel):

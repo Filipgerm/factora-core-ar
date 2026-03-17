@@ -1,10 +1,16 @@
-from datetime import datetime, timedelta, timezone
-import email
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
-from urllib.parse import urljoin
+"""UserService — buyer onboarding flow (phone/email OTP, KYC, finalization).
+
+Auth methods (login, logout, sign_up, refresh_tokens, forgot_password,
+reset_password, change_password) are inherited from
+:class:`~app.services.auth_service.AuthService`.
+"""
+
+from __future__ import annotations
+
+from datetime import timedelta
 from typing import Optional, Dict, Any, Literal
 import hashlib, secrets, string, re
+
 from app.models.user import (
     ServiceResponse,
     PhoneVerificationRequest,
@@ -19,11 +25,6 @@ from app.models.user import (
     OnboardingUser,
     ShareholderInfoRequest,
     BusinessInfoRequest,
-    SignUpRequest,
-    LoginRequest,
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    ChangePasswordRequest,
     SendOnboardingLinkRequest,
 )
 from app.services.notification_service import NotificationService
@@ -39,7 +40,7 @@ from sqlalchemy import (
     literal,
     cast,
 )
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.postgresql import JSONB
 from app.db.database_models import (
     OnboardingSession,
@@ -52,107 +53,32 @@ from app.db.database_models import (
 import phonenumbers
 from phonenumbers.phonenumberutil import NumberParseException
 from app.config import settings
+from app.core.security.jwt import (
+    encode_access_token,
+    generate_refresh_token,
+    hash_jti,
+    REFRESH_TOKEN_TTL_DAYS,
+)
+from app.core.security.hashing import hash_token, sha256_code, now_utc
 
-
-NGROK_DEV_BASE_URL = settings.NGROK_DEV_BASE_URL
+FRONTEND_BASE_URL = settings.FRONTEND_BASE_URL
 
 
 Channel = Literal["phone", "email"]
-ph = PasswordHasher(time_cost=3, memory_cost=64 * 1024, parallelism=2)
+
+from app.services.auth_service import AuthService  # noqa: E402
 
 
-def hash_password(password: str, *, pepper: str | None = None) -> str:
-    """Returns an Argon2id hash string suitable for storage in the DB.
+class UserService(AuthService):
+    """Unified service for seller auth and buyer onboarding.
 
-    Optionally mixes in a server-side pepper kept in a secrets manager.
-    Never call this for verification — use ``verify_password`` instead.
-
-    Args:
-        password: The plaintext password to hash.
-        pepper: Optional server-side secret prepended before hashing.
-
-    Returns:
-        An Argon2id hash string.
+    Auth methods (login, logout, sign_up, etc.) are inherited from
+    :class:`AuthService`.  Onboarding methods live directly in this class.
+    This class is the primary injection target for :class:`UserController`.
     """
-    pwd = f"{pepper}{password}" if pepper else password
-    return ph.hash(pwd)
-
-
-def verify_password(
-    stored_hash: str, password: str, *, pepper: str | None = None
-) -> bool:
-    """Verifies a plaintext password against an Argon2id stored hash.
-
-    Handles salt extraction internally via the Argon2 library; safe against
-    timing attacks. Returns ``False`` (never raises) on mismatch so callers
-    can use a simple boolean check.
-
-    Args:
-        stored_hash: The Argon2id hash retrieved from the database.
-        password: The plaintext password supplied by the user.
-        pepper: Optional server-side secret that was mixed in at hash time.
-
-    Returns:
-        ``True`` if the password matches, ``False`` otherwise.
-    """
-
-    pwd = f"{pepper}{password}" if pepper else password
-    try:
-        return ph.verify(stored_hash, pwd)
-    except (VerifyMismatchError, VerificationError, InvalidHashError):
-        return False
-
-
-_ACCESS_TOKEN_TTL_HOURS = 24
-
-
-def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def hash_token(raw_token: str) -> str:
-    """Return a SHA-256 hex digest of *raw_token* for safe DB storage.
-
-    The raw token is returned to the client; only its hash is persisted so
-    that a database read cannot be used to forge a valid session.
-
-    Args:
-        raw_token: The raw opaque token string (e.g. from ``secrets.token_urlsafe``).
-
-    Returns:
-        A 64-character lowercase hex string.
-    """
-    import hashlib
-
-    return hashlib.sha256(raw_token.encode()).hexdigest()
-
-
-def sha256_code(code: str, *, pepper: str) -> str:
-    """Hash the verification code with a server-side pepper."""
-    h = hashlib.sha256()
-    h.update(f"{pepper}:{code}".encode("utf-8"))
-    return h.hexdigest()
-
-
-def _validate_password(password: str) -> None:
-    if not password or len(password) < 8:
-        raise ValueError("Password must be at least 8 characters.")
-    # Keep a reasonable baseline; adjust to your policy
-    if not re.search(r"[a-z]", password):
-        raise ValueError("Password must include a lowercase letter.")
-    if not re.search(r"[A-Z]", password):
-        raise ValueError("Password must include an uppercase letter.")
-    if not re.search(r"\d", password):
-        raise ValueError("Password must include a digit.")
-
-
-class UserService:
-    """Service class for handling user onboarding business logic"""
 
     def __init__(self, db: AsyncSession, *, code_pepper: str):
-        self.db = db
-        self.notification_service = NotificationService()
-        self.code_pepper = code_pepper
+        super().__init__(db, code_pepper=code_pepper)
 
     async def _generate_code(self, length: int = 4) -> str:
         """Generate a random numeric verification code"""
@@ -310,12 +236,15 @@ class UserService:
 
             await self.db.commit()
 
-            # Generate secure onboarding token (expires in 48 hours)
-            token = secrets.token_urlsafe(32)
+            # Generate secure onboarding token (expires in 48 hours).
+            # The raw token is embedded in the emailed URL so the buyer can click
+            # it.  Only its SHA-256 hash is stored in the DB so a database breach
+            # cannot expose a usable invitation token.
+            raw_token = secrets.token_urlsafe(32)
             expires_at = now_utc() + timedelta(hours=48)
 
             onboarding_token = OnboardingToken(
-                token=token,
+                token=hash_token(raw_token),
                 buyer_id=buyer_id,
                 expires_at=expires_at,
                 used_at=None,
@@ -324,12 +253,10 @@ class UserService:
             self.db.add(onboarding_token)
             await self.db.commit()
 
-            # Generate onboarding link with secure token
-            # PRODUCTION
-            # onboarding_url = f"https://factora.yourdomain.com/onboarding/start-onboarding-session?token={token}"
-
-            # DEVELOPMENT
-            onboarding_url = f"{NGROK_DEV_BASE_URL}/onboarding/start-onboarding-session?token={token}"
+            # Build the invitation URL using the raw (unhashed) token so the
+            # recipient can supply it back.  FRONTEND_BASE_URL is the canonical
+            # frontend origin for all environments.
+            onboarding_url = f"{FRONTEND_BASE_URL}/onboarding?token={raw_token}"
 
             # Send email with link
             email_sent = await self.notification_service.send_onboarding_email(
@@ -353,16 +280,26 @@ class UserService:
             )
 
     async def start_onboarding_session(self, token: str) -> Dict[str, Any]:
-        """
-        Start an onboarding session using a secure token
+        """Start an onboarding session by validating an invitation token.
+
+        The raw token arriving from the query string is hashed before the DB
+        lookup so that only the SHA-256 digest is compared — the plaintext is
+        never used as a search key.
+
+        Args:
+            token: The raw invitation token from the buyer's email link.
+
+        Returns:
+            ServiceResponse with ``onboarding_session_id`` on success.
         """
         try:
             now = now_utc()
+            token_hash = hash_token(token)
 
-            # Validate token
+            # Validate token using its hash — never store or compare raw tokens.
             result = await self.db.execute(
                 select(OnboardingToken).where(
-                    OnboardingToken.token == token,
+                    OnboardingToken.token == token_hash,
                     OnboardingToken.used_at.is_(None),
                     OnboardingToken.expires_at > now,
                 )
@@ -387,10 +324,10 @@ class UserService:
                     message="Buyer not found",
                 )
 
-            # Mark token as used
+            # Mark token as used (single-use enforcement)
             await self.db.execute(
                 update(OnboardingToken)
-                .where(OnboardingToken.token == token)
+                .where(OnboardingToken.token == token_hash)
                 .values(used_at=now)
             )
 
@@ -410,6 +347,44 @@ class UserService:
             return ServiceResponse(
                 success=False,
                 message=f"Failed to start onboarding session: {str(e)}",
+            )
+
+    async def get_onboarding_session_state(self, session_id: str) -> Dict[str, Any]:
+        """Return the current step and verification flags for an onboarding session.
+
+        Called by the frontend on page load when a session_id is stored in
+        localStorage so the buyer can resume from where they left off.
+
+        Args:
+            session_id: The onboarding session primary key.
+
+        Returns:
+            ServiceResponse with ``step``, ``phone_verified``, and
+            ``email_verified`` populated on success.
+        """
+        try:
+            result = await self.db.execute(
+                select(OnboardingSession).where(OnboardingSession.id == session_id)
+            )
+            session: Optional[OnboardingSession] = result.scalar_one_or_none()
+            if not session:
+                return ServiceResponse(
+                    success=False,
+                    message="Onboarding session not found.",
+                )
+            return ServiceResponse(
+                success=True,
+                message="Session state retrieved.",
+                onboarding_session_id=session_id,
+                step=session.step,
+                phone_verified=session.phone_verified,
+                email_verified=session.email_verified,
+                status=session.status,
+            )
+        except Exception as e:
+            return ServiceResponse(
+                success=False,
+                message=f"Failed to retrieve session state: {str(e)}",
             )
 
     async def verify_phone_number(
@@ -1130,337 +1105,3 @@ class UserService:
                 message=f"Failed to finalize onboarding: {str(e)}",
                 onboarding_session_id=onboarding_session_id,
             )
-
-    async def sign_up(self, request: SignUpRequest) -> Dict[str, Any]:
-        """
-        Create a new seller with hashed password and unique email/username.
-        """
-        try:
-
-            # Optional preflight to give a clearer error than raw IntegrityError:
-            exists = await self.db.execute(
-                select(Sellers.id).where(Sellers.email == request.email)
-            )
-            if exists.scalar_one_or_none():
-                return ServiceResponse(success=False, message="Email already in use.")
-
-            result = await self.db.execute(
-                insert(Sellers)
-                .values(
-                    username=request.username,
-                    email=request.email,
-                    password_hash=hash_password(
-                        request.password, pepper=self.code_pepper
-                    ),
-                    is_active=True,
-                )
-                .returning(Sellers.id, Sellers.username, Sellers.email)
-            )
-
-            # created = result.first()
-            # print(created)
-            await self.db.commit()
-            return ServiceResponse(
-                success=True,
-                message="Seller created successfully.",
-            )
-
-        except IntegrityError:
-            # Someone else grabbed the same email between our check and commit
-            await self.db.rollback()
-            return ServiceResponse(success=False, message="Email already in use.")
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
-
-    async def login(self, request: LoginRequest) -> Dict[str, Any]:
-        """
-        Validate username and password.
-
-        Happy path:
-          - return success=True with success message
-        Unhappy path:
-          - return success=False with generic message (no user enumeration)
-        """
-        try:
-            # 1) Lookup by username
-            result = await self.db.execute(
-                select(Sellers).where(Sellers.username == request.username)
-            )
-            seller: Optional[Sellers] = result.scalar_one_or_none()
-
-            if not seller:
-                # User doesn't exist
-                return ServiceResponse(
-                    success=False,
-                    message="Invalid username or password.",
-                )
-
-            # 2) Verify password against the stored Argon2id hash
-            if not verify_password(
-                seller.password_hash, request.password, pepper=self.code_pepper
-            ):
-                return ServiceResponse(
-                    success=False,
-                    message="Invalid username or password.",
-                )
-
-            # 3) Happy path: issue an opaque access token (swap for JWT if desired).
-            # The raw token is returned to the client; only its SHA-256 hash is
-            # stored so that a DB compromise cannot replay credentials.
-            access_token = secrets.token_urlsafe(32)
-            now = now_utc()
-            token_expires_at = now + timedelta(hours=_ACCESS_TOKEN_TTL_HOURS)
-
-            await self.db.execute(
-                update(Sellers)
-                .where(Sellers.id == seller.id)
-                .values(
-                    last_login_at=now,
-                    last_access_token=hash_token(access_token),
-                    access_token_expires_at=token_expires_at,
-                )
-            )
-            await self.db.commit()
-
-            return ServiceResponse(
-                success=True,
-                message="Login successful.",
-                access_token=access_token,
-                token_type="bearer",
-                user_id=str(seller.id),
-                username=seller.username,
-            )
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
-
-    async def logout(self, token: str) -> Dict[str, Any]:
-        """
-        Revoke the current access token (persistent sessions until explicit logout).
-        - Happy path: clear token and return success.
-        - Unhappy path: token not found -> return success=False (401 at route).
-        """
-        try:
-            # Look up user by the SHA-256 hash of the raw bearer token
-            result = await self.db.execute(
-                select(Sellers).where(Sellers.last_access_token == hash_token(token))
-            )
-            seller: Optional[Sellers] = result.scalar_one_or_none()
-
-            if not seller:
-                return ServiceResponse(
-                    success=False, message="Invalid or expired token."
-                )
-
-            # Revoke token and clear expiry
-            await self.db.execute(
-                update(Sellers)
-                .where(Sellers.id == seller.id)
-                .values(last_access_token=None, access_token_expires_at=None)
-            )
-            await self.db.commit()
-
-            return ServiceResponse(success=True, message="Logged out successfully.")
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
-
-    async def forgot_password(self, request: ForgotPasswordRequest) -> Dict[str, Any]:
-        """
-        Generate a password reset token and email it if the account exists.
-        Always return a generic success message to avoid user enumeration.
-        """
-        try:
-            # Email is unique
-            result = await self.db.execute(
-                select(Sellers).where(Sellers.email == request.email)
-            )
-            seller: Optional[Sellers] = result.scalar_one_or_none()
-
-            # Whether or not we found a user, we respond the same.
-            generic_response = ServiceResponse(
-                success=True,
-                message="If an account exists for the provided email, a password reset email has been sent.",
-            )
-
-            if not seller or not seller.is_active:
-                # Do not reveal anything; return generic success message
-                print("WRONG PATH")
-                return generic_response
-
-            # Generate a one-time opaque reset token (not reused as session token)
-            reset_token = secrets.token_urlsafe(32)
-            expires_at = now_utc() + timedelta(minutes=30)
-
-            hashed_token = hash_token(reset_token)
-
-            # Persist token + expiry on the user
-            await self.db.execute(
-                update(Sellers)
-                .where(Sellers.id == seller.id)
-                .values(
-                    password_reset_token=hashed_token,
-                    password_reset_expires_at=expires_at,
-                )
-            )
-            await self.db.commit()
-
-            # Build reset URL the frontend will handle.
-            reset_url = urljoin(NGROK_DEV_BASE_URL, "/onboarding/reset-password")
-            # append the token query param
-            reset_url = f"{reset_url}?token={reset_token}"
-            # Fire-and-forget email (consider try/except around email sending if needed)
-            try:
-                await self.notification_service.send_password_reset_email(
-                    email=seller.email, reset_url=reset_url
-                )
-            except Exception as e:
-                import traceback
-
-                # You may want to log this; we still return generic success
-                print("ERROR sending password reset email:", e)
-                traceback.print_exc()
-
-            return generic_response
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
-
-    async def reset_password(self, request: ResetPasswordRequest) -> Dict[str, Any]:
-        """
-        Validate token + expiry, set new password, clear reset fields, revoke any existing session.
-        Triggered after the user clicks the email link, lands on FE, and submits new password.
-        """
-        try:
-
-            # Technical Logic: We calculate the hash of what they sent and see if it exists in the DB.
-            incoming_hash = hash_token(request.token)
-
-            # 1) Lookup the user by reset token
-            result = await self.db.execute(
-                select(Sellers).where(Sellers.password_reset_token == incoming_hash)
-            )
-            seller: Optional[Sellers] = result.scalar_one_or_none()
-
-            if not seller or not seller.is_active:
-                return ServiceResponse(
-                    success=False, message="Invalid or expired reset token."
-                )
-
-            # 2) Check expiry
-            now = now_utc()
-            if (
-                not seller.password_reset_expires_at
-                or seller.password_reset_expires_at < now
-            ):
-                return ServiceResponse(
-                    success=False, message="Invalid or expired reset token."
-                )
-
-            # 3) Hash and set new password; clear reset token; revoke any existing access token
-            new_hash = hash_password(request.new_password, pepper=self.code_pepper)
-
-            await self.db.execute(
-                update(Sellers)
-                .where(Sellers.id == seller.id)
-                .values(
-                    password_hash=new_hash,
-                    password_reset_token=None,
-                    password_reset_expires_at=None,
-                    last_access_token=None,  # force re-login
-                    updated_at=now,
-                )
-            )
-            await self.db.commit()
-
-            return ServiceResponse(
-                success=True,
-                message="Password has been reset successfully. Please log in with your new password.",
-                user_id=str(seller.id),
-                username=seller.username,
-            )
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")
-
-    async def change_password(
-        self, token: str, request: ChangePasswordRequest
-    ) -> Dict[str, Any]:
-        """
-        Happy path:
-          - Validate bearer token -> load user
-          - Verify current_password
-          - Ensure new_password != current_password
-          - Update password_hash
-          - Revoke existing token (force re-login)
-        Unhappy paths return clear messages for the frontend.
-        """
-        try:
-            # 1) Authenticate via bearer token (compare against stored SHA-256 hash)
-            result = await self.db.execute(
-                select(Sellers).where(Sellers.last_access_token == hash_token(token))
-            )
-            seller: Optional[Sellers] = result.scalar_one_or_none()
-
-            if not seller or not seller.is_active:
-                return ServiceResponse(
-                    success=False, message="Invalid authentication token."
-                )
-
-            # Enforce token expiry
-            if (
-                seller.access_token_expires_at
-                and seller.access_token_expires_at < now_utc()
-            ):
-                return ServiceResponse(
-                    success=False, message="Session expired. Please log in again."
-                )
-
-            # 2) Verify current password against stored Argon2id hash
-            if not verify_password(
-                seller.password_hash, request.current_password, pepper=self.code_pepper
-            ):
-                return ServiceResponse(
-                    success=False, message="Current password is incorrect."
-                )
-
-            # 3) Prevent reusing the same password
-            if verify_password(
-                seller.password_hash, request.new_password, pepper=self.code_pepper
-            ):
-                return ServiceResponse(
-                    success=False,
-                    message="New password must be different from the current password.",
-                )
-
-            new_hash = hash_password(request.new_password, pepper=self.code_pepper)
-
-            # 4) Update password and revoke token (force fresh login)
-            now = now_utc()
-            await self.db.execute(
-                update(Sellers)
-                .where(Sellers.id == seller.id)
-                .values(
-                    password_hash=new_hash,
-                    last_access_token=None,  # revoke the current session
-                    updated_at=now,
-                )
-            )
-            await self.db.commit()
-
-            return ServiceResponse(
-                success=True,
-                message="Password changed successfully. Please log in again.",
-                user_id=str(seller.id),
-                username=seller.username,
-            )
-
-        except SQLAlchemyError as e:
-            await self.db.rollback()
-            return ServiceResponse(success=False, message=f"Database error: {e}")

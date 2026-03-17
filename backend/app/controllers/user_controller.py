@@ -200,31 +200,63 @@ class UserController:
         except Exception as e:
             return ServiceResponse(success=False, message=f"Internal server error: {str(e)}")
 
-    async def login(self, req: LoginRequest) -> Dict[str, Any]:
+    async def login(
+        self,
+        req: LoginRequest,
+        user_agent: str | None = None,
+        ip_address: str | None = None,
+    ) -> Dict[str, Any]:
         """Authenticate a seller with username and password.
 
         Args:
             req: Contains username and password.
+            user_agent: Optional User-Agent header for session audit.
+            ip_address: Optional real client IP for session audit.
 
         Returns:
-            :class:`ServiceResponse` with a bearer ``access_token`` on success.
+            :class:`ServiceResponse` with JWT ``access_token``, opaque
+            ``refresh_token``, and ``token_type="bearer"`` on success.
         """
         try:
-            return await self.user_service.login(req)
+            return await self.user_service.login(req, user_agent=user_agent, ip_address=ip_address)
         except Exception as e:
             return ServiceResponse(success=False, message=f"Internal server error: {str(e)}")
 
-    async def logout(self, token: str) -> Dict[str, Any]:
-        """Revoke the seller's current bearer token.
+    async def logout(self, refresh_token: str) -> Dict[str, Any]:
+        """Revoke the seller's refresh token, ending the session.
 
         Args:
-            token: The raw bearer token extracted from the Authorization header.
+            refresh_token: The opaque refresh token issued at login.
 
         Returns:
             :class:`ServiceResponse` confirming successful logout.
         """
         try:
-            return await self.user_service.logout(token)
+            return await self.user_service.logout(refresh_token)
+        except Exception as e:
+            return ServiceResponse(success=False, message=f"Internal server error: {str(e)}")
+
+    async def refresh_tokens(
+        self,
+        refresh_token: str,
+        user_agent: str | None = None,
+        ip_address: str | None = None,
+    ) -> Dict[str, Any]:
+        """Exchange a refresh token for a new JWT + rotated refresh token.
+
+        Args:
+            refresh_token: The current opaque refresh token from the client.
+            user_agent: Optional User-Agent for the updated session row.
+            ip_address: Optional real client IP for the updated session row.
+
+        Returns:
+            :class:`ServiceResponse` with fresh ``access_token`` and
+            ``refresh_token`` on success.
+        """
+        try:
+            return await self.user_service.refresh_tokens(
+                refresh_token, user_agent=user_agent, ip_address=ip_address
+            )
         except Exception as e:
             return ServiceResponse(success=False, message=f"Internal server error: {str(e)}")
 
@@ -257,19 +289,37 @@ class UserController:
             return ServiceResponse(success=False, message=f"Internal server error: {str(e)}")
 
     async def change_password(
-        self, token: str, req: ChangePasswordRequest
+        self, seller_id: str, req: ChangePasswordRequest
     ) -> Dict[str, Any]:
         """Change the authenticated seller's password.
 
         Args:
-            token: Bearer token identifying the current session.
-            req: Contains the current password and the desired new password.
+            seller_id: The seller's primary key extracted from the validated JWT.
+            req: Contains ``current_password``, ``new_password``, and
+                ``confirm_password``.
 
         Returns:
             :class:`ServiceResponse` confirming the password was changed and
-            the session was revoked (requiring re-login).
+            all sessions were revoked (requiring re-login).
         """
         try:
-            return await self.user_service.change_password(token, req)
+            return await self.user_service.change_password(seller_id, req)
+        except Exception as e:
+            return ServiceResponse(success=False, message=f"Internal server error: {str(e)}")
+
+    async def get_onboarding_session_state(self, session_id: str) -> Dict[str, Any]:
+        """Return the current step and verification state of an onboarding session.
+
+        Used by the frontend to resume an abandoned onboarding flow.
+
+        Args:
+            session_id: The onboarding session primary key.
+
+        Returns:
+            :class:`ServiceResponse` with ``step``, ``phone_verified``, and
+            ``email_verified`` fields populated on success.
+        """
+        try:
+            return await self.user_service.get_onboarding_session_state(session_id)
         except Exception as e:
             return ServiceResponse(success=False, message=f"Internal server error: {str(e)}")
