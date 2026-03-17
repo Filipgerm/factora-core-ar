@@ -1,16 +1,14 @@
-"""JWT utilities for Factora seller authentication.
+"""JWT utilities for Factora user authentication.
 
-This module is the single place where JWTs are created and validated.
-It uses PyJWT with HS256 signing.
+Access token payload:
+  - ``sub``             — user UUID string
+  - ``role``            — UserRole enum value (e.g. "owner")
+  - ``organization_id`` — organization UUID string, or None pre-setup
+  - ``jti``             — UUID4 hex for forced revocation
+  - ``iat`` / ``exp``   — standard timestamps
 
-Token lifecycle:
-  - Access token: stateless JWT, 30-minute TTL.  Never stored in the DB.
-  - Refresh token: opaque ``secrets.token_urlsafe``, 7-day TTL.  Its SHA-256
-    hash is stored in ``seller_sessions``.
-
-The ``jti`` claim (UUID4 hex) is embedded in the access token so that an
-issued JWT can be force-revoked (e.g. on password change) by storing its
-SHA-256 hash in ``seller_sessions.jti_hash`` before the 30-min TTL expires.
+Refresh token: opaque ``secrets.token_urlsafe(48)``, 7-day TTL.
+Its SHA-256 hash is stored in ``user_sessions.token_hash``.
 """
 from __future__ import annotations
 
@@ -24,7 +22,7 @@ import jwt
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
 from app.core.config import settings
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import AuthError
 from app.core.security.hashing import now_utc
 
 # ---------------------------------------------------------------------------
@@ -42,24 +40,33 @@ _ALGORITHM = "HS256"
 # ---------------------------------------------------------------------------
 
 
-def encode_access_token(seller_id: str) -> tuple[str, str]:
-    """Create a signed JWT access token for the given seller.
+def encode_access_token(
+    user_id: str,
+    *,
+    role: str,
+    organization_id: str | None,
+) -> tuple[str, str]:
+    """Create a signed JWT access token for the given user.
 
     Args:
-        seller_id: The seller's primary key (UUID hex).
+        user_id: The user's UUID string.
+        role: The user's RBAC role (e.g. ``"owner"``).
+        organization_id: The user's organization UUID, or ``None`` before setup.
 
     Returns:
-        A tuple of ``(raw_jwt_string, jti_hex)`` where ``jti_hex`` is the
-        UUID4 string embedded in the token's ``jti`` claim.  The caller
-        may store ``SHA-256(jti_hex)`` in ``seller_sessions.jti_hash`` to
-        enable forced revocation.
+        A tuple of ``(raw_jwt_string, jti_hex)`` where ``jti_hex`` is stored
+        as ``SHA-256(jti_hex)`` in ``user_sessions.jti_hash`` to enable forced
+        revocation before the 30-minute TTL expires.
     """
     now = now_utc()
     jti = uuid.uuid4().hex
+    expires_at = now + timedelta(minutes=ACCESS_TOKEN_TTL_MINUTES)
     payload: dict[str, Any] = {
-        "sub": seller_id,
+        "sub": user_id,
+        "role": role,
+        "organization_id": organization_id,
         "iat": now,
-        "exp": now + timedelta(minutes=ACCESS_TOKEN_TTL_MINUTES),
+        "exp": expires_at,
         "jti": jti,
     }
     token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=_ALGORITHM)
@@ -69,15 +76,12 @@ def encode_access_token(seller_id: str) -> tuple[str, str]:
 def decode_access_token(token: str) -> dict[str, Any]:
     """Decode and validate a JWT access token.
 
-    Args:
-        token: The raw JWT string received from the ``Authorization`` header.
-
     Returns:
-        The validated payload dict containing at least ``sub`` and ``jti``.
+        Validated payload dict with at least ``sub``, ``role``,
+        ``organization_id``, and ``jti``.
 
     Raises:
-        AuthenticationError: If the token is expired, malformed, or has an
-            invalid signature.
+        AuthError: If the token is expired, malformed, or has an invalid signature.
     """
     try:
         payload = jwt.decode(
@@ -88,9 +92,17 @@ def decode_access_token(token: str) -> dict[str, Any]:
         )
         return payload
     except ExpiredSignatureError:
-        raise AuthenticationError("Access token has expired")
+        raise AuthError("Access token has expired", code="auth.token_expired")
     except InvalidTokenError as exc:
-        raise AuthenticationError(f"Invalid access token: {exc}")
+        raise AuthError(f"Invalid access token: {exc}", code="auth.token_invalid")
+
+
+def get_token_expires_at(token: str) -> Any:
+    """Return the ``exp`` datetime from a decoded token payload."""
+    from datetime import datetime, timezone
+
+    payload = decode_access_token(token)
+    return datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -102,8 +114,7 @@ def generate_refresh_token() -> tuple[str, str]:
     """Generate a cryptographically random opaque refresh token.
 
     Returns:
-        A tuple of ``(raw_token, sha256_hex)`` where ``raw_token`` is
-        returned to the client and ``sha256_hex`` is stored in the DB.
+        ``(raw_token, sha256_hex)`` — raw is sent to client, hash stored in DB.
     """
     raw = secrets.token_urlsafe(48)
     digest = hashlib.sha256(raw.encode()).hexdigest()
@@ -111,12 +122,5 @@ def generate_refresh_token() -> tuple[str, str]:
 
 
 def hash_jti(jti: str) -> str:
-    """Return SHA-256 hex of a JWT ``jti`` claim value.
-
-    Args:
-        jti: The raw ``jti`` string from the JWT payload.
-
-    Returns:
-        64-character lowercase hex digest.
-    """
+    """Return SHA-256 hex of a JWT ``jti`` claim value."""
     return hashlib.sha256(jti.encode()).hexdigest()

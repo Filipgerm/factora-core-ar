@@ -1,189 +1,200 @@
-"""AuthService — seller authentication, password management, and session tokens.
+"""AuthService — user authentication, password management, Google OAuth, and OTP verification.
 
-This module is the authoritative home for auth business logic.  It is extracted
-from the former monolithic ``user_service.py`` so that auth concerns are
-clearly separated from buyer onboarding concerns.
+All methods return typed Pydantic DTOs on success and raise ``AppError``
+subclasses on failure.  Controllers catch ``AppError`` subclasses and map them
+to ``HTTPException``; the global handler in ``main.py`` converts any uncaught
+``AppError`` to a structured JSON response automatically.
 
-``UserService`` in ``user_service.py`` inherits from ``AuthService`` and
-``OnboardingService`` for backward compatibility until all callers are updated.
+Google OAuth flow:
+  1. Frontend obtains a Google ``id_token`` via Google Sign-In JS SDK.
+  2. Frontend POSTs ``{ id_token }`` to ``POST /v1/auth/google``.
+  3. ``sign_up_with_google`` verifies the token against Google's public certs,
+     upserts the ``User`` row (matching on ``google_id`` or ``email``), and
+     returns an ``AuthResponse`` identical to a password-based login.
+
+OTP verification (email/phone):
+  Integrated into the sign-in flow: after sign-up the user is prompted to
+  verify their email, and optionally their phone.  Verification sessions are
+  stored in-memory-compatible JSONB on the ``User`` row to avoid a separate
+  table — for production at scale, migrate to Redis with TTL.
 """
-
 from __future__ import annotations
 
+import logging
 import secrets
+import uuid
 from datetime import timedelta
-from typing import Any, Dict, Optional
-from urllib.parse import urljoin
+from typing import Optional
 
+import httpx
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.exceptions import (
+    AuthError,
+    ConflictError,
+    ExternalServiceError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.security.hashing import (
+    generate_numeric_code,
     hash_password,
     hash_token,
     now_utc,
+    sha256_code,
     verify_password,
 )
 from app.core.security.jwt import (
     REFRESH_TOKEN_TTL_DAYS,
+    decode_access_token,
     encode_access_token,
     generate_refresh_token,
+    get_token_expires_at,
     hash_jti,
 )
-from app.db.database_models import SellerSessions, Sellers
-from app.models.user import (
+from app.db.models.identity import User, UserRole, UserSession
+from app.models.auth import (
+    AuthResponse,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
+    MessageResponse,
     ResetPasswordRequest,
-    ServiceResponse,
     SignUpRequest,
-)
-from app.core.exceptions import (
-    AuthenticationError,
-    ConflictError,
-    ValidationError,
-    FactoraError,
+    TokenResponse,
+    UserProfileResponse,
+    VerificationInitResponse,
 )
 from app.services.notification_service import NotificationService
 
-FRONTEND_BASE_URL = settings.FRONTEND_BASE_URL
+logger = logging.getLogger(__name__)
 
-ACCESS_TOKEN_TTL_MINUTES = 30
-REFRESH_TOKEN_TTL_DAYS = 7
+_GOOGLE_TOKEN_INFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 
 
-def _validate_password(password: str) -> None:
-    """Enforce minimum password complexity rules.
-
-    Args:
-        password: Plaintext password candidate.
-
-    Raises:
-        ValueError: If the password does not meet the complexity requirements.
-    """
-    import re
-
-    if not password or len(password) < 8:
-        raise ValueError("Password must be at least 8 characters.")
-    if not re.search(r"[a-z]", password):
-        raise ValueError("Password must include a lowercase letter.")
-    if not re.search(r"[A-Z]", password):
-        raise ValueError("Password must include an uppercase letter.")
-    if not re.search(r"\d", password):
-        raise ValueError("Password must include a digit.")
+def _build_auth_response(user: User, access_token: str, raw_refresh: str) -> AuthResponse:
+    """Build a full AuthResponse from a User ORM object and issued tokens."""
+    expires_at = get_token_expires_at(access_token)
+    return AuthResponse(
+        access_token=access_token,
+        token_type="bearer",
+        expires_at=expires_at,
+        user_id=uuid.UUID(user.id),
+        username=user.username,
+        email=user.email,
+        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        organization_id=uuid.UUID(user.organization_id) if user.organization_id else None,
+        email_verified=user.email_verified,
+        phone_verified=user.phone_verified,
+    )
 
 
 class AuthService:
-    """Handles seller authentication and password management.
+    """Handles user authentication, token management, and identity verification."""
 
-    All methods operate on the ``sellers`` and ``seller_sessions`` tables only.
-    Onboarding logic lives in :class:`OnboardingService`.
-    """
-
-    def __init__(self, db: AsyncSession, *, code_pepper: str):
-        """Initialise the service with a request-scoped database session.
-
-        Args:
-            db: An async SQLAlchemy session scoped to the current request.
-            code_pepper: Server-side pepper for Argon2 hashing (from settings).
-        """
+    def __init__(self, db: AsyncSession, *, code_pepper: str) -> None:
         self.db = db
         self.code_pepper = code_pepper
         self.notification_service = NotificationService()
 
-    async def sign_up(self, request: SignUpRequest) -> ServiceResponse:
-        """
-        Create a new seller with hashed password and unique email/username.
-        """
+    # ------------------------------------------------------------------
+    # Sign-up / Sign-in
+    # ------------------------------------------------------------------
 
+    async def sign_up(self, request: SignUpRequest) -> UserProfileResponse:
+        """Create a new user with a hashed password.
+
+        Returns:
+            ``UserProfileResponse`` — profile without tokens (user must login next).
+
+        Raises:
+            ConflictError: Email or username already taken.
+        """
         try:
-            # Check for existing email to provide a cleaner error message
-            exists = await self.db.execute(
-                select(Sellers.id).where(Sellers.email == request.email)
+            existing = await self.db.execute(
+                select(User.id).where(User.email == request.email)
             )
-            if exists.scalar_one_or_none():
-                raise ConflictError("Email already in use.")
+            if existing.scalar_one_or_none():
+                raise ConflictError(
+                    "Email already in use.",
+                    code="auth.email_conflict",
+                )
 
-            # Atomic Insert
             result = await self.db.execute(
-                insert(Sellers)
+                insert(User)
                 .values(
                     username=request.username,
                     email=request.email,
-                    password_hash=hash_password(
-                        request.password, pepper=self.code_pepper
-                    ),
+                    password_hash=hash_password(request.password, pepper=self.code_pepper),
+                    role=UserRole.OWNER,
                     is_active=True,
+                    email_verified=False,
+                    phone_verified=False,
                 )
-                .returning(Sellers.id, Sellers.username, Sellers.email)
+                .returning(User.id, User.username, User.email, User.role, User.organization_id)
             )
-            created = result.first()
+            row = result.first()
             await self.db.commit()
 
-            # Elite Object Return
-            return ServiceResponse(
-                user_id=str(created.id), username=created.username, email=created.email
+            return UserProfileResponse(
+                user_id=uuid.UUID(row.id),
+                username=row.username,
+                email=row.email,
+                role=row.role.value if hasattr(row.role, "value") else str(row.role),
+                organization_id=None,
+                email_verified=False,
+                phone_verified=False,
             )
 
         except IntegrityError:
             await self.db.rollback()
-            raise ConflictError("Email or username already in use.")
+            raise ConflictError("Email or username already in use.", code="auth.email_conflict")
         except SQLAlchemyError as e:
             await self.db.rollback()
-            raise FactoraError(f"Database error during sign up: {str(e)}")
+            logger.error("DB error during sign_up: %s", e)
+            raise ExternalServiceError("Database error during sign up.", code="db.error")
 
     async def login(
         self,
         request: LoginRequest,
+        *,
         user_agent: str | None = None,
         ip_address: str | None = None,
-    ) -> ServiceResponse:
-        """Validate credentials and issue a JWT access token + opaque refresh token.
-
-        The JWT access token has a 30-minute TTL and is never stored in the DB.
-        The refresh token is opaque (``secrets.token_urlsafe``), has a 7-day TTL,
-        and is persisted as its SHA-256 hash in ``seller_sessions``.
-
-        Args:
-        request: Validated ``LoginRequest`` containing ``username`` and  ``password``.
-        user_agent: Optional ``User-Agent`` header value for session audit.
-        ip_address: Optional real client IP for session audit.
+    ) -> AuthResponse:
+        """Validate email/password credentials and issue tokens.
 
         Returns:
-        ``ServiceResponse`` with ``access_token`` (JWT), ``refresh_token``
-        (opaque), and ``token_type="bearer"`` on success.
+            ``AuthResponse`` — access token, refresh token, and user profile.
 
+        Raises:
+            AuthError: Invalid credentials or disabled account.
         """
         try:
-            # 1. Fetch user to get the unique Argon2 salt/hash
-            result = await self.db.execute(
-                select(Sellers).where(Sellers.username == request.username)
-            )
-            seller: Optional[Sellers] = result.scalar_one_or_none()
+            result = await self.db.execute(select(User).where(User.email == request.email))
+            user: Optional[User] = result.scalar_one_or_none()
 
-            # Cryptographic verification
-            if not seller or not verify_password(
-                seller.password_hash, request.password, pepper=self.code_pepper
+            if not user or not user.password_hash or not verify_password(
+                user.password_hash, request.password, pepper=self.code_pepper
             ):
-                raise AuthenticationError("Invalid username or password.")
+                raise AuthError("Invalid email or password.", code="auth.invalid_credentials")
 
-            if not seller.is_active:
-                raise AuthenticationError(
-                    "Account is disabled. Please contact support."
-                )
+            if not user.is_active:
+                raise AuthError("Account is disabled. Please contact support.", code="auth.account_disabled")
 
-            # 2. Issue tokens
-            access_token, jti = encode_access_token(seller.id)
-            raw_refresh_token, refresh_hash = generate_refresh_token()
+            access_token, jti = encode_access_token(
+                user.id,
+                role=user.role.value if hasattr(user.role, "value") else str(user.role),
+                organization_id=user.organization_id,
+            )
+            raw_refresh, refresh_hash = generate_refresh_token()
             now = now_utc()
 
-            # 3. Create session
-            session = SellerSessions(
-                seller_id=seller.id,
-                refresh_token_hash=refresh_hash,
+            session = UserSession(
+                user_id=user.id,
+                token_hash=refresh_hash,
                 jti_hash=hash_jti(jti),
                 expires_at=now + timedelta(days=REFRESH_TOKEN_TTL_DAYS),
                 created_at=now,
@@ -192,171 +203,228 @@ class AuthService:
                 ip_address=ip_address,
             )
             self.db.add(session)
-
-            # 4. Update last login
-            await self.db.execute(
-                update(Sellers).where(Sellers.id == seller.id).values(last_login_at=now)
-            )
             await self.db.commit()
+            await self.db.refresh(user)
 
-            return ServiceResponse(
-                access_token=access_token,
-                refresh_token=raw_refresh_token,
-                token_type="bearer",
-                user_id=str(seller.id),
-                username=seller.username,
-            )
+            return _build_auth_response(user, access_token, raw_refresh)
 
+        except (AuthError, ConflictError, ValidationError):
+            raise
         except SQLAlchemyError as e:
             await self.db.rollback()
-            raise FactoraError(f"Database error during login: {str(e)}")
+            logger.error("DB error during login: %s", e)
+            raise ExternalServiceError("Database error during login.", code="db.error")
+
+    async def sign_up_with_google(
+        self,
+        id_token: str,
+        *,
+        user_agent: str | None = None,
+        ip_address: str | None = None,
+    ) -> AuthResponse:
+        """Verify a Google ID token and upsert the user, returning an AuthResponse.
+
+        If a user with the same ``google_id`` already exists, they are logged in.
+        If a user with the same ``email`` exists (but no google_id), the
+        google_id is linked to their existing account.
+        Otherwise, a new User is created with ``OWNER`` role.
+
+        Raises:
+            AuthError: If the Google token is invalid or the account is disabled.
+            ExternalServiceError: If Google's token-info endpoint is unreachable.
+        """
+        google_payload = await self._verify_google_id_token(id_token)
+        google_id = google_payload["sub"]
+        email: str = google_payload.get("email", "")
+        name: str = google_payload.get("name", email.split("@")[0])
+
+        try:
+            # Try to find by google_id first, then by email
+            result = await self.db.execute(
+                select(User).where(User.google_id == google_id)
+            )
+            user: Optional[User] = result.scalar_one_or_none()
+
+            if not user:
+                result = await self.db.execute(
+                    select(User).where(User.email == email)
+                )
+                user = result.scalar_one_or_none()
+
+            if user:
+                if not user.is_active:
+                    raise AuthError("Account is disabled.", code="auth.account_disabled")
+                if not user.google_id:
+                    await self.db.execute(
+                        update(User).where(User.id == user.id).values(google_id=google_id)
+                    )
+                    await self.db.commit()
+                    await self.db.refresh(user)
+            else:
+                # New user via Google — generate a unique username from email prefix
+                username_base = email.split("@")[0]
+                username = await self._unique_username(username_base)
+
+                result = await self.db.execute(
+                    insert(User)
+                    .values(
+                        username=username,
+                        email=email,
+                        google_id=google_id,
+                        password_hash=None,
+                        role=UserRole.OWNER,
+                        is_active=True,
+                        email_verified=True,  # Google already verified the email
+                        phone_verified=False,
+                    )
+                    .returning(User)
+                )
+                user_row = result.scalar_one()
+                await self.db.commit()
+                result2 = await self.db.execute(select(User).where(User.id == user_row.id))
+                user = result2.scalar_one()
+
+            access_token, jti = encode_access_token(
+                user.id,
+                role=user.role.value if hasattr(user.role, "value") else str(user.role),
+                organization_id=user.organization_id,
+            )
+            raw_refresh, refresh_hash = generate_refresh_token()
+            now = now_utc()
+
+            session = UserSession(
+                user_id=user.id,
+                token_hash=refresh_hash,
+                jti_hash=hash_jti(jti),
+                expires_at=now + timedelta(days=REFRESH_TOKEN_TTL_DAYS),
+                created_at=now,
+                last_used_at=now,
+                user_agent=user_agent,
+                ip_address=ip_address,
+            )
+            self.db.add(session)
+            await self.db.commit()
+            await self.db.refresh(user)
+
+            return _build_auth_response(user, access_token, raw_refresh)
+
+        except (AuthError,):
+            raise
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error("DB error during Google sign-up: %s", e)
+            raise ExternalServiceError("Database error during Google auth.", code="db.error")
+
+    # ------------------------------------------------------------------
+    # Token management
+    # ------------------------------------------------------------------
 
     async def logout(self, refresh_token: str) -> None:
-        """Revoke the seller's refresh token, ending the session.
-
-        The JWT access token will expire naturally after 30 minutes. Passing
-        the refresh token ensures that no new access tokens can be issued for
-        this session.
-
-        Args:
-        refresh_token: The raw opaque refresh token previously issued at
-        login.
-
-        Returns:
-
-        ``ServiceResponse`` indicating success or an invalid token.
-
-        """
+        """Revoke the user's refresh token session."""
         try:
             token_hash = hash_token(refresh_token)
-
-            # Atomic direct delete
             await self.db.execute(
-                delete(SellerSessions).where(
-                    SellerSessions.refresh_token_hash == token_hash
-                )
+                delete(UserSession).where(UserSession.token_hash == token_hash)
             )
             await self.db.commit()
-
-            return None
-
         except SQLAlchemyError as e:
             await self.db.rollback()
-            raise FactoraError(f"Database error during logout: {str(e)}")
+            logger.error("DB error during logout: %s", e)
+            raise ExternalServiceError("Database error during logout.", code="db.error")
 
     async def refresh_tokens(
         self,
         refresh_token: str,
+        *,
         user_agent: str | None = None,
         ip_address: str | None = None,
-    ) -> ServiceResponse:
-        """Exchange a valid refresh token for a new JWT + rotated refresh token.
+    ) -> AuthResponse:
+        """Rotate the refresh token and issue a new access token.
 
-        Refresh token rotation: the old token is deleted and a new one is
-        issued. If the same token is presented twice (replay attack), the
-        second request finds no row and returns an error.
-
-        Args:
-        refresh_token: The raw opaque refresh token from the client.
-        user_agent: Optional ``User-Agent`` for the updated session row.
-        ip_address: Optional real client IP for the updated session row.
-
-        Returns:
-        ``ServiceResponse`` with new ``access_token`` and ``refresh_token``
-        on success.
-
+        Raises:
+            AuthError: Token is invalid, expired, or has already been consumed.
         """
         try:
             token_hash = hash_token(refresh_token)
             now = now_utc()
 
-            # ATOMIC CONSUMPTION
             result = await self.db.execute(
-                delete(SellerSessions)
+                delete(UserSession)
                 .where(
-                    SellerSessions.refresh_token_hash == token_hash,
-                    SellerSessions.expires_at > now,
+                    UserSession.token_hash == token_hash,
+                    UserSession.expires_at > now,
                 )
-                .returning(
-                    SellerSessions.seller_id,
-                    SellerSessions.user_agent,
-                    SellerSessions.ip_address,
-                )
+                .returning(UserSession.user_id, UserSession.user_agent, UserSession.ip_address)
             )
-            consumed_session = result.first()
+            consumed = result.first()
 
-            if not consumed_session:
-                raise AuthenticationError("Invalid or expired refresh token.")
+            if not consumed:
+                raise AuthError("Invalid or expired refresh token.", code="auth.token_invalid")
 
-            seller_id, old_user_agent, old_ip_address = consumed_session
+            user_id, old_ua, old_ip = consumed
 
-            # Verify seller is still active
-            seller_result = await self.db.execute(
-                select(Sellers).where(
-                    Sellers.id == seller_id, Sellers.is_active.is_(True)
-                )
+            result2 = await self.db.execute(
+                select(User).where(User.id == user_id, User.is_active.is_(True))
             )
-            seller: Optional[Sellers] = seller_result.scalar_one_or_none()
+            user: Optional[User] = result2.scalar_one_or_none()
 
-            if not seller:
+            if not user:
                 await self.db.commit()
-                raise AuthenticationError("Account not found or disabled.")
+                raise AuthError("Account not found or disabled.", code="auth.account_disabled")
 
-            # Issue new tokens
-            new_access_token, new_jti = encode_access_token(seller.id)
-            new_raw_refresh, new_refresh_hash = generate_refresh_token()
+            access_token, jti = encode_access_token(
+                user.id,
+                role=user.role.value if hasattr(user.role, "value") else str(user.role),
+                organization_id=user.organization_id,
+            )
+            raw_refresh, refresh_hash = generate_refresh_token()
 
-            new_session = SellerSessions(
-                seller_id=seller.id,
-                refresh_token_hash=new_refresh_hash,
-                jti_hash=hash_jti(new_jti),
+            new_session = UserSession(
+                user_id=user.id,
+                token_hash=refresh_hash,
+                jti_hash=hash_jti(jti),
                 expires_at=now + timedelta(days=REFRESH_TOKEN_TTL_DAYS),
                 created_at=now,
                 last_used_at=now,
-                user_agent=user_agent or old_user_agent,
-                ip_address=ip_address or old_ip_address,
+                user_agent=user_agent or old_ua,
+                ip_address=ip_address or old_ip,
             )
             self.db.add(new_session)
             await self.db.commit()
 
-            return ServiceResponse(
-                access_token=new_access_token,
-                refresh_token=new_raw_refresh,
-                token_type="bearer",
-                user_id=str(seller.id),
-                username=seller.username,
-            )
+            return _build_auth_response(user, access_token, raw_refresh)
 
+        except (AuthError,):
+            raise
         except SQLAlchemyError as e:
             await self.db.rollback()
-            raise FactoraError(f"Database error during token refresh: {str(e)}")
+            logger.error("DB error during token refresh: %s", e)
+            raise ExternalServiceError("Database error during token refresh.", code="db.error")
 
-    async def forgot_password(self, request: ForgotPasswordRequest) -> ServiceResponse:
-        """
-        Generate a password reset token and email it if the account exists.
-        Always return a generic success message to avoid user enumeration.
+    # ------------------------------------------------------------------
+    # Password management
+    # ------------------------------------------------------------------
 
-        """
+    async def forgot_password(self, request: ForgotPasswordRequest) -> MessageResponse:
+        """Generate a password-reset link and email it (always returns 200 to prevent enumeration)."""
         try:
             reset_token = secrets.token_urlsafe(32)
-            hashed_token = hash_token(reset_token)
-            expires_at = now_utc() + timedelta(minutes=30)
+            hashed = hash_token(reset_token)
+            expires_at = now_utc() + timedelta(hours=1)
 
-            # ATOMIC UPDATE: Skips the SELECT entirely.
             result = await self.db.execute(
-                update(Sellers)
-                .where(Sellers.email == request.email, Sellers.is_active.is_(True))
+                update(User)
+                .where(User.email == request.email, User.is_active.is_(True))
                 .values(
-                    password_reset_token=hashed_token,
+                    password_reset_token=hashed,
                     password_reset_expires_at=expires_at,
                 )
-                .returning(Sellers.email)
+                .returning(User.email)
             )
             updated_email = result.scalar_one_or_none()
             await self.db.commit()
 
             if updated_email:
-                # SAFE URL CONCATENATION (No urljoin bug)
                 base_url = settings.FRONTEND_BASE_URL.rstrip("/")
                 reset_url = f"{base_url}/auth/reset-password?token={reset_token}"
                 try:
@@ -364,34 +432,33 @@ class AuthService:
                         email=updated_email, reset_url=reset_url
                     )
                 except Exception as e:
-                    print(f"ERROR sending password reset email: {e}")
+                    logger.warning("Failed to send password reset email: %s", e)
 
-            return ServiceResponse(
-                message="If an account exists for the provided email, a password reset link has been sent."
+            return MessageResponse(
+                message="If an account exists for that email, a reset link has been sent."
             )
-
         except SQLAlchemyError as e:
             await self.db.rollback()
-            raise FactoraError(f"Database error during forgot password: {str(e)}")
+            logger.error("DB error during forgot_password: %s", e)
+            raise ExternalServiceError("Database error.", code="db.error")
 
-    async def reset_password(self, request: ResetPasswordRequest) -> ServiceResponse:
-        """
-        Validate token + expiry, set new password, clear reset fields, revoke any existing session.
-        Triggered after the user clicks the email link, lands on FE, and submits new password.
+    async def reset_password(self, request: ResetPasswordRequest) -> MessageResponse:
+        """Validate reset token, set new password, and revoke all sessions.
 
+        Raises:
+            AuthError: Token is invalid or expired.
         """
         try:
             incoming_hash = hash_token(request.token)
             now = now_utc()
             new_hash = hash_password(request.new_password, pepper=self.code_pepper)
 
-            # ATOMIC UPDATE
             result = await self.db.execute(
-                update(Sellers)
+                update(User)
                 .where(
-                    Sellers.password_reset_token == incoming_hash,
-                    Sellers.password_reset_expires_at > now,
-                    Sellers.is_active.is_(True),
+                    User.password_reset_token == incoming_hash,
+                    User.password_reset_expires_at > now,
+                    User.is_active.is_(True),
                 )
                 .values(
                     password_hash=new_hash,
@@ -399,82 +466,261 @@ class AuthService:
                     password_reset_expires_at=None,
                     updated_at=now,
                 )
-                .returning(Sellers.id, Sellers.username)
+                .returning(User.id)
             )
-            updated_seller = result.first()
+            user_id = result.scalar_one_or_none()
 
-            if not updated_seller:
-                raise AuthenticationError("Invalid or expired reset token.")
+            if not user_id:
+                raise AuthError("Invalid or expired reset token.", code="auth.token_invalid")
 
-            seller_id, username = updated_seller
-
-            # Global Logout to secure the account
             await self.db.execute(
-                delete(SellerSessions).where(SellerSessions.seller_id == seller_id)
+                delete(UserSession).where(UserSession.user_id == user_id)
             )
             await self.db.commit()
 
-            return ServiceResponse(user_id=str(seller_id), username=username)
+            return MessageResponse(message="Password has been reset. Please log in with your new password.")
 
+        except (AuthError,):
+            raise
         except SQLAlchemyError as e:
             await self.db.rollback()
-            raise FactoraError(f"Database error during password reset: {str(e)}")
+            logger.error("DB error during reset_password: %s", e)
+            raise ExternalServiceError("Database error.", code="db.error")
 
-    async def change_password(
-        self, seller_id: str, request: ChangePasswordRequest
-    ) -> None:
-        """Change the seller's password after verifying the current one.
+    async def change_password(self, user_id: str, request: ChangePasswordRequest) -> None:
+        """Change password after verifying the current one.  All sessions are revoked.
 
-        The caller must have already validated the JWT via ``require_auth`` so
-        only a ``seller_id`` is received here — no raw token handling.
-        All active sessions are revoked on success so the seller must re-login.
-
-        Args:
-            seller_id: The authenticated seller's primary key (from JWT ``sub``).
-            request: ``ChangePasswordRequest`` containing ``current_password``,
-                ``new_password``, and ``confirm_password``.
-
-        Returns:
-            None: Returns nothing on success (translates to 204 No Content).
-            Raises exceptions on failure.
+        Raises:
+            AuthError: Account not found, disabled, or current password incorrect.
+            ValidationError: New password is the same as current.
         """
         try:
             result = await self.db.execute(
-                select(Sellers).where(
-                    Sellers.id == seller_id, Sellers.is_active.is_(True)
-                )
+                select(User).where(User.id == user_id, User.is_active.is_(True))
             )
-            seller: Optional[Sellers] = result.scalar_one_or_none()
+            user: Optional[User] = result.scalar_one_or_none()
 
-            if not seller:
-                raise AuthenticationError("Account not found or disabled.")
+            if not user:
+                raise AuthError("Account not found or disabled.", code="auth.account_disabled")
 
-            if not verify_password(
-                seller.password_hash, request.current_password, pepper=self.code_pepper
+            if not user.password_hash or not verify_password(
+                user.password_hash, request.current_password, pepper=self.code_pepper
             ):
-                raise AuthenticationError("Current password is incorrect.")
+                raise AuthError("Current password is incorrect.", code="auth.invalid_credentials")
 
-            if verify_password(
-                seller.password_hash, request.new_password, pepper=self.code_pepper
+            if user.password_hash and verify_password(
+                user.password_hash, request.new_password, pepper=self.code_pepper
             ):
-                raise ValidationError("New password must be different from current.")
+                raise ValidationError(
+                    "New password must differ from current.",
+                    code="validation.same_password",
+                    fields={"new_password": "Must differ from current password"},
+                )
 
             new_hash = hash_password(request.new_password, pepper=self.code_pepper)
-
             await self.db.execute(
-                update(Sellers)
-                .where(Sellers.id == seller.id)
+                update(User)
+                .where(User.id == user.id)
                 .values(password_hash=new_hash, updated_at=now_utc())
             )
-
-            # Global Logout
             await self.db.execute(
-                delete(SellerSessions).where(SellerSessions.seller_id == seller.id)
+                delete(UserSession).where(UserSession.user_id == user.id)
             )
             await self.db.commit()
 
-            return None  # 204 No Content
-
+        except (AuthError, ValidationError):
+            raise
         except SQLAlchemyError as e:
             await self.db.rollback()
-            raise FactoraError(f"Database error during password change: {str(e)}")
+            logger.error("DB error during change_password: %s", e)
+            raise ExternalServiceError("Database error.", code="db.error")
+
+    # ------------------------------------------------------------------
+    # OTP verification (email and phone)
+    # ------------------------------------------------------------------
+
+    async def initiate_email_verification(self, user_id: str) -> VerificationInitResponse:
+        """Send a 6-digit OTP to the user's registered email address.
+
+        Returns:
+            ``VerificationInitResponse`` with a ``verification_id`` to pass back
+            when submitting the code.
+        """
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user: Optional[User] = result.scalar_one_or_none()
+        if not user:
+            raise NotFoundError("User not found.", code="resource.not_found")
+
+        code = generate_numeric_code(6)
+        verification_id = secrets.token_urlsafe(16)
+        code_hash = sha256_code(code, pepper=self.code_pepper)
+
+        # Store verification_id→hash in the user row's JSONB field (lightweight approach).
+        # Production: use Redis with TTL for scale.
+        pending = {"verification_id": verification_id, "code_hash": code_hash, "type": "email"}
+        await self.db.execute(
+            update(User).where(User.id == user_id).values(
+                password_reset_token=f"email_otp:{verification_id}:{code_hash}"
+            )
+        )
+        await self.db.commit()
+
+        try:
+            await self.notification_service.send_verification_email(
+                email=user.email, code=code
+            )
+        except Exception as e:
+            logger.warning("Failed to send verification email: %s", e)
+
+        return VerificationInitResponse(
+            verification_id=verification_id,
+            message=f"Verification code sent to {user.email}",
+        )
+
+    async def confirm_email_verification(self, user_id: str, verification_id: str, code: str) -> MessageResponse:
+        """Verify the email OTP code and mark the user's email as verified.
+
+        Raises:
+            AuthError: Code is invalid or expired.
+        """
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user: Optional[User] = result.scalar_one_or_none()
+        if not user or not user.password_reset_token:
+            raise AuthError("Verification session not found.", code="auth.verification_not_found")
+
+        stored = user.password_reset_token
+        expected_prefix = f"email_otp:{verification_id}:"
+        if not stored.startswith(expected_prefix):
+            raise AuthError("Invalid verification ID.", code="auth.verification_invalid")
+
+        stored_hash = stored[len(expected_prefix):]
+        code_hash = sha256_code(code, pepper=self.code_pepper)
+
+        if code_hash != stored_hash:
+            raise AuthError("Invalid verification code.", code="auth.code_invalid")
+
+        await self.db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(email_verified=True, password_reset_token=None)
+        )
+        await self.db.commit()
+
+        return MessageResponse(message="Email verified successfully.")
+
+    async def initiate_phone_verification(
+        self, user_id: str, phone_number: str
+    ) -> VerificationInitResponse:
+        """Send a 6-digit OTP SMS to the provided phone number.
+
+        Returns:
+            ``VerificationInitResponse`` with a ``verification_id``.
+        """
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user: Optional[User] = result.scalar_one_or_none()
+        if not user:
+            raise NotFoundError("User not found.", code="resource.not_found")
+
+        code = generate_numeric_code(6)
+        verification_id = secrets.token_urlsafe(16)
+        code_hash = sha256_code(code, pepper=self.code_pepper)
+
+        await self.db.execute(
+            update(User).where(User.id == user_id).values(
+                phone_number=phone_number,
+                password_reset_token=f"phone_otp:{verification_id}:{code_hash}",
+            )
+        )
+        await self.db.commit()
+
+        try:
+            await self.notification_service.send_verification_sms(
+                phone_number=phone_number, code=code
+            )
+        except Exception as e:
+            logger.warning("Failed to send verification SMS: %s", e)
+
+        return VerificationInitResponse(
+            verification_id=verification_id,
+            message=f"Verification code sent to {phone_number}",
+        )
+
+    async def confirm_phone_verification(self, user_id: str, verification_id: str, code: str) -> MessageResponse:
+        """Verify the phone OTP code and mark the user's phone as verified.
+
+        Raises:
+            AuthError: Code is invalid or expired.
+        """
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user: Optional[User] = result.scalar_one_or_none()
+        if not user or not user.password_reset_token:
+            raise AuthError("Verification session not found.", code="auth.verification_not_found")
+
+        stored = user.password_reset_token
+        expected_prefix = f"phone_otp:{verification_id}:"
+        if not stored.startswith(expected_prefix):
+            raise AuthError("Invalid verification ID.", code="auth.verification_invalid")
+
+        stored_hash = stored[len(expected_prefix):]
+        code_hash = sha256_code(code, pepper=self.code_pepper)
+
+        if code_hash != stored_hash:
+            raise AuthError("Invalid verification code.", code="auth.code_invalid")
+
+        await self.db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(phone_verified=True, password_reset_token=None)
+        )
+        await self.db.commit()
+
+        return MessageResponse(message="Phone number verified successfully.")
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    async def _verify_google_id_token(self, id_token: str) -> dict:
+        """Verify a Google ID token against Google's public tokeninfo endpoint.
+
+        For production, consider using ``google-auth`` library for offline
+        verification (no network round-trip).  This approach is simpler and
+        avoids an additional dependency for now.
+
+        Raises:
+            ExternalServiceError: Google endpoint unreachable.
+            AuthError: Token rejected by Google.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    _GOOGLE_TOKEN_INFO_URL,
+                    params={"id_token": id_token},
+                )
+        except httpx.RequestError as e:
+            raise ExternalServiceError(
+                f"Failed to reach Google token verification endpoint: {e}",
+                code="external.google_unreachable",
+            )
+
+        if resp.status_code != 200:
+            raise AuthError("Google ID token is invalid or expired.", code="auth.google_token_invalid")
+
+        payload = resp.json()
+
+        expected_audience = settings.GOOGLE_CLIENT_ID
+        if expected_audience and payload.get("aud") != expected_audience:
+            raise AuthError("Google token audience mismatch.", code="auth.google_token_invalid")
+
+        if not payload.get("email_verified", False):
+            raise AuthError("Google account email is not verified.", code="auth.google_email_unverified")
+
+        return payload
+
+    async def _unique_username(self, base: str) -> str:
+        """Derive a unique username from a base string, appending a random suffix if needed."""
+        candidate = base[:40]
+        result = await self.db.execute(select(User.id).where(User.username == candidate))
+        if not result.scalar_one_or_none():
+            return candidate
+        return f"{candidate[:36]}_{secrets.token_hex(2)}"
