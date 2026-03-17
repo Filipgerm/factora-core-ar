@@ -74,18 +74,7 @@ class DashboardController:
     async def get_seller_metrics(
         self, db: AsyncSession, request: SellerMetricsRequest
     ) -> SellerMetricsResponse:
-        """Return aggregate metrics for a seller (completed/pending buyers, active alerts).
-
-        Args:
-            db: Async database session for the current request.
-            request: Contains seller_id.
-
-        Returns:
-            A :class:`SellerMetricsResponse` with customer and alert counts.
-
-        Raises:
-            HTTPException: 500 on unexpected service errors.
-        """
+        """Return aggregate metrics for an organization (counterparties, active alerts)."""
         try:
             return await self.dashboard_service.get_seller_metrics(
                 db=db, request=request
@@ -98,18 +87,7 @@ class DashboardController:
     async def get_aade_documents(
         self, db: AsyncSession, request: AadeDocumentsRequest
     ) -> AadeDocumentsResponse:
-        """Return paginated AADE invoices for a buyer with optional filters.
-
-        Args:
-            db: Async database session for the current request.
-            request: Filter/pagination parameters (buyer_id, dates, vats, invoice_type).
-
-        Returns:
-            An :class:`AadeDocumentsResponse` with a paginated invoice list and total count.
-
-        Raises:
-            HTTPException: 500 on unexpected service errors.
-        """
+        """Return paginated AADE invoices for an organization with optional filters."""
         try:
             return await self.dashboard_service.get_aade_documents(
                 db=db, request=request
@@ -120,23 +98,12 @@ class DashboardController:
             raise HTTPException(status_code=500, detail=str(e))
 
     async def get_aade_summary(
-        self, db: AsyncSession, buyer_id: str
+        self, db: AsyncSession, organization_id: str
     ) -> AadeSummaryResponse:
-        """Return aggregated AADE invoice statistics for a buyer.
-
-        Args:
-            db: Async database session for the current request.
-            buyer_id: Internal buyer identifier to scope the summary.
-
-        Returns:
-            An :class:`AadeSummaryResponse` with totals, party counts, and breakdowns.
-
-        Raises:
-            HTTPException: 500 on unexpected service errors.
-        """
+        """Return aggregated AADE invoice statistics for an organization."""
         try:
             return await self.dashboard_service.get_aade_summary(
-                db=db, buyer_id=buyer_id
+                db=db, organization_id=organization_id
             )
         except HTTPException:
             raise

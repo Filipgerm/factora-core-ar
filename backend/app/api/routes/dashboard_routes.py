@@ -119,11 +119,11 @@ async def get_transaction_history(
     description="Get metrics for a seller: completed customers, pending customers, and active alerts.",
 )
 async def get_seller_metrics(
-    seller_id: str = Query(..., description="Seller ID (string format)"),
+    organization_id: str = Query(..., description="Organization ID"),
     ctl: DashboardController = Depends(get_dashboard_controller),
     db: AsyncSession = Depends(get_db_session),
 ) -> SellerMetricsResponse:
-    req = SellerMetricsRequest(seller_id=seller_id)
+    req = SellerMetricsRequest(organization_id=organization_id)
     return await ctl.get_seller_metrics(db=db, request=req)
 
 
@@ -135,7 +135,7 @@ async def get_seller_metrics(
     "Supports filtering by date range, invoice type, and VAT numbers.",
 )
 async def get_aade_documents(
-    buyer_id: str = Query(..., description="Buyer ID (string format)"),
+    organization_id: str = Query(..., description="Organization ID"),
     date_from: Optional[date] = Query(
         None, description="Filter invoices from this date (YYYY-MM-DD)"
     ),
@@ -159,7 +159,7 @@ async def get_aade_documents(
     """
     Get AADE documents with filtering and pagination.
 
-    - **buyer_id**: Buyer ID to filter documents
+    - **organization_id**: Organization ID to filter documents
     - **date_from**: Filter invoices from this date
     - **date_to**: Filter invoices to this date
     - **invoice_type**: Filter by invoice type
@@ -172,7 +172,7 @@ async def get_aade_documents(
         AadeDocumentsResponse: Paginated response with invoices and total count
     """
     req = AadeDocumentsRequest(
-        buyer_id=buyer_id,
+        organization_id=organization_id,
         date_from=date_from,
         date_to=date_to,
         invoice_type=invoice_type,
@@ -192,16 +192,13 @@ async def get_aade_documents(
     "Includes global totals, supplier/customer counts, and per-customer/per-supplier breakdowns.",
 )
 async def get_aade_summary(
-    buyer_id: str = Query(..., description="Buyer ID (string format)"),
+    organization_id: str = Query(..., description="Organization ID"),
     ctl: DashboardController = Depends(get_dashboard_controller),
     db: AsyncSession = Depends(get_db_session),
 ) -> AadeSummaryResponse:
     """
-    Get aggregated AADE invoice statistics for a buyer.
+    Get aggregated AADE invoice statistics for an organization.
 
-    - **buyer_id**: Buyer ID to filter invoices
-
-    Returns:
-        AadeSummaryResponse: Aggregated statistics including totals, counts, and breakdowns
+    - **organization_id**: Organization ID to filter invoices
     """
-    return await ctl.get_aade_summary(db=db, buyer_id=buyer_id)
+    return await ctl.get_aade_summary(db=db, organization_id=organization_id)

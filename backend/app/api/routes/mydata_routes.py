@@ -56,11 +56,11 @@ async def get_docs(
     q: DocsQuery = Depends(),
     save: bool = Query(
         False,
-        description="If true, save documents to database (requires buyer_id)",
+        description="If true, save documents to database (requires organization_id)",
     ),
-    buyer_id: str = Query(
+    organization_id: str = Query(
         "",
-        description="Buyer ID for saving documents (required if save=true)",
+        description="Organization ID for saving documents (required if save=true)",
     ),
     transmitted: bool = Query(
         False,
@@ -75,28 +75,18 @@ async def get_docs(
 
     - **q**: Document query parameters including date ranges, types, and status filters
     - **save**: If true, save documents to database
-    - **buyer_id**: Buyer ID required when save=true
-    - **ctl**: Injected myDATA controller with error handling
-    - **db**: Database session
-
-    Returns:
-        RequestedDocsResponse: API response containing document data (if save=false)
-        Dict: Save result with document_id and invoice_count (if save=true)
-
-    Raises:
-        HTTPException: 400 for bad requests, 502 for API errors, 503 for network errors, 500 for server errors
+    - **organization_id**: Organization ID required when save=true
     """
     logger.info("🔍 get_docs called with query: %s, save: %s", q.model_dump(), save)
 
     if save:
-        if not buyer_id:
+        if not organization_id:
             raise HTTPException(
                 status_code=400,
-                detail="buyer_id is required when save=true",
+                detail="organization_id is required when save=true",
             )
-        # Fetch and save documents
         result = await ctl.save_documents(
-            query=q, buyer_id=buyer_id, db=db, transmitted=transmitted
+            query=q, organization_id=organization_id, db=db, transmitted=transmitted
         )
         return result
     else:
@@ -121,11 +111,11 @@ async def iterate_docs(
     ),
     save: bool = Query(
         False,
-        description="If true, save documents to database (requires buyer_id)",
+        description="If true, save documents to database (requires organization_id)",
     ),
-    buyer_id: str = Query(
+    organization_id: str = Query(
         "",
-        description="Buyer ID for saving documents (required if save=true)",
+        description="Organization ID for saving documents (required if save=true)",
     ),
     transmitted: bool = Query(
         False,
@@ -140,18 +130,9 @@ async def iterate_docs(
 
     - **q**: Document query parameters
     - **limit**: Maximum number of *batches/pages* to return (1–1000, optional)
-    - **save**: If true, save documents to database (requires buyer_id)
-    - **buyer_id**: Buyer ID required when save=true
+    - **save**: If true, save documents to database (requires organization_id)
+    - **organization_id**: Organization ID required when save=true
     - **transmitted**: Switch between RequestDocs / RequestTransmittedDocs
-    - **ctl**: Injected myDATA controller
-    - **db**: Database session (used when save=true)
-
-    Returns:
-        - **List[RequestedDocsResponse]**: Paginated AADE responses (if save=false)
-        - **Dict[str, Any]**: Save summary (if save=true)
-
-    Raises:
-        HTTPException: 400 for bad requests, 502 for API errors, 503 for network errors, 500 for server errors
     """
     logger.info(
         "🔍 iterate_docs called with query: %s, limit: %s, save: %s, transmitted: %s",
@@ -161,17 +142,16 @@ async def iterate_docs(
         transmitted,
     )
 
-    # Same semantics as /mydata/docs
     if save:
-        if not buyer_id:
+        if not organization_id:
             raise HTTPException(
                 status_code=400,
-                detail="buyer_id is required when save=true",
+                detail="organization_id is required when save=true",
             )
 
         result = await ctl.save_documents(
             query=q,
-            buyer_id=buyer_id,
+            organization_id=organization_id,
             db=db,
             transmitted=transmitted,
         )

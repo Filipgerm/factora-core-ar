@@ -23,7 +23,7 @@ from packages.aade.models.e3_info import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.db.database_models import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
+from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
 from datetime import date
 from decimal import Decimal
 
@@ -158,32 +158,18 @@ class MyDataService:
         self,
         response: RequestedDocsResponse,
         query: DocsQuery,
-        buyer_id: str,
+        organization_id: str,
         db: AsyncSession,
         direction: InvoiceDirection,
         raw_xml: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Save AADE document response to database (raw + normalized).
-
-        Args:
-            response: Parsed RequestedDocsResponse from API
-            query: Original query parameters
-            buyer_id: Buyer ID to link documents to
-            db: Database session
-            direction: Invoice direction (RECEIVED or TRANSMITTED)
-            raw_xml: Optional raw XML string (if available)
-
-        Returns:
-            Dict with saved document IDs and invoice counts
-        """
+        """Save AADE document response to database (raw + normalized)."""
         try:
             # Convert response to JSON dict
             raw_json = response.model_dump(mode="json")
 
-            # Create document record
             doc = AadeDocumentModel(
-                buyer_id=buyer_id,
+                organization_id=organization_id,
                 raw_xml=raw_xml,
                 raw_json=raw_json,
                 query_params=query.model_dump(exclude_none=True, mode="json"),
@@ -268,7 +254,7 @@ class MyDataService:
             await db.commit()
 
             logger.info(
-                f"✅ Saved AADE document {doc.id} with {len(invoice_ids)} invoices for buyer {buyer_id}"
+                f"✅ Saved AADE document {doc.id} with {len(invoice_ids)} invoices for organization {organization_id}"
             )
 
             return {
