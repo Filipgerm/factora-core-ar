@@ -1,41 +1,62 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.db.postgres import AsyncSessionLocal, get_supabase, SUPABASE_BUCKET
-from app.db.database_models import Document
+"""FileService — manages document retrieval from Supabase storage.
+
+Scope: Handles fetching and identifying files from external object storage.
+Contract: Accepts filename strings, returns file metadata/data dicts or None.
+Architectural Notes: Uses asyncio.run_in_executor to prevent the synchronous
+Supabase Python client from blocking the FastAPI async event loop.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import mimetypes
+from typing import Optional
+
+from app.db.postgres import get_supabase, SUPABASE_BUCKET
+
+logger = logging.getLogger(__name__)
 
 
-async def fetch_file_from_storage(filename: str):
-    """
-    Fetch a file from Supabase storage by filename.
-    Returns the file data and metadata.
-    """
-    async with AsyncSessionLocal() as session:
-        # Find document in PostgreSQL by original_name
-        result = await session.execute(
-            select(Document).where(Document.original_name == filename)
-        )
-        doc = result.scalar_one_or_none()
+class FileService:
+    """Service for managing files and documents via Supabase Storage."""
 
-        if not doc:
-            return None
+    def __init__(self) -> None:
+        """Initialize the FileService."""
+        # We fetch the Supabase singleton here. No DB session is needed!
+        self.supabase = get_supabase()
+        self.bucket = SUPABASE_BUCKET
 
-        # Download file from Supabase Storage
-        supabase = get_supabase()
+    async def fetch_file(self, filename: str) -> Optional[dict]:
+        """Fetch a file asynchronously from Supabase storage.
+
+        Args:
+            filename: The original name/path of the file in the bucket.
+
+        Returns:
+            A dict with ``data``, ``content_type``, ``original_name``, and ``size``,
+            or ``None`` if the file is missing or unreadable.
+        """
         try:
-            file_data = supabase.storage.from_(SUPABASE_BUCKET).download(doc.path)
+            loop = asyncio.get_running_loop()
+
+            # CRITICAL FIX: run_in_executor pushes the slow, synchronous
+            # Supabase network call to a background thread.
+            file_data = await loop.run_in_executor(
+                None,
+                lambda: self.supabase.storage.from_(self.bucket).download(filename),
+            )
+
+            # AI/Frontend Fix: Guess the correct mime-type so the browser/AI
+            # knows if it's looking at a PDF, PNG, or XML file.
+            mime_type, _ = mimetypes.guess_type(filename)
+
             return {
                 "data": file_data,
-                "content_type": doc.content_type or "application/octet-stream",
-                "original_name": doc.original_name,
-                "size": doc.size,
-                "metadata": doc.metadata,
+                "content_type": mime_type or "application/octet-stream",
+                "original_name": filename,
+                "size": len(file_data) if file_data else 0,
             }
         except Exception as e:
-            print(f"Error downloading file from storage: {e}")
+            logger.warning("Failed to download file '%s' from storage: %s", filename, e)
             return None
-
-
-# For backward compatibility
-async def fetch_file_from_gridfs(filename: str):
-    """Backward compatibility wrapper."""
-    return await fetch_file_from_storage(filename)

@@ -1,8 +1,15 @@
 from __future__ import annotations
-from typing import Optional, Dict, Any
+
+import logging
+from typing import Any, Dict, Optional
+
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ExternalServiceError, NotFoundError
 from packages.saltedge.errors import ApiError, NetworkError
+
+logger = logging.getLogger(__name__)
 from packages.saltedge.models.connections import ConnectionsResponse, Connection
 from app.services.saltedge_service import SaltEdgeService
 from packages.saltedge.models.accounts import (
@@ -39,13 +46,24 @@ class SaltEdgeController:
         self.service = service
 
     async def _handle_service_call(self, coro, db: AsyncSession, *args, **kwargs):
-        """Helper to handle async service calls with error handling."""
+        """Invoke a service coroutine and map known error types to HTTPException.
+
+        SaltEdge ``ApiError`` → 502 Bad Gateway
+        SaltEdge ``NetworkError`` → 503 Service Unavailable
+        All other exceptions propagate and are caught by the global AppError handler.
+        """
         try:
             return await coro(db, *args, **kwargs)
-        except Exception as e:
-            from fastapi import HTTPException
-
-            raise HTTPException(status_code=500, detail=str(e))
+        except ApiError as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"SaltEdge API error: {e}",
+            )
+        except NetworkError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"SaltEdge network error: {e}",
+            )
 
     # ---------- Accounts ----------
     async def list_accounts(

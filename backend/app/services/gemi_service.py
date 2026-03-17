@@ -1,15 +1,14 @@
-from fastapi import HTTPException
-from app.config import settings
-from app.services.storage.storage import upload_file_to_storage
-import urllib.parse
-from io import BytesIO
-from typing import Dict, List, Any, Optional, Literal
-import re
 import asyncio
+import re
+from io import BytesIO
+from typing import Any, Dict, List, Literal, Optional
 
 from app.clients.gemi_client import GemiApiClient
+from app.config import settings
 from app.core.demo import demo_fixture
+from app.core.exceptions import GemiError, NotFoundError, ValidationError
 from app.scripts.extract_filename import extract_filename
+from app.services.storage.storage import upload_file_to_storage
 
 DEFAULT_DOWNLOAD_CONCURRENCY = 5
 
@@ -52,7 +51,7 @@ class GemiService:
         data = await self.client.search_companies_by_afm(afm)
         search_results = data.get("searchResults", [])
         if not search_results:
-            raise HTTPException(status_code=404, detail="No results found for this AFM")
+            raise NotFoundError("No results found for this AFM.", code="gemi.not_found")
 
         # Decide which result to use according to GEMI swagger documentation.
         company = search_results[0]
@@ -156,7 +155,11 @@ class GemiService:
                 "exact": True,
             }
 
-        raise HTTPException(status_code=400, detail="Unsupported search mode")
+        raise ValidationError(
+            f"Unsupported search mode: {mode}",
+            code="validation.invalid_mode",
+            fields={"mode": "Must be 'afm' or 'gemi_number'"},
+        )
 
     def _normalize_results(self, raw: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
