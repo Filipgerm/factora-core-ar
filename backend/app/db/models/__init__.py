@@ -1,18 +1,13 @@
 """Domain-split ORM models for Factora.
 
-All model classes are re-exported from this package so existing imports of the
-form ``from app.db.database_models import Sellers`` continue to work after the
-split, while new code can import directly from the domain files.
+Import from domain files for specificity, or from this package for convenience::
 
-Usage::
-
-    # Both of the following work:
-    from app.db.models import Sellers, SellerSessions, Buyers
-    from app.db.models.auth import Sellers
+    from app.db.models import Organization, User, UserSession
+    from app.db.models.identity import Organization
 """
-from app.db.models.auth import Sellers, SellerSessions
-from app.db.models.buyers import AlertSeverity, Alerts, Buyers, Document, SellerBuyers
-from app.db.models.onboarding import OnboardingSession, OnboardingToken, VerificationSession
+from app.db.models.identity import Organization, User, UserRole, UserSession
+from app.db.models.counterparty import Counterparty, CounterpartyType
+from app.db.models.alerts import Alert, AlertSeverity
 from app.db.models.banking import (
     BankAccountModel,
     ConsentModel,
@@ -26,19 +21,17 @@ from app.db.models.banking import (
 from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
 
 __all__ = [
-    # auth
-    "Sellers",
-    "SellerSessions",
-    # buyers
-    "Buyers",
-    "SellerBuyers",
-    "Document",
-    "Alerts",
+    # identity
+    "Organization",
+    "User",
+    "UserRole",
+    "UserSession",
+    # counterparty
+    "Counterparty",
+    "CounterpartyType",
+    # alerts
+    "Alert",
     "AlertSeverity",
-    # onboarding
-    "OnboardingSession",
-    "VerificationSession",
-    "OnboardingToken",
     # banking
     "BankAccountModel",
     "ConnectionModel",

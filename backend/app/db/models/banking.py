@@ -1,9 +1,13 @@
-"""Open Banking ORM models: accounts, connections, consents, customers, providers, transactions."""
+"""Open Banking ORM models: accounts, connections, consents, customers, providers, transactions.
+
+All tables with organization scope carry an ``organization_id`` FK to ``organizations``
+for multi-tenant row-level security enforcement.
+"""
 from __future__ import annotations
 
 import enum
 import uuid
-from datetime import date, datetime, time
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
@@ -24,7 +28,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -38,11 +42,17 @@ CUSTOMER_CATEGORIZATION = ("personal", "business")
 
 
 class CustomerModel(Base):
-    """A customer that has connected their bank accounts via SaltEdge."""
+    """A SaltEdge customer entity scoped to one organization."""
 
     __tablename__ = "customers"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    organization_id: Mapped[str] = mapped_column(
+        PGUUID(as_uuid=False),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     external_id: Mapped[Optional[str]] = mapped_column(String, unique=True, nullable=True)
     identifier: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -64,6 +74,7 @@ class CustomerModel(Base):
         UniqueConstraint("email", name="uq_customers_email"),
         Index("ix_customers_identifier", "identifier"),
         Index("ix_customers_email", "email"),
+        Index("ix_customers_organization_id", "organization_id"),
     )
 
     def __repr__(self) -> str:
@@ -241,11 +252,17 @@ class ConsentModel(Base):
 # BankAccount
 # ---------------------------
 class BankAccountModel(Base):
-    """Bank account belonging to a buyer connected via open banking."""
+    """Bank account belonging to an organization connected via open banking."""
 
     __tablename__ = "bank_accounts"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    organization_id: Mapped[str] = mapped_column(
+        PGUUID(as_uuid=False),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     external_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     external_connection_id: Mapped[str] = mapped_column(String, nullable=False)
     connection_id: Mapped[str] = mapped_column(String, ForeignKey("connections.id", ondelete="CASCADE"), nullable=False)
@@ -264,6 +281,7 @@ class BankAccountModel(Base):
         UniqueConstraint("external_id", "external_connection_id", name="uq_accounts_ext_per_conn"),
         CheckConstraint("char_length(currency_code) = 3", name="currency_code_len_3"),
         CheckConstraint("currency_code = upper(currency_code)", name="currency_code_uppercase"),
+        Index("ix_bank_accounts_organization_id", "organization_id"),
     )
 
     def __repr__(self) -> str:
@@ -290,6 +308,12 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    organization_id: Mapped[str] = mapped_column(
+        PGUUID(as_uuid=False),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     account_id: Mapped[str] = mapped_column(String, ForeignKey("bank_accounts.id", ondelete="CASCADE"), index=True, nullable=False)
     status: Mapped[TransactionStatus] = mapped_column(Enum(TransactionStatus, name="transaction_status", native_enum=True), index=True, nullable=False)
     mode: Mapped[TransactionMode] = mapped_column(Enum(TransactionMode, name="transaction_mode", native_enum=True), index=True, nullable=False)
@@ -309,4 +333,5 @@ class Transaction(Base):
         Index("ix_transactions_extra_gin", extra, postgresql_using="gin", postgresql_ops={"extra": "jsonb_path_ops"}),
         Index("ix_transactions_account_made_on", "account_id", "made_on"),
         Index("ix_transactions_made_on_posted_only", "made_on", postgresql_where=(Text("status") == Text("'posted'"))),
+        Index("ix_transactions_organization_id", "organization_id"),
     )
