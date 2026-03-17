@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     BREVO_API_KEY: str = Field(..., description="Brevo REST API key")
     BREVO_SMTP_KEY: str = Field(..., description="Brevo SMTP API key")
     BREVO_SENDER_EMAIL: str = Field(..., description="Verified Brevo sender address")
-    BREVO_SENDER_NAME: str = Field(..., description="Display name for outbound email/SMS")
+    BREVO_SENDER_NAME: str = Field(
+        ..., description="Display name for outbound email/SMS"
+    )
     AADE_USERNAME: str = Field(..., description="AADE/myDATA account username")
     AADE_SUBSCRIPTION_KEY: str = Field(..., description="AADE/myDATA subscription key")
     SALTEDGE_APP_ID: str = Field(..., description="SaltEdge application ID")
@@ -53,7 +55,7 @@ class Settings(BaseSettings):
         description=(
             "HS256 signing key for JWT access tokens. "
             "Must be >= 32 random bytes. "
-            "Generate: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            'Generate: python -c "import secrets; print(secrets.token_urlsafe(48))"'
         ),
     )
 

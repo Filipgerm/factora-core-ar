@@ -203,16 +203,21 @@ app.add_middleware(DemoModeMiddleware)
 app.add_middleware(RequestIDMiddleware)
 
 # ---------------------------------------------------------------------------
-# Routers
+# Routers — all routes versioned under /v1/
+#
+# API versioning strategy: a top-level /v1/ prefix on every route allows us
+# to introduce /v2/ routes in the future without breaking existing clients.
+# The frontend must use /v1/ prefixed paths.
 # ---------------------------------------------------------------------------
+_V1 = "/v1"
 
-app.include_router(auth_router, prefix="/auth", tags=["Auth"])
-app.include_router(companies_router, prefix="/companies", tags=["External APIs"])
-app.include_router(file_router, prefix="/files", tags=["File Management"])
-app.include_router(onboarding_router, prefix="/onboarding", tags=["Onboarding"])
-app.include_router(saltedge_router, prefix="/saltedge", tags=["SaltEdge"])
-app.include_router(aade_router, prefix="/aade", tags=["AADE"])
-app.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard"])
+app.include_router(auth_router, prefix=f"{_V1}/auth", tags=["Auth"])
+app.include_router(companies_router, prefix=f"{_V1}/companies", tags=["External APIs"])
+app.include_router(file_router, prefix=f"{_V1}/files", tags=["File Management"])
+app.include_router(onboarding_router, prefix=f"{_V1}/onboarding", tags=["Onboarding"])
+app.include_router(saltedge_router, prefix=f"{_V1}/saltedge", tags=["SaltEdge"])
+app.include_router(aade_router, prefix=f"{_V1}/aade", tags=["AADE"])
+app.include_router(dashboard_router, prefix=f"{_V1}/dashboard", tags=["Dashboard"])
 
 # ---------------------------------------------------------------------------
 # Dev entry point
