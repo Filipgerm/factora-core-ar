@@ -59,6 +59,21 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Google OAuth ---
+    GOOGLE_CLIENT_ID: str = Field(
+        default="",
+        description=(
+            "Google OAuth 2.0 client ID.  Required for Google Sign-In. "
+            "Obtain from https://console.cloud.google.com/apis/credentials"
+        ),
+    )
+    GOOGLE_CLIENT_SECRET: str = Field(
+        default="",
+        description=(
+            "Google OAuth 2.0 client secret.  Stored securely; never exposed to the client."
+        ),
+    )
+
     # --- URLs ---
     FRONTEND_BASE_URL: str = Field(
         ...,
@@ -85,13 +100,24 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[misc]
     @property
     def demo_mode(self) -> bool:
-        """Return True when the app is running in demo mode.
+        """True when ENVIRONMENT=demo.
 
-        In demo mode all external API calls (AADE, SaltEdge, GEMI, Brevo) are
-        intercepted and return static fixture responses so a demonstration can
-        be run without real credentials or live data.
+        All external API calls return static fixtures; emails are logged only;
+        every HTTP response carries ``X-Demo-Mode: true``.
         """
         return self.ENVIRONMENT == "demo"
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def is_production(self) -> bool:
+        """True when ENVIRONMENT=production."""
+        return self.ENVIRONMENT == "production"
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def is_development(self) -> bool:
+        """True when ENVIRONMENT=development."""
+        return self.ENVIRONMENT == "development"
 
     # --- CORS and Proxy Configuration ---
     CORS_ORIGINS: str = Field(
