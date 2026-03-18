@@ -35,6 +35,35 @@ You embody the Architect, Security Specialist, QA Engineer, and Frontend Lead.
 
 </tech_stack>
 
+<domain_context>
+
+## Business Domain, Vocabulary & Vision (Factora)
+
+Factora is an **AI-native ERP and financial platform**. While the MVP launches in the Greek market (handling local compliance like AADE/myDATA), the architecture is built for **Pan-European scale**.
+
+### The AI-Native Mandate
+
+Factora does not just use AI; it is built _around_ AI. The system must reimagine traditional accounting workflows through LLMs and agentic AI. When designing features, always consider how AI can eliminate manual data entry and cognitive load for the user.
+
+- **Core AI Workflows:** Automated AR/AP (Accounts Receivable/Payable) reconciliation, business bank transactions contextualization, smart journal entry generation, unstructured invoice data extraction, and AI-drafted vendor/customer email communications.
+- **Architecture:** AI logic, embeddings, and LLM calls should be treated as first-class citizens in the Service layer.
+
+### Core Entities
+
+- **User**: A physical person logging into the platform.
+- **Organization**: The legal business entity (the "Tenant"). **Multiple Users can belong to a single Organization**, managed via Role-Based Access Control (RBAC).
+- **Counterparty**: Another business that the Organization interacts with. Can be a `CUSTOMER` (issues invoices to), a `VENDOR` (receives bills from), or `BOTH`.
+- **GEMI**: The Greek Commercial Registry. Used during the MVP onboarding to auto-fetch company data via VAT number (built to be swapped with other European registries later).
+- **AADE / myDATA**: The Greek Tax Authority for the MVP. All Greek invoices must sync here using strict XML formats, serving as the blueprint for future European e-invoicing integrations (e.g., Peppol).
+
+### Core Invariants (Unbreakable Business Rules)
+
+1. **Multi-Tenancy Isolation**: Every database query for business data (Counterparties, Invoices, Bank Accounts) MUST filter by `organization_id`. A user must NEVER see another organization's data.
+2. **Soft Deletion**: Financial records and Counterparties are never hard-deleted. They use `deleted_at` timestamps to preserve historical audit trails.
+3. **Immutability**: Once an Invoice is finalized or synced to a tax authority, its core financial fields (amounts, VAT) cannot be altered.
+
+</domain_context>
+
 ---
 
 <architecture_rules>
@@ -55,6 +84,28 @@ core/            ← Cross-cutting utilities: security/, exceptions.py, config.p
 middleware/      ← Starlette middleware: request_id, demo, (custom additions here).
 ```
 
+### Centralized Dependency Injection (`app/dependencies.py`)
+
+All instantiation of Services and Controllers MUST happen inside `app/dependencies.py`. Routers must never instantiate classes manually.
+
+When adding a new domain (e.g., `Invoices`), you **MUST** update `dependencies.py` in this exact order:
+
+1. Create a Service factory: `def get_invoice_service(db) -> InvoiceService:`
+2. Create a Controller factory: `def get_invoice_controller(service) -> InvoiceController:`
+3. Create the Annotated type aliases:
+   `InvSvc = Annotated[InvoiceService, Depends(get_invoice_service)]`
+   `InvCtrl = Annotated[InvoiceController, Depends(get_invoice_controller)]`
+4. Routers must import the `Ctrl` alias from `dependencies.py` and use it as the sole dependency for business logic.
+
+### Module Documentation Standards
+
+When creating or refactoring core Service or Controller files, always include a module-level Google-style docstring at the top of the file:
+
+1. **Scope:** A one-sentence summary of the file's responsibility.
+2. **Contract:** Define the overarching data exchange pattern (e.g., "Accepts Pydantic requests, returns DTOs, raises AppError"). Do NOT list exhaustive function signatures here.
+3. **Flow Diagrams:** For multi-step processes, provide a numbered list of the logic flow.
+4. **Architectural Notes:** Mention specific implementation choices (e.g., "Using `run_in_executor` to prevent async loop blocking").
+
 ### API Versioning
 
 All routes must be mounted under the `/v1/` prefix in `app/main.py`. Future breaking changes
@@ -73,17 +124,17 @@ the version prefix themselves — it is applied at mount time.
 
 ORM models live in `app/db/models/` split by domain:
 
-- `identity.py`     → `Organization`, `User` (with `UserRole`), `UserSession`
+- `identity.py` → `Organization`, `User` (with `UserRole`), `UserSession`
 - `counterparty.py` → `Counterparty`, `CounterpartyType`
-- `banking.py`      → `CustomerModel`, `ConnectionModel`, `BankAccountModel`, `Transaction`
-- `aade.py`         → `AadeDocumentModel`, `AadeInvoiceModel`
-- `alerts.py`       → `Alert`, `AlertSeverity`
+- `banking.py` → `CustomerModel`, `ConnectionModel`, `BankAccountModel`, `Transaction`
+- `aade.py` → `AadeDocumentModel`, `AadeInvoiceModel`
+- `alerts.py` → `Alert`, `AlertSeverity`
 
 `app/db/database_models.py` has been removed. Never recreate it.
 
 ### Pydantic Schema Naming Convention
 
-- `*Request`  — inbound payload validated on the route (e.g. `SignUpRequest`, `OrganizationSetupRequest`)
+- `*Request` — inbound payload validated on the route (e.g. `SignUpRequest`, `OrganizationSetupRequest`)
 - `*Response` — outbound payload returned to the caller (e.g. `AuthResponse`, `BusinessResponse`)
 - Never use generic envelopes like `ServiceResponse` or `Result` — always return a specific DTO.
 
@@ -97,12 +148,12 @@ ORM models live in `app/db/models/` split by domain:
 
 ### Authentication & Tokens
 
-| Token type              | Format               | Storage (DB)     | TTL    | Transport                            |
-| ----------------------- | -------------------- | ---------------- | ------ | ------------------------------------ |
-| Access token            | JWT HS256            | **Never stored** | 30 min | `Authorization: Bearer` header       |
-| Refresh token           | Opaque (48-byte)     | SHA-256 hash     | 7 days | httpOnly cookie or secure body field |
-| Password reset token    | Opaque               | SHA-256 hash     | 1 hour | Email link                           |
-| OTP / verification code | Numeric              | SHA-256+pepper   | 10 min | SMS / Email                          |
+| Token type              | Format           | Storage (DB)     | TTL    | Transport                            |
+| ----------------------- | ---------------- | ---------------- | ------ | ------------------------------------ |
+| Access token            | JWT HS256        | **Never stored** | 30 min | `Authorization: Bearer` header       |
+| Refresh token           | Opaque (48-byte) | SHA-256 hash     | 7 days | httpOnly cookie or secure body field |
+| Password reset token    | Opaque           | SHA-256 hash     | 1 hour | Email link                           |
+| OTP / verification code | Numeric          | SHA-256+pepper   | 10 min | SMS / Email                          |
 
 **Rule**: NEVER store any token or password in plaintext. Use `app.core.security.hashing`:
 
@@ -120,12 +171,12 @@ ORM models live in `app/db/models/` split by domain:
 
 ### RBAC Roles
 
-| Role                  | Description                                    |
-| --------------------- | ---------------------------------------------- |
-| `owner`               | Full access; can connect bank accounts         |
-| `admin`               | Can manage org data; cannot connect banking    |
-| `external_accountant` | Read + limited write; no settings access       |
-| `viewer`              | Read-only access to dashboards and reports     |
+| Role                  | Description                                 |
+| --------------------- | ------------------------------------------- |
+| `owner`               | Full access; can connect bank accounts      |
+| `admin`               | Can manage org data; cannot connect banking |
+| `external_accountant` | Read + limited write; no settings access    |
+| `viewer`              | Read-only access to dashboards and reports  |
 
 ### OWASP Top 10 Checklist
 
@@ -164,18 +215,18 @@ All environment variables are documented in `backend/.env.example`.
 
 ### Key Variables
 
-| Variable              | Required  | Description                                                                      |
-| --------------------- | --------- | -------------------------------------------------------------------------------- |
-| `SUPABASE_URI`        | ✅ always | Async PostgreSQL DSN (`postgresql+asyncpg://...`).                               |
-| `JWT_SECRET_KEY`      | ✅ always | ≥32 random bytes. Rotate to invalidate all sessions.                             |
-| `FRONTEND_BASE_URL`   | ✅ always | Canonical frontend origin (e.g. `https://app.factora.eu`). Used in email links.  |
-| `CORS_ORIGINS`        | ✅ prod   | Comma-separated origins, or `*` for local dev only.                              |
-| `ALLOWED_HOSTS`       | ✅ prod   | Comma-separated hostnames for `TrustedHostMiddleware`.                           |
-| `TRUSTED_PROXIES`     | ✅ prod   | Nginx CIDR(s) for `ProxyHeadersMiddleware` (e.g. `172.18.0.0/16`).               |
-| `ENVIRONMENT`         | ✅ always | `production` \| `development` \| `demo`.                                         |
-| `CODE_PEPPER`         | ✅ always | Server-side pepper for Argon2id hashing (≥16 chars).                             |
-| `GOOGLE_CLIENT_ID`    | ✅ always | Google OAuth 2.0 client ID for Google Sign-In.                                   |
-| `GOOGLE_CLIENT_SECRET`| ✅ always | Google OAuth 2.0 client secret (never exposed to the client).                    |
+| Variable               | Required  | Description                                                                     |
+| ---------------------- | --------- | ------------------------------------------------------------------------------- |
+| `SUPABASE_URI`         | ✅ always | Async PostgreSQL DSN (`postgresql+asyncpg://...`).                              |
+| `JWT_SECRET_KEY`       | ✅ always | ≥32 random bytes. Rotate to invalidate all sessions.                            |
+| `FRONTEND_BASE_URL`    | ✅ always | Canonical frontend origin (e.g. `https://app.factora.eu`). Used in email links. |
+| `CORS_ORIGINS`         | ✅ prod   | Comma-separated origins, or `*` for local dev only.                             |
+| `ALLOWED_HOSTS`        | ✅ prod   | Comma-separated hostnames for `TrustedHostMiddleware`.                          |
+| `TRUSTED_PROXIES`      | ✅ prod   | Nginx CIDR(s) for `ProxyHeadersMiddleware` (e.g. `172.18.0.0/16`).              |
+| `ENVIRONMENT`          | ✅ always | `production` \| `development` \| `demo`.                                        |
+| `CODE_PEPPER`          | ✅ always | Server-side pepper for Argon2id hashing (≥16 chars).                            |
+| `GOOGLE_CLIENT_ID`     | ✅ always | Google OAuth 2.0 client ID for Google Sign-In.                                  |
+| `GOOGLE_CLIENT_SECRET` | ✅ always | Google OAuth 2.0 client secret (never exposed to the client).                   |
 
 ### DEMO_MODE
 
