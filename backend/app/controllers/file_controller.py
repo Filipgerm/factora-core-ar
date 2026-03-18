@@ -1,13 +1,16 @@
-from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
-from app.services.file_service import fetch_file_from_storage
 import io
+
+from fastapi.responses import StreamingResponse
+
+from app.core.exceptions import NotFoundError
+from app.services.file_service import FileService
 
 
 async def get_file_by_filename(filename: str):
-    file_info = await fetch_file_from_storage(filename)
+    service = FileService()
+    file_info = await service.fetch_file(filename)
     if file_info is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise NotFoundError(f"File '{filename}' not found", code="file.not_found")
 
     file_data = file_info["data"]
     content_type = file_info.get("content_type", "application/octet-stream")
