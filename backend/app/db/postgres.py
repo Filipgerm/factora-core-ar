@@ -35,34 +35,23 @@ def _initialize_database():
         SUPABASE_URL = settings.SUPABASE_URL
         SUPABASE_SECRET_KEY = settings.SUPABASE_SECRET_KEY
 
-        # Ensure the URI is in the correct format for asyncpg
+        # Ensure the URI uses the asyncpg driver scheme
         if not DATABASE_URI.startswith("postgresql+asyncpg://"):
             DATABASE_URI = DATABASE_URI.replace(
-                "postgresql://", "postgresql+asyncpg://"
+                "postgresql://", "postgresql+asyncpg://", 1
             )
-        # engine = create_async_engine(
-        #     DATABASE_URI,
-        #     echo=False,
-        #     future=True,
-        #     poolclass=pool.NullPool,
-        #     pool_pre_ping=True,  # kill stale sockets early
-        #     connect_args={
-        #         "statement_cache_size": 0,
-        #         "prepared_statement_cache_size": 0,
-        #         "server_settings": {
-        #             "jit": "off",  # Disable JIT for more predictable behavior
-        #         },
-        #     },
-        # ).execution_options(compiled_cache=None)
 
+        # Supabase shared pooler (PgBouncer, port 6543) runs in transaction
+        # mode — SQLAlchemy must NOT layer its own connection pool on top.
+        # NullPool opens a fresh connection per request and returns it
+        # immediately, which is exactly what PgBouncer expects.
+        # prepared_statement_cache_size=0 is required because PgBouncer does
+        # not support the extended query protocol used by asyncpg's cache.
         engine = create_async_engine(
             DATABASE_URI,
-            # echo=False,
-            # future=True,
-            pool_size=5,
-            max_overflow=0,
-            pool_timeout=5,
-            pool_pre_ping=True,
+            echo=False,
+            future=True,
+            poolclass=pool.NullPool,
             connect_args={
                 "statement_cache_size": 0,
                 "prepared_statement_cache_size": 0,
