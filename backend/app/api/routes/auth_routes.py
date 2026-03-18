@@ -1,61 +1,69 @@
-"""Authentication routes: login, logout, token refresh, password management.
+"""Authentication routes.
 
-All auth endpoints live under the ``/auth`` prefix.  The seller's JWT
-access token (30-min TTL) is included in the Authorization header of
-subsequent requests; the refresh token is used only at ``POST /auth/refresh``.
+All endpoints live under the ``/v1/auth`` prefix (applied at mount time).
+
+Token lifecycle:
+  - Access token:  JWT, 30-minute TTL, sent in ``Authorization: Bearer`` header
+  - Refresh token: opaque 48-byte random string, 7-day TTL, rotated on each use
+
+Google OAuth:
+  - ``POST /google`` — accepts a Google ``id_token`` and returns ``AuthResponse``
+
+OTP Verification:
+  - ``POST /verify/email``          — send 6-digit OTP to the user's email
+  - ``POST /verify/email/confirm``  — confirm the OTP code
+  - ``POST /verify/phone``          — send 6-digit OTP via SMS
+  - ``POST /verify/phone/confirm``  — confirm the OTP code
 """
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 
-from app.controllers.user_controller import UserController
-from app.dependencies import get_user_controller, require_auth
-from app.models.user import (
+from app.dependencies import AuthSvc, AuthUser, require_auth
+from app.models.auth import (
+    AuthResponse,
     ChangePasswordRequest,
+    EmailVerificationCodeRequest,
+    EmailVerificationRequest,
     ForgotPasswordRequest,
+    GoogleAuthRequest,
     LoginRequest,
+    MessageResponse,
+    PhoneVerificationCodeRequest,
+    PhoneVerificationRequest,
+    RefreshTokenRequest,
     ResetPasswordRequest,
-    ServiceResponse,
     SignUpRequest,
+    UserProfileResponse,
+    VerificationInitResponse,
 )
 
 router = APIRouter(tags=["Auth"])
 
 
 # ---------------------------------------------------------------------------
-# Seller registration
+# Registration
 # ---------------------------------------------------------------------------
 
 
-@router.post("/signup", response_model=ServiceResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/signup",
+    response_model=UserProfileResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new user account",
+)
 async def sign_up(
     req: SignUpRequest,
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-) -> ServiceResponse:
-    """Register a new seller account.
+    auth_service: AuthSvc,
+) -> UserProfileResponse:
+    """Create a new user account with email and password.
 
-    Args:
-        req: ``SignUpRequest`` containing ``username``, ``email``, and
-            ``password``.
-
-    Returns:
-        ``ServiceResponse`` with ``success=True`` on creation.
-
-    Raises:
-        HTTPException: 409 if the username or email is already in use.
-        HTTPException: 400 for other validation failures.
+    Returns a ``UserProfileResponse`` (no tokens).  The user must call
+    ``POST /login`` next to obtain tokens.
     """
-    response: ServiceResponse = await user_controller.sign_up(req)
-    if not response.success:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT
-            if "already" in (response.message or "").lower()
-            else status.HTTP_400_BAD_REQUEST,
-            detail=response.message or "Sign-up failed",
-        )
-    return response
+    return await auth_service.sign_up(req)
 
 
 # ---------------------------------------------------------------------------
@@ -63,91 +71,80 @@ async def sign_up(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/login", response_model=ServiceResponse)
+@router.post(
+    "/login",
+    response_model=AuthResponse,
+    summary="Authenticate with email and password",
+)
 async def login(
     req: LoginRequest,
     request: Request,
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-) -> ServiceResponse:
-    """Authenticate a seller and issue JWT + refresh token.
-
-    Returns:
-        ``ServiceResponse`` with ``access_token`` (JWT, 30 min) and
-        ``refresh_token`` (opaque, 7 days) on success.
-
-    Raises:
-        HTTPException: 401 on invalid credentials.
-    """
-    user_agent = request.headers.get("user-agent")
-    ip_address = request.client.host if request.client else None
-    response: ServiceResponse = await user_controller.login(
-        req, user_agent=user_agent, ip_address=ip_address
+    auth_service: AuthSvc,
+) -> AuthResponse:
+    """Validate credentials and issue JWT access token + opaque refresh token."""
+    return await auth_service.login(
+        req,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
     )
-    if not response.success:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=response.message or "Invalid credentials",
-        )
-    return response
 
 
-@router.post("/logout", response_model=ServiceResponse)
+@router.post(
+    "/logout",
+    response_model=MessageResponse,
+    summary="Revoke refresh token and end session",
+)
 async def logout(
-    req: _RefreshTokenBody,
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-) -> ServiceResponse:
-    """Revoke the seller's refresh token, ending the session.
-
-    The JWT access token will expire on its own after 30 minutes.  Pass the
-    refresh token in the request body to prevent further token issuance for
-    this session.
-
-    Args:
-        req: Body containing ``refresh_token``.
-
-    Raises:
-        HTTPException: 401 if the refresh token is not found.
-    """
-    response: ServiceResponse = await user_controller.logout(req.refresh_token)
-    if not response.success:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=response.message or "Invalid token",
-        )
-    return response
+    req: RefreshTokenRequest,
+    auth_service: AuthSvc,
+) -> MessageResponse:
+    """Revoke the provided refresh token.  The access token expires naturally."""
+    await auth_service.logout(req.refresh_token)
+    return MessageResponse(message="Logged out successfully.")
 
 
-@router.post("/refresh", response_model=ServiceResponse)
+@router.post(
+    "/refresh",
+    response_model=AuthResponse,
+    summary="Rotate refresh token and issue new access token",
+)
 async def refresh_tokens(
-    req: _RefreshTokenBody,
+    req: RefreshTokenRequest,
     request: Request,
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-) -> ServiceResponse:
-    """Exchange a valid refresh token for a new JWT + rotated refresh token.
-
-    Refresh tokens are rotated on each use — presenting the same token twice
-    returns a 401 (replay protection).
-
-    Args:
-        req: Body containing ``refresh_token``.
-
-    Returns:
-        ``ServiceResponse`` with fresh ``access_token`` and ``refresh_token``.
-
-    Raises:
-        HTTPException: 401 if the token is invalid, expired, or already used.
-    """
-    user_agent = request.headers.get("user-agent")
-    ip_address = request.client.host if request.client else None
-    response: ServiceResponse = await user_controller.refresh_tokens(
-        req.refresh_token, user_agent=user_agent, ip_address=ip_address
+    auth_service: AuthSvc,
+) -> AuthResponse:
+    """Exchange a valid refresh token for a new JWT + rotated refresh token."""
+    return await auth_service.refresh_tokens(
+        req.refresh_token,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
     )
-    if not response.success:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=response.message or "Token refresh failed",
-        )
-    return response
+
+
+# ---------------------------------------------------------------------------
+# Google OAuth
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/google",
+    response_model=AuthResponse,
+    summary="Sign in or sign up via Google ID token",
+)
+async def google_auth(
+    req: GoogleAuthRequest,
+    request: Request,
+    auth_service: AuthSvc,
+) -> AuthResponse:
+    """Verify a Google ID token and create or authenticate the user.
+
+    The ``id_token`` must be obtained from Google Sign-In on the frontend.
+    """
+    return await auth_service.sign_up_with_google(
+        req.id_token,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -155,86 +152,114 @@ async def refresh_tokens(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/forgot-password", response_model=ServiceResponse)
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+    summary="Request a password reset email",
+)
 async def forgot_password(
     req: ForgotPasswordRequest,
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-) -> ServiceResponse:
-    """Trigger a password-reset email if the account exists.
+    auth_service: AuthSvc,
+) -> MessageResponse:
+    """Send a password-reset link to the provided email if an account exists.
 
     Always returns a generic success message to prevent user enumeration.
     """
-    response: ServiceResponse = await user_controller.forgot_password(req)
-    if not response.success:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal error",
-        )
-    return response
+    return await auth_service.forgot_password(req)
 
 
-@router.post("/reset-password", response_model=ServiceResponse)
+@router.post(
+    "/reset-password",
+    response_model=MessageResponse,
+    summary="Complete password reset with one-time token",
+)
 async def reset_password(
     req: ResetPasswordRequest,
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-) -> ServiceResponse:
-    """Complete password reset using the one-time token from the email link.
-
-    Args:
-        req: ``ResetPasswordRequest`` with ``token``, ``new_password``, and
-            ``confirm_password``.
-
-    Raises:
-        HTTPException: 400 if the token is invalid or expired.
-    """
-    response: ServiceResponse = await user_controller.reset_password(req)
-    if not response.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=response.message or "Reset failed",
-        )
-    return response
+    auth_service: AuthSvc,
+) -> MessageResponse:
+    """Set a new password using the token from the reset email link."""
+    return await auth_service.reset_password(req)
 
 
-@router.post("/change-password", response_model=ServiceResponse)
+@router.post(
+    "/change-password",
+    response_model=MessageResponse,
+    summary="Change password (requires authentication)",
+)
 async def change_password(
     req: ChangePasswordRequest,
-    payload: Annotated[dict, Depends(require_auth)],
-    user_controller: Annotated[UserController, Depends(get_user_controller)],
-) -> ServiceResponse:
-    """Change the authenticated seller's password.
+    user: AuthUser,
+    auth_service: AuthSvc,
+) -> MessageResponse:
+    """Change the authenticated user's password.  All sessions are revoked."""
+    await auth_service.change_password(user["sub"], req)
+    return MessageResponse(message="Password changed successfully. Please log in again.")
 
-    Requires a valid JWT in the ``Authorization: Bearer <token>`` header.
-    All active sessions are revoked on success.
 
-    Args:
-        req: ``ChangePasswordRequest`` with ``current_password``,
-            ``new_password``, and ``confirm_password``.
-        payload: Decoded JWT payload injected by ``require_auth``.
+# ---------------------------------------------------------------------------
+# Email verification
+# ---------------------------------------------------------------------------
 
-    Raises:
-        HTTPException: 400 if the current password is wrong or passwords match.
-    """
-    seller_id: str = payload["sub"]
-    response: ServiceResponse = await user_controller.change_password(
-        seller_id=seller_id, req=req
+
+@router.post(
+    "/verify/email",
+    response_model=VerificationInitResponse,
+    summary="Send email verification OTP",
+)
+async def initiate_email_verification(
+    user: AuthUser,
+    auth_service: AuthSvc,
+) -> VerificationInitResponse:
+    """Send a 6-digit OTP to the authenticated user's registered email address."""
+    return await auth_service.initiate_email_verification(user["sub"])
+
+
+@router.post(
+    "/verify/email/confirm",
+    response_model=MessageResponse,
+    summary="Confirm email OTP code",
+)
+async def confirm_email_verification(
+    req: EmailVerificationCodeRequest,
+    user: AuthUser,
+    auth_service: AuthSvc,
+) -> MessageResponse:
+    """Verify the OTP code sent to the user's email."""
+    return await auth_service.confirm_email_verification(
+        user["sub"], req.verification_id, req.code
     )
-    if not response.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=response.message or "Change password failed",
-        )
-    return response
 
 
 # ---------------------------------------------------------------------------
-# Internal helper model (defined here to keep routes self-contained)
+# Phone verification
 # ---------------------------------------------------------------------------
 
-from pydantic import BaseModel  # noqa: E402 — placed after routes intentionally
+
+@router.post(
+    "/verify/phone",
+    response_model=VerificationInitResponse,
+    summary="Send phone verification OTP via SMS",
+)
+async def initiate_phone_verification(
+    req: PhoneVerificationRequest,
+    user: AuthUser,
+    auth_service: AuthSvc,
+) -> VerificationInitResponse:
+    """Send a 6-digit OTP SMS to the provided phone number."""
+    return await auth_service.initiate_phone_verification(user["sub"], req.phone_number)
 
 
-class _RefreshTokenBody(BaseModel):
-    """Request body for logout and token-refresh endpoints."""
-
-    refresh_token: str
+@router.post(
+    "/verify/phone/confirm",
+    response_model=MessageResponse,
+    summary="Confirm phone OTP code",
+)
+async def confirm_phone_verification(
+    req: PhoneVerificationCodeRequest,
+    user: AuthUser,
+    auth_service: AuthSvc,
+) -> MessageResponse:
+    """Verify the OTP code sent to the user's phone number."""
+    return await auth_service.confirm_phone_verification(
+        user["sub"], req.verification_id, req.code
+    )

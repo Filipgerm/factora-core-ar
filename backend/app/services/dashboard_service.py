@@ -1,30 +1,33 @@
 from __future__ import annotations
-from typing import Optional, Dict, Any, Tuple
-from fastapi import HTTPException
+
+import logging
 from datetime import date, datetime, timedelta, timezone
-from packages.saltedge.errors import ApiError, NetworkError
+from decimal import Decimal
+from typing import Any, Dict, List, Optional, Tuple
+
+from sqlalchemy import and_, case, distinct, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import ExternalServiceError, NotFoundError
+from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
+from app.db.models.alerts import Alert
+from app.db.models.banking import BankAccountModel, ConnectionModel, Transaction, TransactionMode, TransactionStatus
+from app.db.models.identity import Organization, User
 from app.models.dashboard import (
-    DashboardMetricsResponse,
-    DashboardMetricsRequest,
-    TransactionsRequest,
-    TransactionsResponse,
-    SellerMetricsRequest,
-    SellerMetricsResponse,
     AadeDocumentsRequest,
     AadeDocumentsResponse,
     AadeInvoiceItem,
     AadeSummaryResponse,
+    DashboardMetricsRequest,
+    DashboardMetricsResponse,
     PartySummary,
+    SellerMetricsRequest,
+    SellerMetricsResponse,
+    TransactionsRequest,
+    TransactionsResponse,
 )
-from typing import List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case, and_, distinct
-from decimal import Decimal
 
-from app.db.database_models import Transaction, TransactionStatus, TransactionMode
-from app.db.database_models import BankAccountModel, ConnectionModel
-from app.db.database_models import Sellers, Buyers, SellerBuyers, Alerts
-from app.db.database_models import AadeInvoiceModel, AadeDocumentModel, InvoiceDirection
+logger = logging.getLogger(__name__)
 
 
 class DashboardService:
@@ -120,58 +123,36 @@ class DashboardService:
                 monthly_margin=monthly_margin,
             )
 
-        except HTTPException:
-            raise
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Internal server error: {str(e)}"
-            ) from e
+            logger.error("Dashboard P&L metrics error: %s", e)
+            raise ExternalServiceError(f"Failed to compute P&L metrics: {str(e)}", code="dashboard.error")
 
     async def get_seller_metrics(
         self, db: AsyncSession, request: SellerMetricsRequest
     ) -> SellerMetricsResponse:
-        """Get metrics for a seller: completed customers, pending customers, active alerts."""
+        """Get metrics for an organization: total counterparties and active alerts."""
+        from app.db.models.counterparty import Counterparty
 
-        # Total completed customers (buyers with onboarding complete)
-        completed_query = (
-            select(func.count(Buyers.id))
-            .select_from(Buyers)
-            .join(SellerBuyers, SellerBuyers.buyer_id == Buyers.id)
+        counterparty_result = await db.execute(
+            select(func.count(Counterparty.id))
             .where(
-                SellerBuyers.seller_id == request.seller_id,
-                Buyers.is_onboarding_complete == True,
+                Counterparty.organization_id == request.organization_id,
+                Counterparty.deleted_at.is_(None),
             )
         )
-        completed_result = await db.execute(completed_query)
-        total_completed_customers = completed_result.scalar_one()
+        total_counterparties = counterparty_result.scalar_one()
 
-        # Total pending customers (buyers with onboarding not complete)
-        pending_query = (
-            select(func.count(Buyers.id))
-            .select_from(Buyers)
-            .join(SellerBuyers, SellerBuyers.buyer_id == Buyers.id)
+        alerts_result = await db.execute(
+            select(func.count(Alert.id))
             .where(
-                SellerBuyers.seller_id == request.seller_id,
-                Buyers.is_onboarding_complete == False,
+                Alert.organization_id == request.organization_id,
+                Alert.resolved_at.is_(None),
             )
         )
-        pending_result = await db.execute(pending_query)
-        total_pending_customers = pending_result.scalar_one()
-
-        # Total active alerts (alerts for this seller's buyers)
-        alerts_query = (
-            select(func.count(Alerts.id))
-            .select_from(Alerts)
-            .join(Buyers, Buyers.id == Alerts.business_id)
-            .join(SellerBuyers, SellerBuyers.buyer_id == Buyers.id)
-            .where(SellerBuyers.seller_id == request.seller_id)
-        )
-        alerts_result = await db.execute(alerts_query)
         total_active_alerts = alerts_result.scalar_one()
 
         return SellerMetricsResponse(
-            total_completed_customers=total_completed_customers,
-            total_pending_customers=total_pending_customers,
+            total_counterparties=total_counterparties,
             total_active_alerts=total_active_alerts,
         )
 
@@ -677,13 +658,13 @@ class DashboardService:
         Returns:
             AadeDocumentsResponse with paginated invoice list
         """
-        # Build base query - join invoices with documents to filter by buyer_id
+        # Build base query - join invoices with documents to filter by organization_id
         query = (
             select(AadeInvoiceModel)
             .join(
                 AadeDocumentModel, AadeInvoiceModel.document_id == AadeDocumentModel.id
             )
-            .where(AadeDocumentModel.buyer_id == request.buyer_id)
+            .where(AadeDocumentModel.organization_id == request.organization_id)
         )
 
         # Apply the same optional filters to both the data query and the count
@@ -697,7 +678,7 @@ class DashboardService:
                 AadeDocumentModel,
                 AadeInvoiceModel.document_id == AadeDocumentModel.id,
             )
-            .where(AadeDocumentModel.buyer_id == request.buyer_id)
+            .where(AadeDocumentModel.organization_id == request.organization_id)
         )
         count_query = self._apply_invoice_filters(count_query, request)
 
@@ -752,14 +733,14 @@ class DashboardService:
         )
 
     async def get_aade_summary(
-        self, db: AsyncSession, buyer_id: str
+        self, db: AsyncSession, organization_id: str
     ) -> AadeSummaryResponse:
         """
         Get aggregated statistics for all AADE invoices of a given buyer.
 
         Args:
             db: Database session
-            buyer_id: Buyer ID to filter invoices
+            organization_id: Organization ID to filter invoices
 
         Returns:
             AadeSummaryResponse: Aggregated statistics including totals, counts, and breakdowns
@@ -768,25 +749,25 @@ class DashboardService:
             total_net_value_sum,
             total_vat_amount_sum,
             total_gross_value_sum,
-        ) = await self._get_totals(db, buyer_id)
+        ) = await self._get_totals(db, organization_id)
 
         supplier_count = await self._get_party_count(
             db,
-            buyer_id=buyer_id,
+            organization_id=organization_id,
             direction=InvoiceDirection.RECEIVED,
             vat_column=AadeInvoiceModel.issuer_vat,
         )
 
         customer_count = await self._get_party_count(
             db,
-            buyer_id=buyer_id,
+            organization_id=organization_id,
             direction=InvoiceDirection.TRANSMITTED,
             vat_column=AadeInvoiceModel.counterpart_vat,
         )
 
         customer_breakdown = await self._get_party_breakdown(
             db,
-            buyer_id=buyer_id,
+            organization_id=organization_id,
             direction=InvoiceDirection.TRANSMITTED,
             vat_column=AadeInvoiceModel.counterpart_vat,
             is_supplier=False,
@@ -794,7 +775,7 @@ class DashboardService:
 
         supplier_breakdown = await self._get_party_breakdown(
             db,
-            buyer_id=buyer_id,
+            organization_id=organization_id,
             direction=InvoiceDirection.RECEIVED,
             vat_column=AadeInvoiceModel.issuer_vat,
             is_supplier=True,
@@ -827,7 +808,7 @@ class DashboardService:
         )
 
     async def _get_totals(
-        self, db: AsyncSession, buyer_id: str
+        self, db: AsyncSession, organization_id: str
     ) -> Tuple[Decimal, Decimal, Decimal]:
         """Compute global direction-aware totals across all invoices for a buyer."""
         signed_net = self._signed_expr(AadeInvoiceModel.total_net_value)
@@ -845,7 +826,7 @@ class DashboardService:
                 AadeDocumentModel,
                 AadeInvoiceModel.document_id == AadeDocumentModel.id,
             )
-            .where(AadeDocumentModel.buyer_id == buyer_id)
+            .where(AadeDocumentModel.organization_id == organization_id)
         )
 
         result = await db.execute(totals_query)
@@ -860,7 +841,7 @@ class DashboardService:
     async def _get_party_count(
         self,
         db: AsyncSession,
-        buyer_id: str,
+        organization_id: str,
         direction: InvoiceDirection,
         vat_column,
     ) -> int:
@@ -874,7 +855,7 @@ class DashboardService:
             )
             .where(
                 and_(
-                    AadeDocumentModel.buyer_id == buyer_id,
+                    AadeDocumentModel.organization_id == organization_id,
                     AadeInvoiceModel.direction == direction,
                     vat_column.isnot(None),
                 )
@@ -887,7 +868,7 @@ class DashboardService:
     async def _get_party_breakdown(
         self,
         db: AsyncSession,
-        buyer_id: str,
+        organization_id: str,
         direction: InvoiceDirection,
         vat_column,
         is_supplier: bool,
@@ -918,7 +899,7 @@ class DashboardService:
             )
             .where(
                 and_(
-                    AadeDocumentModel.buyer_id == buyer_id,
+                    AadeDocumentModel.organization_id == organization_id,
                     AadeInvoiceModel.direction == direction,
                 )
             )

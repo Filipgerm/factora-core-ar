@@ -1,12 +1,16 @@
 from __future__ import annotations
-from fastapi import APIRouter, Depends, Body, HTTPException, Path, Query
-from typing import Optional, Dict, Any
+
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.services.saltedge_service import SaltEdgeService
 from app.controllers.saltedge_controller import SaltEdgeController
+from app.db.models.identity import UserRole
 from app.db.postgres import get_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.dependencies import require_role
+from app.services.saltedge_service import SaltEdgeService
 from packages.saltedge.models.connections import ConnectionsResponse, Connection
 from packages.saltedge.models.consents import ConsentsResponse, ConsentResponse
 from packages.saltedge.models.accounts import (
@@ -108,9 +112,9 @@ async def get_connection(
 
 @router.post(
     "/connections/connect",
-    summary="Create a new connection",
-    description="Initiate a new SaltEdge connection (link a bank account) "
-    "using connection parameters provided in the request body.",
+    summary="Create a new bank connection (Owner only)",
+    description="Initiate a new SaltEdge connection (link a bank account). Requires OWNER role.",
+    dependencies=[Depends(require_role(UserRole.OWNER))],
 )
 def connect(
     payload: Dict[str, Any] = Body(

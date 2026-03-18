@@ -1,4 +1,8 @@
-"""AADE / myDATA ORM models: document storage and normalized invoices."""
+"""AADE / myDATA ORM models: document storage and normalized invoices.
+
+``organization_id`` replaces the old ``buyer_id`` FK, scoping all AADE
+documents to the multi-tenant organization that fetched them.
+"""
 from __future__ import annotations
 
 import enum
@@ -21,7 +25,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -36,13 +40,16 @@ class InvoiceDirection(str, enum.Enum):
 
 
 class AadeDocumentModel(Base):
-    """Raw AADE myDATA document response (XML + JSON) linked to a buyer."""
+    """Raw AADE myDATA document response (XML + JSON) linked to an organization."""
 
     __tablename__ = "aade_documents"
 
     id: Mapped[str] = mapped_column(primary_key=True, default=lambda: uuid.uuid4().hex)
-    buyer_id: Mapped[str] = mapped_column(
-        String(32), ForeignKey("buyers.id", ondelete="CASCADE"), index=True, nullable=False
+    organization_id: Mapped[str] = mapped_column(
+        PGUUID(as_uuid=False),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     raw_xml: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     raw_json: Mapped[dict] = mapped_column(JSONB, default=dict)
@@ -52,16 +59,15 @@ class AadeDocumentModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"), onupdate=func.now())
 
-    buyer: Mapped["Buyers"] = relationship("Buyers")  # type: ignore[name-defined]
     invoices: Mapped[List["AadeInvoiceModel"]] = relationship("AadeInvoiceModel", back_populates="document", cascade="all, delete-orphan")
 
     __table_args__ = (
-        Index("ix_aade_documents_buyer_id", "buyer_id"),
+        Index("ix_aade_documents_organization_id", "organization_id"),
         Index("ix_aade_documents_fetched_at", "fetched_at"),
     )
 
     def __repr__(self) -> str:
-        return f"<AadeDocument(id={self.id}, buyer_id={self.buyer_id}, fetched_at={self.fetched_at})>"
+        return f"<AadeDocument(id={self.id}, organization_id={self.organization_id}, fetched_at={self.fetched_at})>"
 
 
 class AadeInvoiceModel(Base):
@@ -70,6 +76,12 @@ class AadeInvoiceModel(Base):
     __tablename__ = "aade_invoices"
 
     id: Mapped[str] = mapped_column(primary_key=True, default=lambda: uuid.uuid4().hex)
+    organization_id: Mapped[str] = mapped_column(
+        PGUUID(as_uuid=False),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     document_id: Mapped[str] = mapped_column(
         String(32), ForeignKey("aade_documents.id", ondelete="CASCADE"), index=True, nullable=False
     )
@@ -102,6 +114,7 @@ class AadeInvoiceModel(Base):
     document: Mapped[AadeDocumentModel] = relationship("AadeDocumentModel", back_populates="invoices")
 
     __table_args__ = (
+        Index("ix_aade_invoices_organization_id", "organization_id"),
         Index("ix_aade_invoices_document_id", "document_id"),
         Index("ix_aade_invoices_issuer_vat", "issuer_vat"),
         Index("ix_aade_invoices_counterpart_vat", "counterpart_vat"),

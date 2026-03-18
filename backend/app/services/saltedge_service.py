@@ -34,13 +34,13 @@ from packages.saltedge.models.payments import (
     PaymentsListResponse,
     UpdatePaymentResponse,
 )
-from app.db.database_models import (
-    CustomerModel,
-    ConnectionModel,
+from app.db.models.banking import (
     BankAccountModel,
     ConsentModel,
-    Transaction,
+    ConnectionModel,
+    CustomerModel,
     ProviderModel,
+    Transaction,
 )
 
 

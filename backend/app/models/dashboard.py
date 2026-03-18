@@ -61,12 +61,11 @@ class TransactionsResponse(BaseModel):
 
 
 class SellerMetricsRequest(BaseModel):
-    seller_id: str
+    organization_id: str
 
 
 class SellerMetricsResponse(BaseModel):
-    total_completed_customers: int
-    total_pending_customers: int
+    total_counterparties: int
     total_active_alerts: int
 
 
@@ -76,7 +75,7 @@ class SellerMetricsResponse(BaseModel):
 class AadeDocumentsRequest(BaseModel):
     """Request model for querying AADE documents with filters and pagination."""
 
-    buyer_id: str = Field(..., description="Buyer ID to filter documents")
+    organization_id: str = Field(..., description="Organization ID to filter documents")
     date_from: Optional[date] = Field(
         None, description="Filter invoices from this date"
     )

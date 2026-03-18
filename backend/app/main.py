@@ -2,12 +2,13 @@
 
 Middleware stack (applied in reverse order — last added = first executed):
   1. RequestIDMiddleware  — injects X-Request-ID for end-to-end tracing
-  2. ProxyHeadersMiddleware — reads X-Forwarded-For / X-Forwarded-Proto from
+  2. DemoModeMiddleware   — injects X-Demo-Mode: true when ENVIRONMENT=demo
+  3. ProxyHeadersMiddleware — reads X-Forwarded-For / X-Forwarded-Proto from
                               nginx so request.client.host and request.url.scheme
                               reflect the real browser values
-  3. TrustedHostMiddleware  — validates the Host header against ALLOWED_HOSTS
+  4. TrustedHostMiddleware  — validates the Host header against ALLOWED_HOSTS
                                to prevent host-header injection
-  4. CORSMiddleware         — handles Access-Control-* headers for browser
+  5. CORSMiddleware         — handles Access-Control-* headers for browser
                                cross-origin requests
 
 Note on middleware ordering in FastAPI/Starlette:
@@ -18,11 +19,13 @@ Note on middleware ordering in FastAPI/Starlette:
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -31,12 +34,15 @@ from app.api.routes.dashboard_routes import router as dashboard_router
 from app.api.routes.file_routes import router as file_router
 from app.api.routes.gemi_routes import router as companies_router
 from app.api.routes.mydata_routes import router as aade_router
-from app.api.routes.onboarding_routes import router as onboarding_router
+from app.api.routes.organization_routes import router as organization_router
 from app.api.routes.saltedge_routes import router as saltedge_router
 from app.config import settings
+from app.core.exceptions import AppError, ValidationError
 from app.db.postgres import close_database_connection, connect_to_database
 from app.middleware.demo import DemoModeMiddleware
 from app.middleware.request_id import RequestIDMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -58,26 +64,12 @@ async def lifespan(app: FastAPI):
 
 
 def _parse_comma_list(value: str) -> list[str]:
-    """Split a comma-separated setting string into a cleaned list.
-
-    Args:
-        value: Raw setting string (e.g. ``"a.eu,b.eu"``).
-
-    Returns:
-        List of non-empty stripped strings.
-    """
+    """Split a comma-separated setting string into a cleaned list."""
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def get_cors_origins() -> list[str]:
-    """Parse and return the list of allowed CORS origins from settings.
-
-    An empty ``CORS_ORIGINS`` string disables cross-origin access (production
-    default).  ``"*"`` is accepted for local development only.
-
-    Returns:
-        List of allowed origin strings.
-    """
+    """Parse and return the list of allowed CORS origins from settings."""
     raw = settings.CORS_ORIGINS.strip()
     if not raw:
         return []
@@ -87,11 +79,7 @@ def get_cors_origins() -> list[str]:
 
 
 def get_allowed_hosts() -> list[str]:
-    """Parse and return the list of allowed Host header values.
-
-    Returns:
-        List of allowed hostnames.  ``["*"]`` permits all hosts (dev only).
-    """
+    """Parse and return the list of allowed Host header values."""
     raw = settings.ALLOWED_HOSTS.strip()
     if not raw or raw == "*":
         return ["*"]
@@ -99,11 +87,7 @@ def get_allowed_hosts() -> list[str]:
 
 
 def get_trusted_proxies() -> list[str]:
-    """Parse trusted proxy IPs/CIDRs for ProxyHeadersMiddleware.
-
-    Returns:
-        List of trusted proxy IP strings, or ``["*"]`` to trust all.
-    """
+    """Parse trusted proxy IPs/CIDRs for ProxyHeadersMiddleware."""
     raw = settings.TRUSTED_PROXIES.strip()
     if not raw or raw == "*":
         return ["*"]
@@ -116,10 +100,34 @@ def get_trusted_proxies() -> list[str]:
 
 app = FastAPI(
     title="Factora API",
-    description="Production-ready accounts-receivable and open banking platform.",
-    version="1.0.0",
+    description="AI-native ERP and accounting platform.",
+    version="2.0.0",
     lifespan=lifespan,
 )
+
+
+# ---------------------------------------------------------------------------
+# Global exception handler — converts AppError → structured JSON
+# ---------------------------------------------------------------------------
+
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    """Convert any AppError subclass into a structured JSON response.
+
+    Response body:
+        {
+            "detail": "<human-readable message>",
+            "code":   "<machine-readable slug>",
+            "fields": {"field_name": "reason"}   # only present on ValidationError
+        }
+    """
+    body: dict = {"detail": exc.detail, "code": exc.code}
+    if isinstance(exc, ValidationError) and exc.fields:
+        body["fields"] = exc.fields
+    logger.debug("AppError [%s] %s: %s", exc.status_code, exc.code, exc.detail)
+    return JSONResponse(status_code=exc.status_code, content=body)
+
 
 # ---------------------------------------------------------------------------
 # Middleware stack
@@ -128,37 +136,25 @@ app = FastAPI(
 # TrustedHost rejects unknown hosts.
 # ---------------------------------------------------------------------------
 
-# 1. RequestIDMiddleware — innermost, runs last on request / first on response.
-# Injects X-Request-ID so all log lines for a request share a traceable ID.
+# 1. RequestIDMiddleware — innermost, injects X-Request-ID for tracing.
 app.add_middleware(RequestIDMiddleware)
 
-# 2. ProxyHeadersMiddleware — reads X-Forwarded-For and X-Forwarded-Proto
-# set by nginx so that:
-#   - request.client.host == real browser IP (needed for rate limiting & logs)
-#   - request.url.scheme  == "https"          (needed for redirect URLs, Secure cookies)
-# trusted_hosts restricts which proxy IPs we trust to set these headers.
-# Docker bridge network is 172.16.0.0/12 by default; use "*" only in dev.
+# 2. DemoModeMiddleware — adds X-Demo-Mode: true when ENVIRONMENT=demo.
+app.add_middleware(DemoModeMiddleware)
+
+# 3. ProxyHeadersMiddleware — reads X-Forwarded-For / X-Forwarded-Proto from nginx.
 trusted_proxies = get_trusted_proxies()
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=trusted_proxies)
 
-
-# 3. TrustedHostMiddleware — prevents Host-header injection attacks.
-# Validates the Host: header against ALLOWED_HOSTS before any route logic runs.
-# In production set ALLOWED_HOSTS=app.factora.eu,api.factora.eu
+# 4. TrustedHostMiddleware — validates Host header (production only).
 allowed_hosts = get_allowed_hosts()
 if allowed_hosts != ["*"]:
-    # Only activate when specific hosts are configured to avoid false positives
-    # in local dev or CI environments where the host is unpredictable.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
-
-# 4. CORS — outermost layer, handles browser preflight.
+# 5. CORS — outermost, handles browser preflight.
 # IMPORTANT: allow_credentials=True is incompatible with allow_origins=["*"].
-# When CORS_ORIGINS is the wildcard, credentials are disabled automatically.
 cors_origins = get_cors_origins()
 if cors_origins == ["*"]:
-    # Wildcard origin disallows credentials per CORS spec §7.1.5.
-    # Safe for public APIs that do not use cookies or Authorization headers.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -167,7 +163,6 @@ if cors_origins == ["*"]:
         allow_headers=["*"],
     )
 else:
-    # Specific origins allow credentialed requests (Authorization, cookies).
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
@@ -176,48 +171,20 @@ else:
         allow_headers=["*"],
     )
 
-# 3. TrustedHostMiddleware — prevents Host-header injection attacks.
-# Validates the Host: header against ALLOWED_HOSTS before any route logic runs.
-# In production set ALLOWED_HOSTS=app.factora.eu,api.factora.eu
-allowed_hosts = get_allowed_hosts()
-if allowed_hosts != ["*"]:
-    # Only activate when specific hosts are configured to avoid false positives
-    # in local dev or CI environments where the host is unpredictable.
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
-
-# 2. ProxyHeadersMiddleware — reads X-Forwarded-For and X-Forwarded-Proto
-# set by nginx so that:
-#   - request.client.host == real browser IP (needed for rate limiting & logs)
-#   - request.url.scheme  == "https"          (needed for redirect URLs, Secure cookies)
-# trusted_hosts restricts which proxy IPs we trust to set these headers.
-# Docker bridge network is 172.16.0.0/12 by default; use "*" only in dev.
-trusted_proxies = get_trusted_proxies()
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=trusted_proxies)
-
-# 1b. DemoModeMiddleware — adds X-Demo-Mode: true to every response when
-# ENVIRONMENT=demo so the frontend can show a demo banner.
-app.add_middleware(DemoModeMiddleware)
-
-# 1. RequestIDMiddleware — innermost, runs last on request / first on response.
-# Injects X-Request-ID so all log lines for a request share a traceable ID.
-app.add_middleware(RequestIDMiddleware)
 
 # ---------------------------------------------------------------------------
 # Routers — all routes versioned under /v1/
-#
-# API versioning strategy: a top-level /v1/ prefix on every route allows us
-# to introduce /v2/ routes in the future without breaking existing clients.
-# The frontend must use /v1/ prefixed paths.
 # ---------------------------------------------------------------------------
 _V1 = "/v1"
 
 app.include_router(auth_router, prefix=f"{_V1}/auth", tags=["Auth"])
+app.include_router(organization_router, prefix=f"{_V1}/organization", tags=["Organization"])
 app.include_router(companies_router, prefix=f"{_V1}/companies", tags=["External APIs"])
 app.include_router(file_router, prefix=f"{_V1}/files", tags=["File Management"])
-app.include_router(onboarding_router, prefix=f"{_V1}/onboarding", tags=["Onboarding"])
 app.include_router(saltedge_router, prefix=f"{_V1}/saltedge", tags=["SaltEdge"])
 app.include_router(aade_router, prefix=f"{_V1}/aade", tags=["AADE"])
 app.include_router(dashboard_router, prefix=f"{_V1}/dashboard", tags=["Dashboard"])
+
 
 # ---------------------------------------------------------------------------
 # Dev entry point

@@ -18,7 +18,7 @@ from packages.aade.models.e3_info import (
 )
 from packages.aade.errors import AadeError, NetworkError, ApiError
 from app.services.mydata_service import MyDataService
-from app.db.database_models import InvoiceDirection
+from app.db.models.aade import InvoiceDirection
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -436,27 +436,12 @@ class MyDataController:
     async def save_documents(
         self,
         query: DocsQuery,
-        buyer_id: str,
+        organization_id: str,
         db: AsyncSession,
         transmitted: bool = False,
         use_iterator: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Fetch documents from myDATA API and save them to database.
-
-        Args:
-            query: Document query parameters
-            buyer_id: Buyer ID to link documents to
-            db: Database session
-            transmitted: If true, fetch transmitted documents (RequestTransmittedDocs),
-                        otherwise fetch received documents (RequestDocs)
-
-        Returns:
-            Dict with saved document information
-
-        Raises:
-            HTTPException: 400 for bad requests, 502 for API errors, 503 for network errors, 500 for other failures
-        """
+        """Fetch documents from myDATA API and save them to the database."""
         try:
             # Determine direction based on transmitted flag
             direction = (
@@ -474,10 +459,10 @@ class MyDataController:
                 result = await self.mydata_service.save_documents(
                     response=response,
                     query=query,
-                    buyer_id=buyer_id,
+                    organization_id=organization_id,
                     db=db,
                     direction=direction,
-                    raw_xml=None,  # TODO: Fetch raw XML if needed
+                    raw_xml=None,
                 )
 
                 return result
@@ -499,7 +484,7 @@ class MyDataController:
                 page_result = await self.mydata_service.save_documents(
                     response=page,
                     query=query,
-                    buyer_id=buyer_id,
+                    organization_id=organization_id,
                     db=db,
                     direction=direction,
                     raw_xml=None,

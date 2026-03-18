@@ -14,7 +14,7 @@ from app.db.postgres import (
     AsyncSessionLocal,
     get_db_session,
 )
-from app.db.database_models import Document
+from app.db.models.files import Document
 
 # --- Small helpers ---
 
