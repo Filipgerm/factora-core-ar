@@ -34,9 +34,11 @@ from app.services.notification_service import NotificationService
 from app.services.organization_service import OrganizationService
 from app.services.saltedge_service import SaltEdgeService
 from app.services.dashboard_service import DashboardService
+from app.services.gemi_service import GemiService
 from app.controllers.organization_controller import OrganizationController
 from app.controllers.saltedge_controller import SaltEdgeController
 from app.controllers.dashboard_controller import DashboardController
+from app.controllers.gemi_controller import GemiController
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -260,3 +262,25 @@ def get_dashboard_controller(
 
 
 DashboardCtrl = Annotated[DashboardController, Depends(get_dashboard_controller)]
+
+
+# ---------------------------------------------------------------------------
+# GEMI 3-Tier DI chain (public endpoints; org_id optional)
+# ---------------------------------------------------------------------------
+
+
+def get_gemi_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> GemiService:
+    """Create a request-scoped ``GemiService``. GEMI endpoints are public; org_id=None."""
+    return GemiService(db, organization_id=None)
+
+
+def get_gemi_controller(
+    service: Annotated[GemiService, Depends(get_gemi_service)],
+) -> GemiController:
+    """Create a request-scoped ``GemiController`` injecting its service."""
+    return GemiController(service)
+
+
+GemiCtrl = Annotated[GemiController, Depends(get_gemi_controller)]
