@@ -74,8 +74,8 @@ Every feature must respect the following layer separation (top = closest to HTTP
 
 ```
 api/routes/      ← FastAPI route declarations, Pydantic validation, DI only. ZERO business logic.
-controllers/     ← Orchestration: calls services, maps exceptions → HTTPException, formats responses.
-services/        ← ALL business logic + DB access via AsyncSession. NEVER return HTTP types.
+controllers/     ← Orchestration: calls services, maps domain exceptions → HTTPException, translates internal models into external *Response DTOs.
+services/        ← ALL business logic + DB access via AsyncSession. Returns Domain Models, ORM instances, or internal DTOs. NEVER return HTTP types or external DTOs.
 clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI). No business logic.
 packages/        ← Internal SDKs (AADE, SaltEdge). Standalone — must NEVER import from app/.
 db/models/       ← SQLAlchemy ORM models only (split by domain: identity, counterparty, banking, aade, alerts).
@@ -136,6 +136,7 @@ ORM models live in `app/db/models/` split by domain:
 
 - `*Request` — inbound payload validated on the route (e.g. `SignUpRequest`, `OrganizationSetupRequest`)
 - `*Response` — outbound payload returned to the caller (e.g. `AuthResponse`, `BusinessResponse`)
+- `*Model` or `*DTO` — internal schemas used purely to pass structured data between Services and Controllers (if an ORM instance isn't sufficient).
 - Never use generic envelopes like `ServiceResponse` or `Result` — always return a specific DTO.
 
 </architecture_rules>
@@ -377,7 +378,8 @@ style(frontend):  UI / styling changes
 - **NEVER** add `pytest` or other test tools to `[project.dependencies]` — use `[dependency-groups]` in `pyproject.toml`.
 - **NEVER** put business logic in route files (`api/routes/`) — routes declare endpoints only.
 - **NEVER** return `HTTPException` or status codes from a service — raise `AppError` subclasses instead.
-- **NEVER** wrap service returns in generic "Result" or "ServiceResponse" objects — always return specific Pydantic `*Response` DTOs (or None) on the happy path, and rely on domain exceptions for failures.
+- **NEVER** return external API `*Response` DTOs from a service. Services must return strongly-typed Domain Models, ORM instances, or internal typed DTOs. Controllers are responsible for translating these internal returns into the final external Pydantic `*Response` DTOs.
+- **NEVER** wrap service returns in generic "Result" or "ServiceResponse" objects — rely strictly on domain exceptions from `app.core.exceptions` for failures.
 - **NEVER** use `allow_origins=["*"]` together with `allow_credentials=True` — this violates the CORS spec and will silently break auth in the browser.
 - **NEVER** skip the `/v1/` prefix when adding a new router to `main.py`.
 - **NEVER** add new ORM models to a backwards-compat shim — add them to the appropriate domain file under `db/models/`.

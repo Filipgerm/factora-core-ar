@@ -90,3 +90,12 @@ class Connection(BaseModel):
 class ConnectionsResponse(BaseModel):
     data: List[Connection]
     meta: Optional[MetaObject] = None
+
+
+class ConnectionActionData(BaseModel):
+    connect_url: str
+    token: str
+
+
+class ConnectionActionResponse(BaseModel):
+    data: ConnectionActionData

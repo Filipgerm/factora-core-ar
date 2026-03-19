@@ -2,7 +2,9 @@ from __future__ import annotations
 from typing import Iterator, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, date
+from datetime import datetime, date, timezone
+import asyncio
+from functools import partial
 
 from app.config import Settings
 from app.core.demo import demo_fixture
@@ -47,16 +49,19 @@ from app.db.models.banking import (
 class SaltEdgeService:
     """Orchestrates calls to the Salt Edge SDK using app-level settings."""
 
-    def __init__(self, app_settings: Settings) -> None:
+    def __init__(
+        self, db: AsyncSession, app_settings: Settings, organization_id: str
+    ) -> None:
+        self.db = db
+        self.app_settings = app_settings
+        self.organization_id = organization_id  # Security anchor
         self._client: SaltEdgeClient = SaltEdgeClient(app_settings)
         self._api: API = API(self._client)
-        self.app_settings = app_settings
 
     # ---------- Accounts ----------
     @demo_fixture("saltedge_accounts")
     async def list_accounts(
         self,
-        db: AsyncSession,
         *,
         customer_id: str | None = None,
         connection_id: str | None = None,
@@ -64,7 +69,7 @@ class SaltEdgeService:
         from_id: str | None = None,
     ) -> AccountsResponse:
         # Fetch from SaltEdge API
-        response = self._api.accounts.list(
+        response = await self._api.accounts.list(
             customer_id=customer_id,
             connection_id=connection_id,
             per_page=per_page,
@@ -74,62 +79,74 @@ class SaltEdgeService:
         # Store/update accounts in database
         if response.data:
             for account_data in response.data:
-                await self._store_or_update_account(db, account_data, connection_id)
+                await self._store_or_update_account(account_data, connection_id)
 
         return response
 
     # ---------- Connections ----------
     async def list_connections(
         self,
-        db: AsyncSession,
         *,
         customer_id: str,
         per_page: Optional[int] = None,
         from_id: Optional[str] = None,
     ) -> ConnectionsResponse:
         # Fetch from SaltEdge API
-        response = self._api.connections.list(
+        response = await self._api.connections.list(
             customer_id=customer_id, per_page=per_page, from_id=from_id
         )
 
         # Store/update connections in database
         if response.data:
             for connection_data in response.data:
-                await self._store_or_update_connection(db, connection_data)
+                await self._store_or_update_connection(connection_data)
 
         return response
 
-    def iterate_connections(
+    async def iterate_connections(
         self, *, customer_id: str, per_page: Optional[int] = None
     ) -> Iterator[ConnectionsResponse]:
-        return self._api.connections.iterate(customer_id=customer_id, per_page=per_page)
+        return await self._api.connections.iterate(
+            customer_id=customer_id, per_page=per_page
+        )
 
-    async def get_connection(
-        self, db: AsyncSession, *, connection_id: str
-    ) -> Connection:
+    async def get_connection(self, *, connection_id: str) -> Connection:
         # Fetch from SaltEdge API
-        response = self._api.connections.get(connection_id)
+        response = await self._api.connections.get(connection_id)
 
         # Store/update connection in database
-        await self._store_or_update_connection(db, response)
+        await self._store_or_update_connection(response)
 
         return response
 
-    def connect(self, *, payload: Dict[str, Any]) -> Dict[str, Any]:
-        return self._api.connections.connect(payload=payload)
+    async def connect(self, *, payload: Dict[str, Any]) -> Dict[str, Any]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, partial(self._api.connections.connect, payload=payload)
+        )
 
-    def reconnect(
+    async def reconnect(
         self, *, connection_id: str, payload: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        return self._api.connections.reconnect(connection_id, payload=payload)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            partial(self._api.connections.reconnect, connection_id, payload=payload),
+        )
 
-    def refresh(self, *, connection_id: str) -> Dict[str, Any]:
-        return self._api.connections.refresh(connection_id)
+    async def refresh(self, *, connection_id: str) -> Dict[str, Any]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, partial(self._api.connections.refresh, connection_id)
+        )
 
-    def background_refresh(self, *, connection_id: str) -> Dict[str, Any]:
-        return self._api.connections.background_refresh(connection_id)
+    async def background_refresh(self, *, connection_id: str) -> Dict[str, Any]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, partial(self._api.connections.background_refresh, connection_id)
+        )
 
-    def close(self) -> None:
+    async def close(self) -> None:
         self._client.close()
 
     # ---------- Consents ----------
@@ -138,7 +155,6 @@ class SaltEdgeService:
 
     async def list_consents(
         self,
-        db: AsyncSession,
         *,
         customer_id: str | None = None,
         connection_id: str | None = None,
@@ -146,7 +162,7 @@ class SaltEdgeService:
         from_id: str | None = None,
     ) -> ConsentsResponse:
         # Fetch from SaltEdge API
-        response = self._api.consents.list(
+        response = await self._api.consents.list(
             customer_id=customer_id,
             connection_id=connection_id,
             per_page=per_page,
@@ -156,84 +172,99 @@ class SaltEdgeService:
         # Store/update consents in database
         if response.data:
             for consent_data in response.data:
-                await self._store_or_update_consent(db, consent_data)
+                await self._store_or_update_consent(consent_data)
 
         return response
 
     async def get_consent(
         self,
-        db: AsyncSession,
         consent_id: str,
         *,
         connection_id: str | None = None,
         customer_id: str | None = None,
     ):
         # Fetch from SaltEdge API
-        response = self._api.consents.get(
+        response = await self._api.consents.get(
             consent_id, connection_id=connection_id, customer_id=customer_id
         )
 
         # Store/update consent in database
-        await self._store_or_update_consent(db, response)
+        await self._store_or_update_consent(response)
 
         return response
 
-    def revoke_consent(self, *, consent_id: str) -> ConsentResponse:
-        return self._api.consents.revoke(consent_id=consent_id)
+    async def revoke_consent(self, *, consent_id: str) -> ConsentResponse:
+        return await self._api.consents.revoke(consent_id=consent_id)
 
     # ---------- Rates ----------
-    def get_rates(self, *, date: str | None = None) -> RatesResponse:
-        return self._api.rates.get_rates(date=date)
+    async def get_rates(self, *, date: str | None = None) -> RatesResponse:
+        return await self._api.rates.get_rates(date=date)
 
     # ---------- Customers ----------
     async def create_customer(
-        self, db: AsyncSession, *, payload: dict
+        self, *, payload: dict
     ) -> CreatedClientCustomerResponse | CreatedPartnerCustomerResponse | dict:
         # Create in SaltEdge API
-        response = self._api.customers.create(payload=payload)
+        response = await self._api.customers.create(payload=payload)
 
         # Store customer in database if creation was successful
         if hasattr(response, "data") and response.data:
-            await self._store_or_update_customer(db, response.data)
+            await self._store_or_update_customer(response.data)
 
         return response
 
     async def list_customers(
         self,
-        db: AsyncSession,
         *,
         per_page: int | None = None,
         from_id: str | None = None,
     ) -> CustomersResponse:
         # Fetch from SaltEdge API
-        response = self._api.customers.list(from_id=from_id, per_page=per_page)
+        response = await self._api.customers.list(from_id=from_id, per_page=per_page)
 
         # Store/update customers in database
         if response.data:
             for customer_data in response.data:
-                await self._store_or_update_customer(db, customer_data)
+                await self._store_or_update_customer(customer_data)
 
         return response
 
-    async def get_customer(
-        self, db: AsyncSession, *, customer_id: str
-    ) -> CustomerResponse:
+    async def get_customer(self, *, customer_id: str) -> CustomerResponse:
         # Fetch from SaltEdge API
-        response = self._api.customers.get(customer_id=customer_id)
+        response = await self._api.customers.get(customer_id=customer_id)
 
         # Store/update customer in database
-        await self._store_or_update_customer(db, response.data)
+        await self._store_or_update_customer(response.data)
 
         return response
 
-    def delete_customer(self, *, customer_id: str) -> RemovedCustomerResponse:
-        return self._api.customers.delete(customer_id=customer_id)
+    async def delete_customer(self, *, customer_id: str) -> RemovedCustomerResponse:
+
+        # 1. External call: Delete from SaltEdge securely without blocking the event loop
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            None, partial(self._api.customers.delete, customer_id=customer_id)
+        )
+
+        # 2. Local DB: Soft delete the record (Ensuring multi-tenant safety)
+        existing_result = await self.db.execute(
+            select(CustomerModel).where(
+                CustomerModel.id == customer_id,
+                CustomerModel.organization_id == self.organization_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+
+        if existing:
+            existing.deleted_at = datetime.now(timezone.utc)
+            await self.db.commit()
+
+        return response
 
     # ---------- Transactions ----------
     @demo_fixture("saltedge_transactions")
     async def list_transactions(
         self,
-        db: AsyncSession,
         *,
         connection_id: str,
         account_id: str | None = None,
@@ -243,7 +274,7 @@ class SaltEdgeService:
         per_page: int | None = None,
     ) -> TransactionsResponse:
         # Fetch from SaltEdge API
-        response = self._api.transactions.list(
+        response = await self._api.transactions.list(
             connection_id=connection_id,
             account_id=account_id,
             pending=pending,
@@ -255,19 +286,18 @@ class SaltEdgeService:
         # Store/update transactions in database
         if response.data:
             for transaction_data in response.data:
-                await self._store_or_update_transaction(db, transaction_data)
+                await self._store_or_update_transaction(transaction_data)
 
         return response
 
-    def update_transactions(
+    async def update_transactions(
         self, *, payload: UpdateTransactionsRequestBody
     ) -> UpdateTransactionsResponse:
-        return self._api.transactions.update(payload=payload)
+        return await self._api.transactions.update(payload=payload)
 
     # ---------- Providers ----------
     async def list_providers(
         self,
-        db: AsyncSession,
         *,
         include_sandboxes: Optional[bool] = None,
         country_code: Optional[str] = None,
@@ -281,7 +311,7 @@ class SaltEdgeService:
         per_page: Optional[int] = None,
     ) -> ProvidersResponse:
         # Fetch from SaltEdge API
-        response = self._api.providers.list(
+        response = await self._api.providers.list(
             include_sandboxes=include_sandboxes,
             country_code=country_code,
             include_ais_fields=include_ais_fields,
@@ -297,13 +327,12 @@ class SaltEdgeService:
         # Store/update providers in database
         if response.data:
             for provider_data in response.data:
-                await self._store_or_update_provider(db, provider_data)
+                await self._store_or_update_provider(provider_data)
 
         return response
 
     async def show_provider(
         self,
-        db: AsyncSession,
         *,
         provider_code: str,
         include_ais_fields: Optional[bool] = None,
@@ -311,7 +340,7 @@ class SaltEdgeService:
         include_credentials_fields: Optional[bool] = None,
     ) -> ProviderResponse:
         # Fetch from SaltEdge API
-        response = self._api.providers.show(
+        response = await self._api.providers.show(
             provider_code=provider_code,
             include_ais_fields=include_ais_fields,
             include_pis_fields=include_pis_fields,
@@ -319,35 +348,33 @@ class SaltEdgeService:
         )
 
         # Store/update provider in database
-        await self._store_or_update_provider(db, response.data)
+        await self._store_or_update_provider(response.data)
 
         return response
 
     # ---------- Payments ----------
-    def create_payment(
+    async def create_payment(
         self, *, payload: CreatePaymentRequestBody
     ) -> PaymentCreateResponse:
-        return self._api.payments.create(payload=payload)
+        return await self._api.payments.create(payload=payload)
 
-    def list_payments(
+    async def list_payments(
         self,
         *,
         customer_id: str,
         from_id: Optional[str] = None,
         per_page: Optional[int] = None,
     ) -> PaymentsListResponse:
-        return self._api.payments.list(
+        return await self._api.payments.list(
             customer_id=customer_id, from_id=from_id, per_page=per_page
         )
 
-    def show_payment(self, *, payment_id: str) -> PaymentResponse:
-        return self._api.payments.show(payment_id=payment_id)
+    async def show_payment(self, *, payment_id: str) -> PaymentResponse:
+        return await self._api.payments.show(payment_id=payment_id)
 
-    async def refresh_payment(
-        self, db: AsyncSession, *, payment_id: str
-    ) -> UpdatePaymentResponse:
+    async def refresh_payment(self, *, payment_id: str) -> UpdatePaymentResponse:
         # Refresh payment status from SaltEdge API
-        response = self._api.payments.refresh(payment_id=payment_id)
+        response = await self._api.payments.refresh(payment_id=payment_id)
 
         # Note: Payment data storage would depend on your payment model structure
         # For now, just return the response
@@ -356,17 +383,46 @@ class SaltEdgeService:
 
     # ---------- Helper methods for database storage ----------
 
-    async def _store_or_update_customer(self, db: AsyncSession, customer_data) -> None:
+    async def _store_or_update_customer(self, customer_data) -> None:
         """Upsert a SaltEdge customer into the local database.
 
         Args:
             db: Async database session.
             customer_data: SaltEdge SDK customer model instance to persist.
         """
-        customer_id = customer_data.customer_id  # Use string directly
+        customer_id = str(customer_data.id)  # Use string directly
+
+        # 1. 🔒 SECURE LOOKUP: Filter by both ID and Organization
+        query = select(CustomerModel).where(
+            CustomerModel.id == customer_id,
+            CustomerModel.organization_id
+            == self.organization_id,  # <--- Multi-Tenancy Security Check
+        )
+        result = await self.db.execute(query)
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            existing.external_id = customer_data.customer_id
+            if hasattr(customer_data, "identifier"):
+                existing.identifier = customer_data.identifier
+        else:
+            # 2. 🔒 SECURE Creation; Assign the organization_id
+            customer = CustomerModel(
+                id=customer_id,
+                organization_id=self.organization_id,  # <--- Multi-Tenancy Security Check
+                external_id=customer_data.customer_id,
+                identifier=getattr(customer_data, "identifier", None),
+                email=getattr(customer_data, "email", None),
+                categorization_type=getattr(
+                    customer_data, "categorization_type", "personal"
+                ),
+            )
+            self.db.add(customer)
+
+        await self.db.commit()
 
         # Check if customer exists
-        existing = await db.get(CustomerModel, customer_id)
+        existing = await self.db.get(CustomerModel, customer_id)
 
         if existing:
             # Update existing customer
@@ -385,17 +441,12 @@ class SaltEdgeService:
                     customer_data, "categorization_type", "personal"
                 ),
             )
-            db.add(customer)
+            self.db.add(customer)
 
-        await db.commit()
+        await self.db.commit()
 
-    async def _store_or_update_connection(self, db: AsyncSession, connection_data) -> None:
-        """Upsert a SaltEdge connection into the local database.
-
-        Args:
-            db: Async database session.
-            connection_data: SaltEdge SDK ``Connection`` model instance to persist.
-        """
+    async def _store_or_update_connection(self, connection_data) -> None:
+        """Upsert a SaltEdge connection into the local database."""
         connection_id = connection_data.id
         customer_id = connection_data.customer_id
 
@@ -405,7 +456,9 @@ class SaltEdgeService:
         fields: Dict[str, Any] = {
             "external_id": connection_data.id,
             "external_customer_id": connection_data.customer_id,
-            "customer_identifier": getattr(connection_data, "customer_identifier", None),
+            "customer_identifier": getattr(
+                connection_data, "customer_identifier", None
+            ),
             "customer_id": customer_id,
             "provider_code": connection_data.provider_code,
             "provider_name": connection_data.provider_name,
@@ -414,70 +467,82 @@ class SaltEdgeService:
             "categorization": connection_data.categorization.value,
             "last_consent_id": getattr(connection_data, "last_consent_id", None),
             "automatic_refresh": getattr(connection_data, "automatic_refresh", False),
-            "last_attempt": last_attempt_raw.model_dump(mode="json") if last_attempt_raw else None,
-            "holder_info": holder_info_raw.model_dump(mode="json") if holder_info_raw else None,
+            "last_attempt": (
+                last_attempt_raw.model_dump(mode="json") if last_attempt_raw else None
+            ),
+            "holder_info": (
+                holder_info_raw.model_dump(mode="json") if holder_info_raw else None
+            ),
         }
 
-        existing = await db.get(ConnectionModel, connection_id)
+        # SECURE: Filter by organization_id
+        existing_result = await self.db.execute(
+            select(ConnectionModel).where(
+                ConnectionModel.id == connection_id,
+                ConnectionModel.organization_id == self.organization_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+
         if existing:
             for attr, value in fields.items():
                 setattr(existing, attr, value)
         else:
-            db.add(ConnectionModel(id=connection_id, **fields))
+            self.db.add(
+                ConnectionModel(
+                    id=connection_id,
+                    organization_id=self.organization_id,  # SECURE: Insert tenant ID
+                    **fields,
+                )
+            )
 
-        await db.commit()
+        await self.db.commit()
 
     async def _store_or_update_account(
-        self, db: AsyncSession, account_data, connection_id: str = None
+        self, account_data, connection_id: str = None
     ) -> None:
-        """Upsert a SaltEdge bank account into the local database.
-
-        Args:
-            db: Async database session.
-            account_data: SaltEdge SDK account model instance to persist.
-            connection_id: External SaltEdge connection ID.  If ``None``,
-                the method attempts to read it from ``account_data.connection_id``.
-        """
+        """Upsert a SaltEdge bank account into the local database."""
         account_id = account_data.id  # Use string directly
 
-        # If connection_id not provided, try to get it from account_data
         if not connection_id and hasattr(account_data, "connection_id"):
             connection_id = account_data.connection_id
 
-            # Look up the internal connection ID by external_id
         if connection_id:
+            # SECURE: Also ensure the parent connection belongs to this organization
             connection_query = select(ConnectionModel.id).where(
-                ConnectionModel.external_id == connection_id
+                ConnectionModel.external_id == connection_id,
+                ConnectionModel.organization_id == self.organization_id,
             )
-            connection_result = await db.execute(connection_query)
+            connection_result = await self.db.execute(connection_query)
             internal_connection_id = connection_result.scalar_one_or_none()
 
             if not internal_connection_id:
-                # Connection doesn't exist, skip storing this account
                 return
         else:
             internal_connection_id = None
 
-        # Check if account exists
-        existing = await db.get(BankAccountModel, account_id)
+        # SECURE: Filter by organization_id
+        existing_result = await self.db.execute(
+            select(BankAccountModel).where(
+                BankAccountModel.id == account_id,
+                BankAccountModel.organization_id == self.organization_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
 
         if existing:
-            # Update existing account
             existing.external_id = account_data.id
             existing.external_connection_id = connection_id
             existing.connection_id = internal_connection_id
             existing.name = account_data.name
-            existing.nature = (
-                account_data.nature.value
-            )  # The value of this Enum variable needs to be retrieved using the .value attribute
+            existing.nature = account_data.nature.value
             existing.balance = account_data.balance
             existing.currency_code = account_data.currency_code
             existing.extra = account_data.extra.model_dump(mode="json")
-            # Update timestamps
         else:
-            # Create new account
             account = BankAccountModel(
                 id=account_id,
+                organization_id=self.organization_id,  # SECURE
                 external_id=account_data.id,
                 external_connection_id=connection_id,
                 connection_id=internal_connection_id,
@@ -487,33 +552,22 @@ class SaltEdgeService:
                 currency_code=account_data.currency_code,
                 extra=account_data.extra.model_dump(mode="json"),
             )
-            db.add(account)
+            self.db.add(account)
 
-        await db.commit()
+        await self.db.commit()
 
-    async def _store_or_update_transaction(self, db: AsyncSession, transaction_data) -> None:
-        """Upsert a SaltEdge transaction into the local database.
-
-        Bank-specific extras (``posting_date``, ``merchant_id``, ``mcc``,
-        ``original_amount``, ``original_currency_code``) are not direct ORM
-        columns; they are persisted inside the JSONB ``extra`` field via
-        ``transaction_data.extra.model_dump()``.
-
-        Args:
-            db: Async database session.
-            transaction_data: SaltEdge SDK transaction model instance to persist.
-        """
-        # Check if transaction exists by external ID
-        existing = await db.execute(
-            select(Transaction).where(Transaction.id == transaction_data.id)
+    async def _store_or_update_transaction(self, transaction_data) -> None:
+        """Upsert a SaltEdge transaction into the local database."""
+        # SECURE: Filter by organization_id
+        existing_result = await self.db.execute(
+            select(Transaction).where(
+                Transaction.id == transaction_data.id,
+                Transaction.organization_id == self.organization_id,
+            )
         )
-        existing = existing.scalar_one_or_none()
+        existing = existing_result.scalar_one_or_none()
 
         if existing:
-            # Update existing transaction — only write columns that exist on the
-            # ORM model.  Bank-specific extras (posting_date, merchant_id, mcc,
-            # original_amount, original_currency_code, …) are stored in the
-            # JSONB `extra` column and must not be set as direct attributes.
             existing.status = transaction_data.status
             existing.mode = transaction_data.mode
             existing.duplicated = transaction_data.duplicated
@@ -530,6 +584,7 @@ class SaltEdgeService:
         else:
             transaction = Transaction(
                 id=transaction_data.id,
+                organization_id=self.organization_id,  # SECURE
                 account_id=transaction_data.account_id,
                 status=transaction_data.status,
                 mode=transaction_data.mode,
@@ -545,41 +600,40 @@ class SaltEdgeService:
                 description=getattr(transaction_data, "description", None),
                 extra=transaction_data.extra.model_dump(mode="json"),
             )
-            db.add(transaction)
+            self.db.add(transaction)
 
-        await db.commit()
+        await self.db.commit()
 
-    async def _store_or_update_consent(self, db: AsyncSession, consent_data) -> None:
-        """Upsert a SaltEdge consent record into the local database.
+    async def _store_or_update_consent(self, consent_data) -> None:
+        """Upsert a SaltEdge consent record into the local database."""
+        consent_id = consent_data.id
 
-        Args:
-            db: Async database session.
-            consent_data: SaltEdge SDK consent model instance to persist.
-        """
-        consent_id = consent_data.id  # Use string directly
-
-        # Get connection_id - need to look up internal ID by external_id
         external_connection_id = consent_data.connection_id
 
-        # Look up the internal connection ID by external_id
         if external_connection_id:
+            # SECURE
             connection_query = select(ConnectionModel.id).where(
-                ConnectionModel.external_id == external_connection_id
+                ConnectionModel.external_id == external_connection_id,
+                ConnectionModel.organization_id == self.organization_id,
             )
-            connection_result = await db.execute(connection_query)
+            connection_result = await self.db.execute(connection_query)
             internal_connection_id = connection_result.scalar_one_or_none()
 
             if not internal_connection_id:
-                # Connection doesn't exist, skip storing this consent
                 return
         else:
             internal_connection_id = None
 
-        # Check if consent exists
-        existing = await db.get(ConsentModel, consent_id)
+        # SECURE
+        existing_result = await self.db.execute(
+            select(ConsentModel).where(
+                ConsentModel.id == consent_id,
+                ConsentModel.organization_id == self.organization_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
 
         if existing:
-            # Update existing consent
             existing.external_id = consent_data.id
             existing.external_customer_id = consent_data.customer_id
             existing.external_connection_id = external_connection_id
@@ -594,9 +648,9 @@ class SaltEdgeService:
             existing.revoked_at = getattr(consent_data, "revoked_at", None)
             existing.revoke_reason = getattr(consent_data, "revoke_reason", None)
         else:
-            # Create new consent
             consent = ConsentModel(
                 id=consent_id,
+                organization_id=self.organization_id,  # SECURE
                 external_id=consent_data.id,
                 external_customer_id=consent_data.customer_id,
                 external_connection_id=external_connection_id,
@@ -611,9 +665,9 @@ class SaltEdgeService:
                 revoked_at=getattr(consent_data, "revoked_at", None),
                 revoke_reason=getattr(consent_data, "revoke_reason", None),
             )
-            db.add(consent)
+            self.db.add(consent)
 
-        await db.commit()
+        await self.db.commit()
 
     @staticmethod
     def _build_provider_fields(provider_data) -> Dict[str, Any]:
@@ -628,7 +682,9 @@ class SaltEdgeService:
         Returns:
             Dict mapping ``ProviderModel`` column names to their values.
         """
-        g = lambda attr, default=None: getattr(provider_data, attr, default)  # noqa: E731
+        g = lambda attr, default=None: getattr(
+            provider_data, attr, default
+        )  # noqa: E731
         return {
             "name": provider_data.name,
             "country_code": provider_data.country_code,
@@ -660,7 +716,9 @@ class SaltEdgeService:
             "supported_account_natures": g("supported_account_natures"),
             "supported_account_types": g("supported_account_types"),
             "supported_fetch_scopes": g("supported_fetch_scopes"),
-            "supported_transaction_extra_fields": g("supported_transaction_extra_fields"),
+            "supported_transaction_extra_fields": g(
+                "supported_transaction_extra_fields"
+            ),
             "payment_templates": g("payment_templates"),
             "instruction_for_payments": g("instruction_for_payments"),
             "interactive_for_payments": g("interactive_for_payments"),
@@ -671,7 +729,7 @@ class SaltEdgeService:
             "interactive_fields": g("interactive_fields"),
         }
 
-    async def _store_or_update_provider(self, db: AsyncSession, provider_data) -> None:
+    async def _store_or_update_provider(self, provider_data) -> None:
         """Upsert a SaltEdge provider into the local database.
 
         Args:
@@ -679,12 +737,14 @@ class SaltEdgeService:
             provider_data: SaltEdge SDK ``Provider`` model instance to persist.
         """
         fields = self._build_provider_fields(provider_data)
-        existing = await db.get(ProviderModel, provider_data.code)
+        existing = await self.db.get(ProviderModel, provider_data.code)
 
         if existing:
             for attr, value in fields.items():
                 setattr(existing, attr, value)
         else:
-            db.add(ProviderModel(id=provider_data.code, code=provider_data.code, **fields))
+            self.db.add(
+                ProviderModel(id=provider_data.code, code=provider_data.code, **fields)
+            )
 
-        await db.commit()
+        await self.db.commit()
