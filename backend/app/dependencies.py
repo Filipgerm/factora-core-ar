@@ -32,7 +32,9 @@ from app.db.postgres import get_db_session
 from app.services.auth_service import AuthService
 from app.services.notification_service import NotificationService
 from app.services.organization_service import OrganizationService
+from app.services.saltedge_service import SaltEdgeService
 from app.controllers.organization_controller import OrganizationController
+from app.controllers.saltedge_controller import SaltEdgeController
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -74,9 +76,13 @@ def get_auth_service(
 
 def get_org_service(
     db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgIdOptional,
 ) -> OrganizationService:
-    """Create a request-scoped ``OrganizationService``."""
-    return OrganizationService(db)
+    """Create a request-scoped ``OrganizationService``.
+
+    org_id is None for setup flow (user has no org yet); set for org-scoped ops.
+    """
+    return OrganizationService(db, organization_id=org_id)
 
 
 def get_notification_service() -> NotificationService:
@@ -197,4 +203,35 @@ def get_current_org_id(user: AuthUser) -> str:
     return org_id
 
 
+def get_current_org_id_optional(user: AuthUser) -> str | None:
+    """Extract organization_id from JWT if present; returns None for setup flow."""
+    return user.get("organization_id")
+
+
 CurrentOrgId = Annotated[str, Depends(get_current_org_id)]
+CurrentOrgIdOptional = Annotated[
+    str | None, Depends(get_current_org_id_optional)
+]
+
+
+# ---------------------------------------------------------------------------
+# SaltEdge 3-Tier DI chain
+# ---------------------------------------------------------------------------
+
+
+def get_saltedge_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+) -> SaltEdgeService:
+    """Create a request-scoped ``SaltEdgeService`` with db and organization_id."""
+    return SaltEdgeService(db, settings, org_id)
+
+
+def get_saltedge_controller(
+    service: Annotated[SaltEdgeService, Depends(get_saltedge_service)],
+) -> SaltEdgeController:
+    """Create a request-scoped ``SaltEdgeController`` injecting its service."""
+    return SaltEdgeController(service)
+
+
+SaltEdgeCtrl = Annotated[SaltEdgeController, Depends(get_saltedge_controller)]
