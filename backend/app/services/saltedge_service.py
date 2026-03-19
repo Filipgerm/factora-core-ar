@@ -421,30 +421,6 @@ class SaltEdgeService:
 
         await self.db.commit()
 
-        # Check if customer exists
-        existing = await self.db.get(CustomerModel, customer_id)
-
-        if existing:
-            # Update existing customer
-            existing.external_id = customer_data.customer_id
-            if hasattr(customer_data, "identifier"):
-                existing.identifier = customer_data.identifier
-            # Update other fields as needed
-        else:
-            # Create new customer
-            customer = CustomerModel(
-                id=customer_id,
-                external_id=customer_data.customer_id,
-                identifier=getattr(customer_data, "identifier", None),
-                email=getattr(customer_data, "email", None),
-                categorization_type=getattr(
-                    customer_data, "categorization_type", "personal"
-                ),
-            )
-            self.db.add(customer)
-
-        await self.db.commit()
-
     async def _store_or_update_connection(self, connection_data) -> None:
         """Upsert a SaltEdge connection into the local database."""
         connection_id = connection_data.id
