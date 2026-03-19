@@ -32,7 +32,17 @@ from app.db.postgres import get_db_session
 from app.services.auth_service import AuthService
 from app.services.notification_service import NotificationService
 from app.services.organization_service import OrganizationService
+from app.services.saltedge_service import SaltEdgeService
+from app.services.dashboard_service import DashboardService
+from app.services.gemi_service import GemiService
+from app.services.mydata_service import MyDataService
+from app.services.file_service import FileService
 from app.controllers.organization_controller import OrganizationController
+from app.controllers.saltedge_controller import SaltEdgeController
+from app.controllers.dashboard_controller import DashboardController
+from app.controllers.gemi_controller import GemiController
+from app.controllers.mydata_controller import MyDataController
+from app.controllers.file_controller import FileController
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -74,9 +84,13 @@ def get_auth_service(
 
 def get_org_service(
     db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgIdOptional,
 ) -> OrganizationService:
-    """Create a request-scoped ``OrganizationService``."""
-    return OrganizationService(db)
+    """Create a request-scoped ``OrganizationService``.
+
+    org_id is None for setup flow (user has no org yet); set for org-scoped ops.
+    """
+    return OrganizationService(db, organization_id=org_id)
 
 
 def get_notification_service() -> NotificationService:
@@ -197,4 +211,126 @@ def get_current_org_id(user: AuthUser) -> str:
     return org_id
 
 
+def get_current_org_id_optional(user: AuthUser) -> str | None:
+    """Extract organization_id from JWT if present; returns None for setup flow."""
+    return user.get("organization_id")
+
+
 CurrentOrgId = Annotated[str, Depends(get_current_org_id)]
+CurrentOrgIdOptional = Annotated[
+    str | None, Depends(get_current_org_id_optional)
+]
+
+
+# ---------------------------------------------------------------------------
+# SaltEdge 3-Tier DI chain
+# ---------------------------------------------------------------------------
+
+
+def get_saltedge_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+) -> SaltEdgeService:
+    """Create a request-scoped ``SaltEdgeService`` with db and organization_id."""
+    return SaltEdgeService(db, settings, org_id)
+
+
+def get_saltedge_controller(
+    service: Annotated[SaltEdgeService, Depends(get_saltedge_service)],
+) -> SaltEdgeController:
+    """Create a request-scoped ``SaltEdgeController`` injecting its service."""
+    return SaltEdgeController(service)
+
+
+SaltEdgeCtrl = Annotated[SaltEdgeController, Depends(get_saltedge_controller)]
+
+
+# ---------------------------------------------------------------------------
+# Dashboard 3-Tier DI chain
+# ---------------------------------------------------------------------------
+
+
+def get_dashboard_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+) -> DashboardService:
+    """Create a request-scoped ``DashboardService`` with db and organization_id."""
+    return DashboardService(db, org_id)
+
+
+def get_dashboard_controller(
+    service: Annotated[DashboardService, Depends(get_dashboard_service)],
+) -> DashboardController:
+    """Create a request-scoped ``DashboardController`` injecting its service."""
+    return DashboardController(service)
+
+
+DashboardCtrl = Annotated[DashboardController, Depends(get_dashboard_controller)]
+
+
+# ---------------------------------------------------------------------------
+# GEMI 3-Tier DI chain (public endpoints; org_id optional)
+# ---------------------------------------------------------------------------
+
+
+def get_gemi_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> GemiService:
+    """Create a request-scoped ``GemiService``. GEMI endpoints are public; org_id=None."""
+    return GemiService(db, organization_id=None)
+
+
+def get_gemi_controller(
+    service: Annotated[GemiService, Depends(get_gemi_service)],
+) -> GemiController:
+    """Create a request-scoped ``GemiController`` injecting its service."""
+    return GemiController(service)
+
+
+GemiCtrl = Annotated[GemiController, Depends(get_gemi_controller)]
+
+
+# ---------------------------------------------------------------------------
+# MyData 3-Tier DI chain
+# ---------------------------------------------------------------------------
+
+
+def get_mydata_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgIdOptional,
+) -> MyDataService:
+    """Create a request-scoped ``MyDataService``. org_id optional for read-only."""
+    return MyDataService(db, org_id, settings)
+
+
+def get_mydata_controller(
+    service: Annotated[MyDataService, Depends(get_mydata_service)],
+) -> MyDataController:
+    """Create a request-scoped ``MyDataController`` injecting its service."""
+    return MyDataController(service)
+
+
+MyDataCtrl = Annotated[MyDataController, Depends(get_mydata_controller)]
+
+
+# ---------------------------------------------------------------------------
+# File 3-Tier DI chain
+# ---------------------------------------------------------------------------
+
+
+def get_file_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+) -> FileService:
+    """Create a request-scoped ``FileService`` with db and organization_id."""
+    return FileService(db, org_id)
+
+
+def get_file_controller(
+    service: Annotated[FileService, Depends(get_file_service)],
+) -> FileController:
+    """Create a request-scoped ``FileController`` injecting its service."""
+    return FileController(service)
+
+
+FileCtrl = Annotated[FileController, Depends(get_file_controller)]

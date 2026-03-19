@@ -1,15 +1,20 @@
-from fastapi import APIRouter, Depends, Query
+"""GEMI/companies routes — company search and document fetch."""
+
+from __future__ import annotations
+
 from typing import Annotated, Literal
-from app.controllers.gemi_controller import GemiController, get_gemi_controller
+
+from fastapi import APIRouter, Query
+
+from app.dependencies import GemiCtrl
 
 router = APIRouter()
 
 
-# GEMH API
 @router.post("/gemi/{afm}/documents:fetch")
 async def fetch_docs(
     afm: str,
-    gemi_controller: Annotated["GemiController", Depends(get_gemi_controller)] = None,
+    ctl: GemiCtrl,
 ):
     """
     Trigger a fetch of official GEMI documents for a company and store them server-side.
@@ -24,12 +29,12 @@ async def fetch_docs(
         A JSON object summarizing the operation (company label, number of documents uploaded,
         and a human-readable message). Exact shape is defined by the controller/service.
     """
-    return await gemi_controller.fetch_and_store_company_documents(afm)
+    return await ctl.fetch_and_store_company_documents(afm)
 
 
 @router.get("/gemi/search")
 async def search_companies(
-    gemi_controller: Annotated[GemiController, Depends(get_gemi_controller)],
+    ctl: GemiCtrl,
     q: Annotated[
         str,
         Query(
@@ -60,4 +65,4 @@ async def search_companies(
         }
         Exact keys/flags are defined by the controller/service to keep the frontend stable.
     """
-    return await gemi_controller.gemi_search(q, mode, limit)
+    return await ctl.gemi_search(q, mode, limit)

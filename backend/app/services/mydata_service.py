@@ -6,6 +6,7 @@ from packages.aade.http import AadeClient
 from packages.aade.aade_api import API as MyDataAPI
 from app.config import Settings
 from app.core.demo import demo_fixture
+from app.core.exceptions import ValidationError
 from packages.aade import AadeClient
 from packages.aade.models.docs import DocsQuery, RequestedDocsResponse
 from packages.aade.models.my_book_info import (
@@ -38,8 +39,14 @@ class MyDataService:
     Orchestrates myDATA ERP GET calls across endpoints with a consistent interface.
     """
 
-    def __init__(self, app_settings: Settings) -> None:
-        # Allow injection for testing; otherwise build default API facade
+    def __init__(
+        self,
+        db: AsyncSession,
+        organization_id: Optional[str],
+        app_settings: Settings,
+    ) -> None:
+        self.db = db
+        self.organization_id = organization_id
         self.client: AadeClient = AadeClient(app_settings)
         self.api = MyDataAPI(self.client)
         self.app_settings = app_settings
@@ -158,18 +165,21 @@ class MyDataService:
         self,
         response: RequestedDocsResponse,
         query: DocsQuery,
-        organization_id: str,
-        db: AsyncSession,
         direction: InvoiceDirection,
         raw_xml: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Save AADE document response to database (raw + normalized)."""
+        if not self.organization_id:
+            raise ValidationError(
+                "Organization setup required to save documents.",
+                code="validation.org_required",
+            )
         try:
             # Convert response to JSON dict
             raw_json = response.model_dump(mode="json")
 
             doc = AadeDocumentModel(
-                organization_id=organization_id,
+                organization_id=self.organization_id,
                 raw_xml=raw_xml,
                 raw_json=raw_json,
                 query_params=query.model_dump(exclude_none=True, mode="json"),
@@ -179,8 +189,8 @@ class MyDataService:
                     else None
                 ),
             )
-            db.add(doc)
-            await db.flush()  # Get the document ID
+            self.db.add(doc)
+            await self.db.flush()  # Get the document ID
 
             # Pre-normalize all invoices and collect candidate marks
             normalized_invoices: list[dict] = []
@@ -207,7 +217,7 @@ class MyDataService:
             # The unique constraint on AadeInvoiceModel.mark enforces this at the database level.
             existing_marks: set[int] = set()
             if candidate_marks:
-                result = await db.scalars(
+                result = await self.db.scalars(
                     select(AadeInvoiceModel.mark).where(
                         AadeInvoiceModel.mark.in_(candidate_marks)
                     )
@@ -248,13 +258,13 @@ class MyDataService:
                     total_gross_value=normalized.get("total_gross_value"),
                     normalized_data=normalized_json,
                 )
-                db.add(invoice_model)
+                self.db.add(invoice_model)
                 invoice_ids.append(invoice_model.id)
 
-            await db.commit()
+            await self.db.commit()
 
             logger.info(
-                f"✅ Saved AADE document {doc.id} with {len(invoice_ids)} invoices for organization {organization_id}"
+                f"✅ Saved AADE document {doc.id} with {len(invoice_ids)} invoices for organization {self.organization_id}"
             )
 
             return {
@@ -263,7 +273,7 @@ class MyDataService:
                 "invoice_ids": invoice_ids,
             }
         except Exception as e:
-            await db.rollback()
+            await self.db.rollback()
             logger.error(f"❌ Failed to save AADE documents: {e}", exc_info=True)
             raise
 

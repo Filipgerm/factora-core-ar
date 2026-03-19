@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Sequence
 
 from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,66 +11,79 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ExternalServiceError, NotFoundError
 from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
 from app.db.models.alerts import Alert
-from app.db.models.banking import BankAccountModel, ConnectionModel, Transaction, TransactionMode, TransactionStatus
-from app.db.models.identity import Organization, User
+from app.db.models.banking import (
+    BankAccountModel,
+    ConnectionModel,
+    CustomerModel,
+    Transaction,
+    TransactionMode,
+    TransactionStatus,
+)
 from app.models.dashboard import (
     AadeDocumentsRequest,
-    AadeDocumentsResponse,
-    AadeInvoiceItem,
-    AadeSummaryResponse,
     DashboardMetricsRequest,
-    DashboardMetricsResponse,
-    PartySummary,
-    SellerMetricsRequest,
-    SellerMetricsResponse,
     TransactionsRequest,
-    TransactionsResponse,
 )
 
 logger = logging.getLogger(__name__)
 
 
 class DashboardService:
-    """Stateless service that computes all dashboard metrics from the DB.
+    """Computes dashboard metrics from the DB, scoped by organization_id."""
 
-    The database session is injected per call so that the service can be
-    shared across requests without holding a long-lived connection.
-    """
+    def __init__(self, db: AsyncSession, organization_id: str) -> None:
+        self.db = db
+        self.organization_id = organization_id
+
+    async def _ensure_customer_belongs_to_org(self, customer_id: str) -> None:
+        """Raise NotFoundError if customer_id does not belong to self.organization_id."""
+        result = await self.db.execute(
+            select(CustomerModel.id).where(
+                CustomerModel.id == customer_id,
+                CustomerModel.organization_id == self.organization_id,
+            )
+        )
+        if not result.scalar_one_or_none():
+            raise NotFoundError(
+                "Customer not found or access denied.",
+                code="resource.not_found",
+            )
 
     async def get_dashboard_pl_metrics(
-        self, db: AsyncSession, request: DashboardMetricsRequest
-    ) -> DashboardMetricsResponse:
+        self, request: DashboardMetricsRequest
+    ) -> Dict[str, Any]:
+        await self._ensure_customer_belongs_to_org(request.customer_id)
         start_date, end_date = self._resolve_window(request=request)
         period_days = (end_date - start_date).days + 1
 
         try:
             # Totals
             net_cash_flow = await self.get_net_cash_flow(
-                db=db,
+                db=self.db,
                 customer_id=request.customer_id,
                 start_date=start_date,
                 end_date=end_date,
                 currency=request.currency,
             )
             total_revenue = await self.get_total_revenue(
-                db=db,
+                db=self.db,
                 customer_id=request.customer_id,
                 start_date=start_date,
                 end_date=end_date,
                 currency=request.currency,
             )
             total_expenses = await self.get_total_expenses(
-                db=db,
+                db=self.db,
                 customer_id=request.customer_id,
                 start_date=start_date,
                 end_date=end_date,
                 currency=request.currency,
             )
             net_income = await self.get_net_income(
-                db=db, revenue=total_revenue, expenses=total_expenses
+                db=self.db, revenue=total_revenue, expenses=total_expenses
             )
             average_margin = await self.get_average_margin(
-                db=db,
+                db=self.db,
                 customer_id=request.customer_id,
                 start_date=start_date,
                 end_date=end_date,
@@ -79,21 +92,21 @@ class DashboardService:
 
             # Balance & currency from accounts (MVP: sum all EUR accounts for customer)
             balance, currency = await self._get_balance_and_currency(
-                db=db, customer_id=request.customer_id, currency=request.currency
+                db=self.db, customer_id=request.customer_id, currency=request.currency
             )
 
             # Monthly aggregations — fetch revenue and expenses once, then derive
             # net_income and margin from those pre-computed lists to avoid 4 extra
             # round-trips to the DB.
             monthly_revenue = await self.get_monthly_revenue(
-                db=db,
+                db=self.db,
                 customer_id=request.customer_id,
                 start_date=start_date,
                 end_date=end_date,
                 currency=request.currency,
             )
             monthly_expenses = await self.get_monthly_expenses(
-                db=db,
+                db=self.db,
                 customer_id=request.customer_id,
                 start_date=start_date,
                 end_date=end_date,
@@ -108,58 +121,54 @@ class DashboardService:
                 monthly_expenses=monthly_expenses,
             )
 
-            return DashboardMetricsResponse(
-                net_cash_flow=round(net_cash_flow, 2),
-                total_revenue=round(total_revenue, 2),
-                total_expenses=round(total_expenses, 2),
-                net_income=round(net_income, 2),
-                average_margin=average_margin,
-                balance=round(balance, 2),
-                currency=currency,
-                period_days=period_days,
-                monthly_revenue=monthly_revenue,
-                monthly_expenses=monthly_expenses,
-                monthly_net_income=monthly_net_income,
-                monthly_margin=monthly_margin,
-            )
+            return {
+                "net_cash_flow": round(net_cash_flow, 2),
+                "total_revenue": round(total_revenue, 2),
+                "total_expenses": round(total_expenses, 2),
+                "net_income": round(net_income, 2),
+                "average_margin": average_margin,
+                "balance": round(balance, 2),
+                "currency": currency,
+                "period_days": period_days,
+                "monthly_revenue": monthly_revenue,
+                "monthly_expenses": monthly_expenses,
+                "monthly_net_income": monthly_net_income,
+                "monthly_margin": monthly_margin,
+            }
 
         except Exception as e:
             logger.error("Dashboard P&L metrics error: %s", e)
-            raise ExternalServiceError(f"Failed to compute P&L metrics: {str(e)}", code="dashboard.error")
+            raise ExternalServiceError(
+                f"Failed to compute P&L metrics: {str(e)}", code="dashboard.error"
+            )
 
-    async def get_seller_metrics(
-        self, db: AsyncSession, request: SellerMetricsRequest
-    ) -> SellerMetricsResponse:
+    async def get_seller_metrics(self) -> Tuple[int, int]:
         """Get metrics for an organization: total counterparties and active alerts."""
         from app.db.models.counterparty import Counterparty
 
-        counterparty_result = await db.execute(
-            select(func.count(Counterparty.id))
-            .where(
-                Counterparty.organization_id == request.organization_id,
+        counterparty_result = await self.db.execute(
+            select(func.count(Counterparty.id)).where(
+                Counterparty.organization_id == self.organization_id,
                 Counterparty.deleted_at.is_(None),
             )
         )
         total_counterparties = counterparty_result.scalar_one()
 
-        alerts_result = await db.execute(
-            select(func.count(Alert.id))
-            .where(
-                Alert.organization_id == request.organization_id,
+        alerts_result = await self.db.execute(
+            select(func.count(Alert.id)).where(
+                Alert.organization_id == self.organization_id,
                 Alert.resolved_at.is_(None),
             )
         )
         total_active_alerts = alerts_result.scalar_one()
 
-        return SellerMetricsResponse(
-            total_counterparties=total_counterparties,
-            total_active_alerts=total_active_alerts,
-        )
+        return total_counterparties, total_active_alerts
 
     async def get_transaction_history(
-        self, db: AsyncSession, request: TransactionsRequest
-    ) -> List[TransactionsResponse]:
+        self, request: TransactionsRequest
+    ) -> Sequence[Transaction]:
         """Get detailed transaction history with filtering and pagination."""
+        await self._ensure_customer_belongs_to_org(request.customer_id)
 
         # Build base query
         query = (
@@ -212,27 +221,8 @@ class DashboardService:
             query = query.limit(request.limit)
 
         # Execute query
-        result = await db.execute(query)
-        transactions = result.scalars().all()
-
-        # Convert to response model
-        return [
-            TransactionsResponse(
-                id=tx.id,
-                account_id=tx.account_id,
-                status=tx.status.value,
-                made_on=tx.made_on,
-                posted_date=tx.extra.get("posting_date") if tx.extra else None,
-                amount=float(tx.amount),
-                currency_code=tx.currency_code,
-                category=tx.category or "",
-                merchant_id=tx.extra.get("merchant_id") if tx.extra else None,
-                mcc=tx.extra.get("mcc") if tx.extra else None,
-                description=tx.description or "",
-                iban=tx.extra.get("iban") if tx.extra else None,
-            )
-            for tx in transactions
-        ]
+        result = await self.db.execute(query)
+        return result.scalars().all()
 
     # ---------- helpers ----------
 
@@ -646,13 +636,12 @@ class DashboardService:
         return query
 
     async def get_aade_documents(
-        self, db: AsyncSession, request: AadeDocumentsRequest
-    ) -> AadeDocumentsResponse:
+        self, request: AadeDocumentsRequest
+    ) -> Tuple[Sequence[AadeInvoiceModel], int]:
         """
         Get AADE invoices with filtering and pagination.
 
         Args:
-            db: Database session
             request: AadeDocumentsRequest with filters and pagination
 
         Returns:
@@ -664,7 +653,7 @@ class DashboardService:
             .join(
                 AadeDocumentModel, AadeInvoiceModel.document_id == AadeDocumentModel.id
             )
-            .where(AadeDocumentModel.organization_id == request.organization_id)
+            .where(AadeDocumentModel.organization_id == self.organization_id)
         )
 
         # Apply the same optional filters to both the data query and the count
@@ -678,11 +667,11 @@ class DashboardService:
                 AadeDocumentModel,
                 AadeInvoiceModel.document_id == AadeDocumentModel.id,
             )
-            .where(AadeDocumentModel.organization_id == request.organization_id)
+            .where(AadeDocumentModel.organization_id == self.organization_id)
         )
         count_query = self._apply_invoice_filters(count_query, request)
 
-        count_result = await db.execute(count_query)
+        count_result = await self.db.execute(count_query)
         total = count_result.scalar_one()
 
         # Apply ordering (newest first by issue_date, then by created_at)
@@ -695,52 +684,16 @@ class DashboardService:
         query = query.offset(request.offset).limit(request.limit)
 
         # Execute query
-        result = await db.execute(query)
+        result = await self.db.execute(query)
         invoices = result.scalars().all()
 
-        # Convert to response model
-        invoice_items = [
-            AadeInvoiceItem(
-                id=inv.id,
-                document_id=inv.document_id,
-                uid=inv.uid,
-                mark=inv.mark,
-                authentication_code=inv.authentication_code,
-                issuer_vat=inv.issuer_vat,
-                issuer_country=inv.issuer_country,
-                issuer_branch=inv.issuer_branch,
-                counterpart_vat=inv.counterpart_vat,
-                counterpart_country=inv.counterpart_country,
-                counterpart_branch=inv.counterpart_branch,
-                series=inv.series,
-                aa=inv.aa,
-                issue_date=inv.issue_date,
-                invoice_type=inv.invoice_type,
-                currency=inv.currency,
-                total_net_value=inv.total_net_value,
-                total_vat_amount=inv.total_vat_amount,
-                total_gross_value=inv.total_gross_value,
-                created_at=inv.created_at,
-            )
-            for inv in invoices
-        ]
-
-        return AadeDocumentsResponse(
-            invoices=invoice_items,
-            total=total,
-            limit=request.limit,
-            offset=request.offset,
-        )
+        return invoices, total
 
     async def get_aade_summary(
-        self, db: AsyncSession, organization_id: str
-    ) -> AadeSummaryResponse:
+        self,
+    ) -> Tuple[Decimal, Decimal, Decimal, int, int, List[Any], List[Any]]:
         """
-        Get aggregated statistics for all AADE invoices of a given buyer.
-
-        Args:
-            db: Database session
-            organization_id: Organization ID to filter invoices
+        Get aggregated statistics for all AADE invoices of the organization.
 
         Returns:
             AadeSummaryResponse: Aggregated statistics including totals, counts, and breakdowns
@@ -749,46 +702,46 @@ class DashboardService:
             total_net_value_sum,
             total_vat_amount_sum,
             total_gross_value_sum,
-        ) = await self._get_totals(db, organization_id)
+        ) = await self._get_totals(self.db, self.organization_id)
 
         supplier_count = await self._get_party_count(
-            db,
-            organization_id=organization_id,
+            self.db,
+            organization_id=self.organization_id,
             direction=InvoiceDirection.RECEIVED,
             vat_column=AadeInvoiceModel.issuer_vat,
         )
 
         customer_count = await self._get_party_count(
-            db,
-            organization_id=organization_id,
+            self.db,
+            organization_id=self.organization_id,
             direction=InvoiceDirection.TRANSMITTED,
             vat_column=AadeInvoiceModel.counterpart_vat,
         )
 
         customer_breakdown = await self._get_party_breakdown(
-            db,
-            organization_id=organization_id,
+            self.db,
+            organization_id=self.organization_id,
             direction=InvoiceDirection.TRANSMITTED,
             vat_column=AadeInvoiceModel.counterpart_vat,
             is_supplier=False,
         )
 
         supplier_breakdown = await self._get_party_breakdown(
-            db,
-            organization_id=organization_id,
+            self.db,
+            organization_id=self.organization_id,
             direction=InvoiceDirection.RECEIVED,
             vat_column=AadeInvoiceModel.issuer_vat,
             is_supplier=True,
         )
 
-        return AadeSummaryResponse(
-            total_net_value_sum=total_net_value_sum,
-            total_vat_amount_sum=total_vat_amount_sum,
-            total_gross_value_sum=total_gross_value_sum,
-            supplier_count=supplier_count,
-            customer_count=customer_count,
-            customer_breakdown=customer_breakdown,
-            supplier_breakdown=supplier_breakdown,
+        return (
+            total_net_value_sum,
+            total_vat_amount_sum,
+            total_gross_value_sum,
+            supplier_count,
+            customer_count,
+            customer_breakdown,
+            supplier_breakdown,
         )
 
     # ---------- helpers ----------
@@ -920,10 +873,3 @@ class DashboardService:
             )
             for row in rows
         ]
-
-
-"""Dependency injection for DashboardService"""
-
-
-def get_dashboard_service() -> DashboardService:
-    return DashboardService()

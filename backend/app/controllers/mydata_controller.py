@@ -19,7 +19,6 @@ from packages.aade.models.e3_info import (
 from packages.aade.errors import AadeError, NetworkError, ApiError
 from app.services.mydata_service import MyDataService
 from app.db.models.aade import InvoiceDirection
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class MyDataController:
@@ -436,56 +435,41 @@ class MyDataController:
     async def save_documents(
         self,
         query: DocsQuery,
-        organization_id: str,
-        db: AsyncSession,
         transmitted: bool = False,
         use_iterator: bool = False,
     ) -> Dict[str, Any]:
         """Fetch documents from myDATA API and save them to the database."""
         try:
-            # Determine direction based on transmitted flag
             direction = (
                 InvoiceDirection.TRANSMITTED
                 if transmitted
                 else InvoiceDirection.RECEIVED
             )
             if not use_iterator:
-                # Fetch documents from API
                 response = await self.mydata_service.get_docs(
                     query, transmitted=transmitted
                 )
-
-                # Save to database (raw XML is optional, can be added later if needed)
                 result = await self.mydata_service.save_documents(
                     response=response,
                     query=query,
-                    organization_id=organization_id,
-                    db=db,
                     direction=direction,
                     raw_xml=None,
                 )
-
                 return result
 
-            # --- ITERATOR MODE (used by /mydata/docs/iterate) ---
-            # Here we fetch *all* pages via iter_docs and save them one by one.
             iterator = await self.mydata_service.iter_docs(
                 query, transmitted=transmitted
             )
-
             aggregated_result: Dict[str, Any] = {
                 "pages_saved": 0,
                 "documents_saved": 0,
                 "details": [],
             }
 
-            # iter_docs is sync in your earlier snippet, so plain `for`, not `async for`
             for page in iterator:
                 page_result = await self.mydata_service.save_documents(
                     response=page,
                     query=query,
-                    organization_id=organization_id,
-                    db=db,
                     direction=direction,
                     raw_xml=None,
                 )

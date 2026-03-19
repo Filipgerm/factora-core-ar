@@ -64,11 +64,11 @@ async def setup_organization(
     summary="Get current user's organization profile",
 )
 async def get_organization(
-    organization_id: CurrentOrgId,
+    _org_id: CurrentOrgId,  # Ensures user has org; org_id comes from JWT via DI
     org_controller: OrgCtrl,
 ) -> BusinessResponse:
     """Return the authenticated user's organization profile."""
-    return await org_controller.get_organization(organization_id)
+    return await org_controller.get_organization()
 
 
 # ---------------------------------------------------------------------------
@@ -82,11 +82,11 @@ async def get_organization(
     summary="List all counterparties for the organization",
 )
 async def list_counterparties(
-    organization_id: CurrentOrgId,
+    _org_id: CurrentOrgId,  # Ensures user has org
     org_controller: OrgCtrl,
 ) -> list[CounterpartyResponse]:
     """Return all active (non-deleted) counterparties for the organization."""
-    return await org_controller.list_counterparties(organization_id)
+    return await org_controller.list_counterparties()
 
 
 @router.post(
@@ -98,11 +98,11 @@ async def list_counterparties(
 )
 async def create_counterparty(
     req: CounterpartyCreate,
-    organization_id: CurrentOrgId,
+    _org_id: CurrentOrgId,  # Ensures user has org
     org_controller: OrgCtrl,
 ) -> CounterpartyResponse:
     """Create a new customer, vendor, or both."""
-    return await org_controller.create_counterparty(organization_id, req)
+    return await org_controller.create_counterparty(req)
 
 
 @router.put(
@@ -114,13 +114,11 @@ async def create_counterparty(
 async def update_counterparty(
     counterparty_id: UUID,
     req: CounterpartyUpdate,
-    organization_id: CurrentOrgId,
+    _org_id: CurrentOrgId,  # Ensures user has org
     org_controller: OrgCtrl,
 ) -> CounterpartyResponse:
     """Update a counterparty's fields (partial update)."""
-    return await org_controller.update_counterparty(
-        organization_id, str(counterparty_id), req
-    )
+    return await org_controller.update_counterparty(str(counterparty_id), req)
 
 
 @router.delete(
@@ -131,8 +129,8 @@ async def update_counterparty(
 )
 async def delete_counterparty(
     counterparty_id: UUID,
-    organization_id: CurrentOrgId,
+    _org_id: CurrentOrgId,  # Ensures user has org
     org_controller: OrgCtrl,
 ) -> None:
     """Soft-delete a counterparty (sets ``deleted_at``; data is preserved)."""
-    await org_controller.delete_counterparty(organization_id, str(counterparty_id))
+    await org_controller.delete_counterparty(str(counterparty_id))

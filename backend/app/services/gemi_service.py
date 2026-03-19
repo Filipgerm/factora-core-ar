@@ -3,6 +3,8 @@ import re
 from io import BytesIO
 from typing import Any, Dict, List, Literal, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.clients.gemi_client import GemiApiClient
 from app.config import settings
 from app.core.demo import demo_fixture
@@ -29,7 +31,14 @@ class GemiService:
     Keep this layer free of raw HTTP calls.
     """
 
-    def __init__(self, client: Optional[GemiApiClient] = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        organization_id: Optional[str] = None,
+        client: Optional[GemiApiClient] = None,
+    ) -> None:
+        self.db = db
+        self.organization_id = organization_id
         self.client = client or GemiApiClient(api_key=settings.GEMH_API_KEY)
 
     def _digits(self, s: str) -> str:
@@ -102,6 +111,8 @@ class GemiService:
                 "ar_gemi": ar_gemi,
                 "company_name": company_name,
             }
+            if self.organization_id:
+                metadata["organization_id"] = self.organization_id
             await upload_file_to_storage(
                 BytesIO(contents), filename=filename, metadata=metadata
             )

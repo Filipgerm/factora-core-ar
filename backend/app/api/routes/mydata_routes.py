@@ -1,13 +1,18 @@
+"""myDATA/AADE routes — documents, income, expenses, VAT, E3."""
+
 from __future__ import annotations
+
 import logging
+from typing import Any, Dict, List, Optional, Union
 
-logger = logging.getLogger(__name__)
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from fastapi import APIRouter, Depends, Query, HTTPException
-from typing import List, Optional, Iterator, Dict, Any, Union
+from app.dependencies import MyDataCtrl, require_auth
 from packages.aade.models.docs import DocsQuery, RequestedDocsResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.postgres import get_db_session
+from packages.aade.models.e3_info import (
+    RequestE3InfoQuery,
+    RequestE3InfoResponse,
+)
 from packages.aade.models.my_book_info import (
     BookInfoQuery,
     RequestMyIncomeResponse,
@@ -17,30 +22,10 @@ from packages.aade.models.vat_info import (
     RequestVatInfoQuery,
     RequestVatInfoResponse,
 )
-from packages.aade.models.e3_info import (
-    RequestE3InfoQuery,
-    RequestE3InfoResponse,
-)
-from app.config import settings
-from packages.aade import AadeClient, API as MyDataAPI
-from app.services.mydata_service import MyDataService
-from app.controllers.mydata_controller import MyDataController
 
+logger = logging.getLogger(__name__)
 
-router = APIRouter()
-
-
-# -----------------------------
-# Dependency Injection
-# -----------------------------
-def get_mydata_controller() -> MyDataController:
-    """Provide a ``MyDataController`` wired to the global settings singleton.
-
-    Returns:
-        A fully initialised :class:`MyDataController` instance.
-    """
-    service = MyDataService(settings)
-    return MyDataController(service)
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 
 # -----------------------------
@@ -53,45 +38,23 @@ def get_mydata_controller() -> MyDataController:
     "Supports pagination for large result sets. Optionally save to database.",
 )
 async def get_docs(
+    ctl: MyDataCtrl,
     q: DocsQuery = Depends(),
     save: bool = Query(
         False,
-        description="If true, save documents to database (requires organization_id)",
-    ),
-    organization_id: str = Query(
-        "",
-        description="Organization ID for saving documents (required if save=true)",
+        description="If true, save documents to database (requires organization)",
     ),
     transmitted: bool = Query(
         False,
         description="If true, fetch invoices transmitted by this AADE user (RequestTransmittedDocs). "
         "If false, fetch invoices issued to this AADE user (RequestDocs).",
     ),
-    ctl: MyDataController = Depends(get_mydata_controller),
-    db: AsyncSession = Depends(get_db_session),
 ) -> Union[RequestedDocsResponse, Dict[str, Any]]:
-    """
-    Get documents from myDATA API.
-
-    - **q**: Document query parameters including date ranges, types, and status filters
-    - **save**: If true, save documents to database
-    - **organization_id**: Organization ID required when save=true
-    """
-    logger.info("🔍 get_docs called with query: %s, save: %s", q.model_dump(), save)
-
     if save:
-        if not organization_id:
-            raise HTTPException(
-                status_code=400,
-                detail="organization_id is required when save=true",
-            )
-        result = await ctl.save_documents(
-            query=q, organization_id=organization_id, db=db, transmitted=transmitted
+        return await ctl.save_documents(
+            query=q, transmitted=transmitted
         )
-        return result
-    else:
-        # Just return the response without saving
-        return await ctl.get_docs(q, transmitted=transmitted)
+    return await ctl.get_docs(q, transmitted=transmitted)
 
 
 @router.get(
@@ -102,6 +65,7 @@ async def get_docs(
     "Returns documents in batches for efficient processing of large datasets.",
 )
 async def iterate_docs(
+    ctl: MyDataCtrl,
     q: DocsQuery = Depends(),
     limit: Optional[int] = Query(
         None,
@@ -111,53 +75,21 @@ async def iterate_docs(
     ),
     save: bool = Query(
         False,
-        description="If true, save documents to database (requires organization_id)",
-    ),
-    organization_id: str = Query(
-        "",
-        description="Organization ID for saving documents (required if save=true)",
+        description="If true, save documents to database (requires organization)",
     ),
     transmitted: bool = Query(
         False,
         description="If true, fetch invoices transmitted by this AADE user (RequestTransmittedDocs). "
         "If false, fetch invoices issued to this AADE user (RequestDocs).",
     ),
-    ctl: MyDataController = Depends(get_mydata_controller),
-    db: AsyncSession = Depends(get_db_session),
 ) -> Union[List[RequestedDocsResponse], Dict[str, Any]]:
-    """
-    Iterate over paginated documents.
-
-    - **q**: Document query parameters
-    - **limit**: Maximum number of *batches/pages* to return (1–1000, optional)
-    - **save**: If true, save documents to database (requires organization_id)
-    - **organization_id**: Organization ID required when save=true
-    - **transmitted**: Switch between RequestDocs / RequestTransmittedDocs
-    """
-    logger.info(
-        "🔍 iterate_docs called with query: %s, limit: %s, save: %s, transmitted: %s",
-        q.model_dump(),
-        limit,
-        save,
-        transmitted,
-    )
-
     if save:
-        if not organization_id:
-            raise HTTPException(
-                status_code=400,
-                detail="organization_id is required when save=true",
-            )
-
-        result = await ctl.save_documents(
+        return await ctl.save_documents(
             query=q,
-            organization_id=organization_id,
-            db=db,
             transmitted=transmitted,
+            use_iterator=True,
         )
-        return result
 
-    # Get an iterator over paginated AADE responses
     iterator = ctl.iterate_docs(q, transmitted=transmitted)
     # If a limit is provided, only collect up to that many pages
     if limit:
@@ -185,7 +117,7 @@ async def iterate_docs(
 )
 async def get_my_income(
     q: BookInfoQuery = Depends(),
-    ctl: MyDataController = Depends(get_mydata_controller),
+    ctl: MyDataCtrl,
 ) -> RequestMyIncomeResponse:
     """
     Get income data from myDATA API.
@@ -216,7 +148,7 @@ async def iterate_my_income(
         le=1000,
         description="Maximum number of income records to return per request",
     ),
-    ctl: MyDataController = Depends(get_mydata_controller),
+    ctl: MyDataCtrl,
 ) -> List[RequestMyIncomeResponse]:
     """
     Iterate over paginated income data.
@@ -253,7 +185,7 @@ async def iterate_my_income(
 )
 async def get_my_expenses(
     q: BookInfoQuery = Depends(),
-    ctl: MyDataController = Depends(get_mydata_controller),
+    ctl: MyDataCtrl,
 ) -> RequestMyExpensesResponse:
     """
     Get expenses data from myDATA API.
@@ -284,7 +216,7 @@ async def iterate_my_expenses(
         le=1000,
         description="Maximum number of expense records to return per request",
     ),
-    ctl: MyDataController = Depends(get_mydata_controller),
+    ctl: MyDataCtrl,
 ) -> List[RequestMyExpensesResponse]:
     """
     Iterate over paginated expenses data.
@@ -324,7 +256,7 @@ async def iterate_my_expenses(
 )
 async def get_vat_info(
     q: RequestVatInfoQuery = Depends(),
-    ctl: MyDataController = Depends(get_mydata_controller),
+    ctl: MyDataCtrl,
 ) -> RequestVatInfoResponse:
     """
     Get VAT information from myDATA API.
@@ -355,7 +287,7 @@ async def iterate_vat_info(
         le=1000,
         description="Maximum number of VAT records to return per request",
     ),
-    ctl: MyDataController = Depends(get_mydata_controller),
+    ctl: MyDataCtrl,
 ) -> List[RequestVatInfoResponse]:
     """
     Iterate over paginated VAT information.
@@ -392,7 +324,7 @@ async def iterate_vat_info(
 )
 async def get_e3_info(
     q: RequestE3InfoQuery = Depends(),
-    ctl: MyDataController = Depends(get_mydata_controller),
+    ctl: MyDataCtrl,
 ) -> RequestE3InfoResponse:
     """
     Get E3 information from myDATA API.
@@ -423,7 +355,7 @@ async def iterate_e3_info(
         le=1000,
         description="Maximum number of E3 records to return per request",
     ),
-    ctl: MyDataController = Depends(get_mydata_controller),
+    ctl: MyDataCtrl,
 ) -> List[RequestE3InfoResponse]:
     """
     Iterate over paginated E3 information.

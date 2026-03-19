@@ -6,12 +6,16 @@ Architectural Notes: Uses asyncio.run_in_executor to prevent the synchronous
 Supabase Python client from blocking the FastAPI async event loop.
 """
 
+"""FileService — manages document retrieval from Supabase storage."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import mimetypes
 from typing import Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_supabase, SUPABASE_BUCKET
 
@@ -21,9 +25,15 @@ logger = logging.getLogger(__name__)
 class FileService:
     """Service for managing files and documents via Supabase Storage."""
 
-    def __init__(self) -> None:
-        """Initialize the FileService."""
-        # We fetch the Supabase singleton here. No DB session is needed!
+    def __init__(
+        self, db: AsyncSession, organization_id: str
+    ) -> None:
+        """Initialize the FileService.
+
+        TODO: When storage has org-scoped metadata, validate file belongs to organization_id.
+        """
+        self.db = db
+        self.organization_id = organization_id
         self.supabase = get_supabase()
         self.bucket = SUPABASE_BUCKET
 

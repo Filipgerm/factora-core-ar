@@ -61,7 +61,9 @@ class TransactionsResponse(BaseModel):
 
 
 class SellerMetricsRequest(BaseModel):
-    organization_id: str
+    """Empty request model. The organization_id is handled natively by the Service DI."""
+
+    pass
 
 
 class SellerMetricsResponse(BaseModel):
@@ -75,7 +77,6 @@ class SellerMetricsResponse(BaseModel):
 class AadeDocumentsRequest(BaseModel):
     """Request model for querying AADE documents with filters and pagination."""
 
-    organization_id: str = Field(..., description="Organization ID to filter documents")
     date_from: Optional[date] = Field(
         None, description="Filter invoices from this date"
     )
