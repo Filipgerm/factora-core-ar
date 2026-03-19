@@ -33,8 +33,10 @@ from app.services.auth_service import AuthService
 from app.services.notification_service import NotificationService
 from app.services.organization_service import OrganizationService
 from app.services.saltedge_service import SaltEdgeService
+from app.services.dashboard_service import DashboardService
 from app.controllers.organization_controller import OrganizationController
 from app.controllers.saltedge_controller import SaltEdgeController
+from app.controllers.dashboard_controller import DashboardController
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -235,3 +237,26 @@ def get_saltedge_controller(
 
 
 SaltEdgeCtrl = Annotated[SaltEdgeController, Depends(get_saltedge_controller)]
+
+
+# ---------------------------------------------------------------------------
+# Dashboard 3-Tier DI chain
+# ---------------------------------------------------------------------------
+
+
+def get_dashboard_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+) -> DashboardService:
+    """Create a request-scoped ``DashboardService`` with db and organization_id."""
+    return DashboardService(db, org_id)
+
+
+def get_dashboard_controller(
+    service: Annotated[DashboardService, Depends(get_dashboard_service)],
+) -> DashboardController:
+    """Create a request-scoped ``DashboardController`` injecting its service."""
+    return DashboardController(service)
+
+
+DashboardCtrl = Annotated[DashboardController, Depends(get_dashboard_controller)]

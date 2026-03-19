@@ -1,30 +1,26 @@
+"""Dashboard routes — P&L metrics, transactions, seller metrics, AADE documents."""
+
 from __future__ import annotations
-from fastapi import APIRouter, Depends, Body, HTTPException, Path, Query
+
 from datetime import date, timedelta
-from typing import Optional, Dict, Any, Annotated, Literal, List
-from app.controllers.dashboard_controller import (
-    DashboardController,
-    get_dashboard_controller,
-)
-from app.services.dashboard_service import DashboardService
-from app.config import Settings as AppSettings
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.dependencies import CurrentOrgId, DashboardCtrl, require_auth
 from app.models.dashboard import (
-    DashboardMetricsResponse,
-    DashboardMetricsRequest,
-    TransactionsRequest,
-    TransactionsResponse,
-    SellerMetricsRequest,
-    SellerMetricsResponse,
     AadeDocumentsRequest,
     AadeDocumentsResponse,
     AadeSummaryResponse,
+    DashboardMetricsRequest,
+    DashboardMetricsResponse,
+    SellerMetricsRequest,
+    SellerMetricsResponse,
+    TransactionsRequest,
+    TransactionsResponse,
 )
-from app.db.postgres import get_db_session  # your AsyncSession provider
-from sqlalchemy.ext.asyncio import AsyncSession
 
-# from uuid import UUID  # No longer needed
-
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 
 @router.get(
@@ -35,6 +31,8 @@ router = APIRouter()
     "(revenue, expenses, net income, net cash flow, balance) for the given time period.",
 )
 async def get_dashboard_pl_metrics(
+    ctl: DashboardCtrl,
+    _org_id: CurrentOrgId,
     customer_id: str = Query(..., description="Customer ID (string format)"),
     days: Optional[int] = Query(
         30, description="Number of days for cash flow calculation"
@@ -42,16 +40,7 @@ async def get_dashboard_pl_metrics(
     start_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     currency: Optional[str] = Query("EUR", description="Reporting currency (MVP: EUR)"),
-    ctl: DashboardController = Depends(get_dashboard_controller),
-    db: AsyncSession = Depends(get_db_session),
 ) -> DashboardMetricsResponse:
-
-    # Normalize window defaults (if both dates missing, use last `days`)
-    if not start_date and not end_date:
-        end_date = date.today()
-        start_date = end_date - timedelta(days=days or 30)
-    if start_date and end_date and start_date > end_date:
-        raise HTTPException(status_code=400, detail="start_date must be <= end_date")
 
     req = DashboardMetricsRequest(
         customer_id=customer_id,
@@ -60,7 +49,7 @@ async def get_dashboard_pl_metrics(
         end_date=end_date,
         currency=currency,
     )
-    return await ctl.get_dashboard_pl_metrics(db=db, request=req)
+    return await ctl.get_dashboard_pl_metrics(request=req)
 
 
 @router.get(
@@ -70,6 +59,8 @@ async def get_dashboard_pl_metrics(
     description="Get the detailed transaction history enriched with amount, category and date.",
 )
 async def get_transaction_history(
+    ctl: DashboardCtrl,
+    _org_id: CurrentOrgId,
     customer_id: str = Query(..., description="Customer ID (string format)"),
     account_id: Optional[str] = Query(None, description="BankAccount ID"),
     status: Optional[str] = Query(None, description="Transaction status filter"),
@@ -88,15 +79,12 @@ async def get_transaction_history(
     limit: Optional[int] = Query(
         50, description="Maximum number of transactions to return"
     ),
-    ctl: DashboardController = Depends(get_dashboard_controller),
-    db: AsyncSession = Depends(get_db_session),
 ) -> List[TransactionsResponse]:
-
     req = TransactionsRequest(
         customer_id=customer_id,
         account_id=account_id,
         status=status,
-        start_date=start_date,  # We'll handle date filtering in the service
+        start_date=start_date,
         end_date=end_date,
         max_amount=max_amount,
         min_amount=min_amount,
@@ -106,10 +94,7 @@ async def get_transaction_history(
         mcc=mcc,
         limit=limit,
     )
-    return await ctl.get_transaction_history(
-        db=db,
-        request=req,
-    )
+    return await ctl.get_transaction_history(request=req)
 
 
 @router.get(
@@ -119,12 +104,11 @@ async def get_transaction_history(
     description="Get metrics for a seller: completed customers, pending customers, and active alerts.",
 )
 async def get_seller_metrics(
-    organization_id: str = Query(..., description="Organization ID"),
-    ctl: DashboardController = Depends(get_dashboard_controller),
-    db: AsyncSession = Depends(get_db_session),
+    ctl: DashboardCtrl,
+    _org_id: CurrentOrgId,
 ) -> SellerMetricsResponse:
-    req = SellerMetricsRequest(organization_id=organization_id)
-    return await ctl.get_seller_metrics(db=db, request=req)
+    req = SellerMetricsRequest()
+    return await ctl.get_seller_metrics(request=req)
 
 
 @router.get(
@@ -135,7 +119,8 @@ async def get_seller_metrics(
     "Supports filtering by date range, invoice type, and VAT numbers.",
 )
 async def get_aade_documents(
-    organization_id: str = Query(..., description="Organization ID"),
+    ctl: DashboardCtrl,
+    _org_id: CurrentOrgId,
     date_from: Optional[date] = Query(
         None, description="Filter invoices from this date (YYYY-MM-DD)"
     ),
@@ -153,26 +138,8 @@ async def get_aade_documents(
     offset: int = Query(
         0, ge=0, description="Number of invoices to skip for pagination"
     ),
-    ctl: DashboardController = Depends(get_dashboard_controller),
-    db: AsyncSession = Depends(get_db_session),
 ) -> AadeDocumentsResponse:
-    """
-    Get AADE documents with filtering and pagination.
-
-    - **organization_id**: Organization ID to filter documents
-    - **date_from**: Filter invoices from this date
-    - **date_to**: Filter invoices to this date
-    - **invoice_type**: Filter by invoice type
-    - **issuer_vat**: Filter by issuer VAT number
-    - **counterpart_vat**: Filter by counterpart VAT number
-    - **limit**: Maximum number of invoices to return (1-1000)
-    - **offset**: Number of invoices to skip for pagination
-
-    Returns:
-        AadeDocumentsResponse: Paginated response with invoices and total count
-    """
     req = AadeDocumentsRequest(
-        organization_id=organization_id,
         date_from=date_from,
         date_to=date_to,
         invoice_type=invoice_type,
@@ -181,7 +148,7 @@ async def get_aade_documents(
         limit=limit,
         offset=offset,
     )
-    return await ctl.get_aade_documents(db=db, request=req)
+    return await ctl.get_aade_documents(request=req)
 
 
 @router.get(
@@ -192,13 +159,8 @@ async def get_aade_documents(
     "Includes global totals, supplier/customer counts, and per-customer/per-supplier breakdowns.",
 )
 async def get_aade_summary(
-    organization_id: str = Query(..., description="Organization ID"),
-    ctl: DashboardController = Depends(get_dashboard_controller),
-    db: AsyncSession = Depends(get_db_session),
+    ctl: DashboardCtrl,
+    _org_id: CurrentOrgId,
 ) -> AadeSummaryResponse:
-    """
-    Get aggregated AADE invoice statistics for an organization.
-
-    - **organization_id**: Organization ID to filter invoices
-    """
-    return await ctl.get_aade_summary(db=db, organization_id=organization_id)
+    """Get aggregated AADE invoice statistics for an organization."""
+    return await ctl.get_aade_summary()
