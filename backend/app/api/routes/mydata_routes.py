@@ -51,9 +51,7 @@ async def get_docs(
     ),
 ) -> Union[RequestedDocsResponse, Dict[str, Any]]:
     if save:
-        return await ctl.save_documents(
-            query=q, transmitted=transmitted
-        )
+        return await ctl.save_documents(query=q, transmitted=transmitted)
     return await ctl.get_docs(q, transmitted=transmitted)
 
 
@@ -116,8 +114,8 @@ async def iterate_docs(
     "Includes revenue, sales, and other income sources for tax reporting.",
 )
 async def get_my_income(
-    q: BookInfoQuery = Depends(),
     ctl: MyDataCtrl,
+    q: BookInfoQuery = Depends(),
 ) -> RequestMyIncomeResponse:
     """
     Get income data from myDATA API.
@@ -141,6 +139,7 @@ async def get_my_income(
     description="Get an iterator over income data with server-side pagination.",
 )
 async def iterate_my_income(
+    ctl: MyDataCtrl,
     q: BookInfoQuery = Depends(),
     limit: Optional[int] = Query(
         None,
@@ -148,7 +147,6 @@ async def iterate_my_income(
         le=1000,
         description="Maximum number of income records to return per request",
     ),
-    ctl: MyDataCtrl,
 ) -> List[RequestMyIncomeResponse]:
     """
     Iterate over paginated income data.
@@ -184,8 +182,8 @@ async def iterate_my_income(
     "Includes business expenses, deductions, and other tax-relevant costs.",
 )
 async def get_my_expenses(
-    q: BookInfoQuery = Depends(),
     ctl: MyDataCtrl,
+    q: BookInfoQuery = Depends(),
 ) -> RequestMyExpensesResponse:
     """
     Get expenses data from myDATA API.
@@ -209,6 +207,7 @@ async def get_my_expenses(
     description="Get an iterator over expenses data with server-side pagination.",
 )
 async def iterate_my_expenses(
+    ctl: MyDataCtrl,
     q: BookInfoQuery = Depends(),
     limit: Optional[int] = Query(
         None,
@@ -216,7 +215,6 @@ async def iterate_my_expenses(
         le=1000,
         description="Maximum number of expense records to return per request",
     ),
-    ctl: MyDataCtrl,
 ) -> List[RequestMyExpensesResponse]:
     """
     Iterate over paginated expenses data.
@@ -255,8 +253,8 @@ async def iterate_my_expenses(
     "Includes VAT declarations, returns, and payment status.",
 )
 async def get_vat_info(
-    q: RequestVatInfoQuery = Depends(),
     ctl: MyDataCtrl,
+    q: RequestVatInfoQuery = Depends(),
 ) -> RequestVatInfoResponse:
     """
     Get VAT information from myDATA API.
@@ -280,6 +278,7 @@ async def get_vat_info(
     description="Get an iterator over VAT information with server-side pagination.",
 )
 async def iterate_vat_info(
+    ctl: MyDataCtrl,
     q: RequestVatInfoQuery = Depends(),
     limit: Optional[int] = Query(
         None,
@@ -287,7 +286,6 @@ async def iterate_vat_info(
         le=1000,
         description="Maximum number of VAT records to return per request",
     ),
-    ctl: MyDataCtrl,
 ) -> List[RequestVatInfoResponse]:
     """
     Iterate over paginated VAT information.
@@ -323,8 +321,8 @@ async def iterate_vat_info(
     "Required for annual tax declarations and financial reporting.",
 )
 async def get_e3_info(
-    q: RequestE3InfoQuery = Depends(),
     ctl: MyDataCtrl,
+    q: RequestE3InfoQuery = Depends(),
 ) -> RequestE3InfoResponse:
     """
     Get E3 information from myDATA API.
@@ -348,6 +346,7 @@ async def get_e3_info(
     description="Get an iterator over E3 information with server-side pagination.",
 )
 async def iterate_e3_info(
+    ctl: MyDataCtrl,
     q: RequestE3InfoQuery = Depends(),
     limit: Optional[int] = Query(
         None,
@@ -355,7 +354,6 @@ async def iterate_e3_info(
         le=1000,
         description="Maximum number of E3 records to return per request",
     ),
-    ctl: MyDataCtrl,
 ) -> List[RequestE3InfoResponse]:
     """
     Iterate over paginated E3 information.

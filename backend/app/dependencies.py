@@ -163,7 +163,7 @@ AuthUser = Annotated[dict, Depends(require_auth)]
 # ---------------------------------------------------------------------------
 
 
-def require_role(*roles: UserRole) -> Depends:
+def require_role(*roles: UserRole):
     """Dependency factory that enforces one of the specified RBAC roles.
 
     Usage::
@@ -193,7 +193,7 @@ def require_role(*roles: UserRole) -> Depends:
             )
         return user
 
-    return Depends(_check)
+    return _check
 
 
 def get_current_org_id(user: AuthUser) -> str:
@@ -217,9 +217,7 @@ def get_current_org_id_optional(user: AuthUser) -> str | None:
 
 
 CurrentOrgId = Annotated[str, Depends(get_current_org_id)]
-CurrentOrgIdOptional = Annotated[
-    str | None, Depends(get_current_org_id_optional)
-]
+CurrentOrgIdOptional = Annotated[str | None, Depends(get_current_org_id_optional)]
 
 
 # ---------------------------------------------------------------------------
