@@ -37,32 +37,54 @@ You embody the Architect, Security Specialist, QA Engineer, and Frontend Lead.
 
 ---
 
+<frontend_aesthetic>
+
+## UI/UX & Aesthetic Standards (The "Stripe / Rillet" Standard)
+
+Our frontend must look and feel like a top-tier, modern fintech application (e.g., Stripe, Rillet, DualEntry).
+
+- **Density & Cleanliness:** Data tables and ledgers must be data-dense but use ample whitespace, subtle borders (`border-slate-200`), and clean typography (Inter/Geist font).
+- **Micro-interactions:** Buttons, table rows, and dropdowns must have subtle hover states and transitions (`transition-all duration-200`).
+- **Empty States:** Never leave a blank screen. Empty states must have a subtle dashed border, an aesthetic Lucide icon, a brief explainer text, and a primary CTA (e.g., "Upload your first CSV").
+- **AI Presence (Crucial):** AI elements must be visually distinct but not overwhelming. Use subtle purple/blue gradients or sparkles to indicate "AI-Suggested" actions. For low-confidence AI matches, use sleek inline dropdowns to prompt human-in-the-loop verification.
+- **Components:** Rely heavily on Shadcn/UI for core components, but customize them to look premium. Use Tremor for any financial charts, metrics, or KPIs.
+
+</frontend_aesthetic>
+
+---
+
 <domain_context>
 
 ## Business Domain, Vocabulary & Vision (Factora)
 
-Factora is an **AI-native ERP and financial platform**. While the MVP launches in the Greek market (handling local compliance like AADE/myDATA), the architecture is built for **Pan-European scale**.
+Factora is an **AI-native ERP and financial platform**, built to be the "Rillet / DualEntry of Europe." Our MVP targets startups and SMEs transitioning away from messy, manual Google Sheets. We provide them with intuitive, enterprise-grade accounting and billing, starting with the Greek market (AADE/myDATA/GEMI) and scaling Pan-European.
 
 ### The AI-Native Mandate
 
-Factora does not just use AI; it is built _around_ AI. The system must reimagine traditional accounting workflows through LLMs and agentic AI. When designing features, always consider how AI can eliminate manual data entry and cognitive load for the user.
+### The AI-Native Mandate (The "Agentic Swarm")
 
-- **Core AI Workflows:** Automated AR/AP (Accounts Receivable/Payable) reconciliation, business bank transactions contextualization, smart journal entry generation, unstructured invoice data extraction, and AI-drafted vendor/customer email communications.
-- **Architecture:** AI logic, embeddings, and LLM calls should be treated as first-class citizens in the Service layer.
+Factora does not just use AI; it is built _around_ AI. We use a multi-agent architecture (using Claude 3.5 / GPT-4o, pgvector, and LangGraph) to automate end-to-end accounting processes. When designing features, always consider how AI can eliminate manual data entry, and always build an "Active Learning Loop" (if the AI is unsure, ask the user, and use that feedback to improve the model).
+
+**Core AI Workflows to Support:**
+
+- **Data Ingestion & OCR:** Native integrations with Gmail SDK (to extract invoices from email bodies/PDF attachments using Vision models) and Google Sheets (for two-way sync). Manual CSV/XLSX uploads for legacy ERP records and bank statements.
+- **Smart Categorization Agent:** Automatically categorizes transactions (e.g., COGS, utilities, software, loan origination, shareholder transfers, etcetera) based on industry context, historical embeddings, and web scraping.
+- **Reconciliation Agent:** Auto-matches bank statement lines to AR/AP invoices, handling partial payments and exact matches autonomously, while flagging low-confidence matches for human review.
+- **AR Collections Agent:** Monitors overdue invoices and connects to Gmail via SMTP to autonomously track, draft, and (if toggled to "Act Mode") send follow-up nudges to customers.
+- **General Ledger & Journal Entries:** Automatically drafts standard journal entries based on the categorized data.
 
 ### Core Entities
 
 - **User**: A physical person logging into the platform.
-- **Organization**: The legal business entity (the "Tenant"). **Multiple Users can belong to a single Organization**, managed via Role-Based Access Control (RBAC).
-- **Counterparty**: Another business that the Organization interacts with. Can be a `CUSTOMER` (issues invoices to), a `VENDOR` (receives bills from), or `BOTH`.
-- **GEMI**: The Greek Commercial Registry. Used during the MVP onboarding to auto-fetch company data via VAT number (built to be swapped with other European registries later).
-- **AADE / myDATA**: The Greek Tax Authority for the MVP. All Greek invoices must sync here using strict XML formats, serving as the blueprint for future European e-invoicing integrations (e.g., Peppol).
+- **Organization**: The legal business entity (the "Tenant"). **Multiple Users can belong to a single Organization** (RBAC).
+- **Counterparty**: Another business interacting with the Org (Customer, Vendor, or Both). AI automatically opens or updates ledgers for these entities when parsing invoices.
+- **GEMI & AADE/myDATA**: Greek Business Registry and Tax Authority.
 
 ### Core Invariants (Unbreakable Business Rules)
 
 1. **Multi-Tenancy Isolation**: Every database query for business data (Counterparties, Invoices, Bank Accounts) MUST filter by `organization_id`. A user must NEVER see another organization's data.
 2. **Soft Deletion**: Financial records and Counterparties are never hard-deleted. They use `deleted_at` timestamps to preserve historical audit trails.
-3. **Immutability**: Once an Invoice is finalized or synced to a tax authority, its core financial fields (amounts, VAT) cannot be altered.
+3. **Immutability**: Once an Invoice is finalized or synced to a tax authority, its core financial fields cannot be altered.
 
 </domain_context>
 
