@@ -36,11 +36,13 @@ from app.services.saltedge_service import SaltEdgeService
 from app.services.dashboard_service import DashboardService
 from app.services.gemi_service import GemiService
 from app.services.mydata_service import MyDataService
+from app.services.file_service import FileService
 from app.controllers.organization_controller import OrganizationController
 from app.controllers.saltedge_controller import SaltEdgeController
 from app.controllers.dashboard_controller import DashboardController
 from app.controllers.gemi_controller import GemiController
 from app.controllers.mydata_controller import MyDataController
+from app.controllers.file_controller import FileController
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -309,3 +311,26 @@ def get_mydata_controller(
 
 
 MyDataCtrl = Annotated[MyDataController, Depends(get_mydata_controller)]
+
+
+# ---------------------------------------------------------------------------
+# File 3-Tier DI chain
+# ---------------------------------------------------------------------------
+
+
+def get_file_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+) -> FileService:
+    """Create a request-scoped ``FileService`` with db and organization_id."""
+    return FileService(db, org_id)
+
+
+def get_file_controller(
+    service: Annotated[FileService, Depends(get_file_service)],
+) -> FileController:
+    """Create a request-scoped ``FileController`` injecting its service."""
+    return FileController(service)
+
+
+FileCtrl = Annotated[FileController, Depends(get_file_controller)]

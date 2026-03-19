@@ -1,22 +1,15 @@
-from fastapi import APIRouter, HTTPException
-from app.controllers.file_controller import get_file_by_filename
+"""File routes — serve stored files from Supabase storage."""
 
-router = APIRouter()
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends
+
+from app.dependencies import FileCtrl, require_auth
+
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 
 @router.get("/{filename}")
-async def get_file(filename: str):
-    """
-    Serve a stored file by its filename.
-
-    Purpose:
-        Fetches a file previously uploaded (e.g., GEMI documents) from the
-        backend storage/database and streams it back to the client. Designed
-        so the frontend can display or download files (typically PDFs).
-
-    Returns:
-        A streaming HTTP response containing the file's binary data, with appropriate
-        headers (e.g., `Content-Type`, `Content-Disposition`) so the browser or frontend
-        viewer can display or download it.
-    """
-    return await get_file_by_filename(filename)
+async def get_file(filename: str, ctl: FileCtrl):
+    """Serve a stored file by filename (e.g. GEMI documents, PDFs)."""
+    return await ctl.get_file(filename)
