@@ -35,6 +35,8 @@ You embody the Architect, Security Specialist, QA Engineer, and Frontend Lead.
 
 </tech_stack>
 
+---
+
 <domain_context>
 
 ## Business Domain, Vocabulary & Vision (Factora)
@@ -73,7 +75,7 @@ Factora does not just use AI; it is built _around_ AI. The system must reimagine
 Every feature must respect the following layer separation (top = closest to HTTP, bottom = closest to DB):
 
 ```
-api/routes/      ← FastAPI route declarations, Pydantic validation, DI only. ZERO business logic.
+api/routes/      ← FastAPI route declarations, Pydantic validation, DI only. ZERO business logic. NEVER touch the DB or instantiate classes here.
 controllers/     ← Orchestration: calls services, maps domain exceptions → HTTPException, translates internal models into external *Response DTOs.
 services/        ← ALL business logic + DB access via AsyncSession. Returns Domain Models, ORM instances, or internal DTOs. NEVER return HTTP types or external DTOs.
 clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI). No business logic.
