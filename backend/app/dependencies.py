@@ -35,10 +35,12 @@ from app.services.organization_service import OrganizationService
 from app.services.saltedge_service import SaltEdgeService
 from app.services.dashboard_service import DashboardService
 from app.services.gemi_service import GemiService
+from app.services.mydata_service import MyDataService
 from app.controllers.organization_controller import OrganizationController
 from app.controllers.saltedge_controller import SaltEdgeController
 from app.controllers.dashboard_controller import DashboardController
 from app.controllers.gemi_controller import GemiController
+from app.controllers.mydata_controller import MyDataController
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -284,3 +286,26 @@ def get_gemi_controller(
 
 
 GemiCtrl = Annotated[GemiController, Depends(get_gemi_controller)]
+
+
+# ---------------------------------------------------------------------------
+# MyData 3-Tier DI chain
+# ---------------------------------------------------------------------------
+
+
+def get_mydata_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgIdOptional,
+) -> MyDataService:
+    """Create a request-scoped ``MyDataService``. org_id optional for read-only."""
+    return MyDataService(db, org_id, settings)
+
+
+def get_mydata_controller(
+    service: Annotated[MyDataService, Depends(get_mydata_service)],
+) -> MyDataController:
+    """Create a request-scoped ``MyDataController`` injecting its service."""
+    return MyDataController(service)
+
+
+MyDataCtrl = Annotated[MyDataController, Depends(get_mydata_controller)]
