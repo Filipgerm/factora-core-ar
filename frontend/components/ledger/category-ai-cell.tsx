@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,33 @@ import type {
   LedgerCategory,
 } from "@/lib/mock-data/dashboard-mocks";
 import { LEDGER_CATEGORY_OPTIONS } from "@/lib/mock-data/dashboard-mocks";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+function showLearningToast() {
+  toast({
+    className:
+      "border-indigo-100/90 bg-white/95 shadow-lg backdrop-blur-md sm:max-w-[380px]",
+    title: (
+      <span className="flex items-center gap-2.5">
+        <motion.span
+          aria-hidden
+          className="inline-flex text-indigo-500"
+          animate={{ rotate: [0, 12, -8, 5, 0], scale: [1, 1.08, 1] }}
+          transition={{
+            duration: 0.55,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+        >
+          <Sparkles className="size-4 shrink-0" />
+        </motion.span>
+        <span className="font-semibold tracking-tight">Feedback saved.</span>
+      </span>
+    ),
+    description:
+      "The AI model is learning from your categorization.",
+  });
+}
 
 interface CategoryAiCellProps {
   invoiceId: string;
@@ -84,9 +111,11 @@ export function CategoryAiCell({
       </p>
       <Select
         value={verifiedCategory}
-        onValueChange={(v) =>
-          onCategoryVerified(invoiceId, v as LedgerCategory)
-        }
+        onValueChange={(v) => {
+          const next = v as LedgerCategory;
+          onCategoryVerified(invoiceId, next);
+          showLearningToast();
+        }}
       >
         <SelectTrigger
           size="sm"

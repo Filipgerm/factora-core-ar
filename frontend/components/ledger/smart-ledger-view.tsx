@@ -36,6 +36,8 @@ import {
 } from "@/lib/mock-data/dashboard-mocks";
 import { cn } from "@/lib/utils";
 
+const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
+
 function formatMoneyEUR(value: number) {
   return new Intl.NumberFormat("el-GR", {
     style: "currency",
@@ -83,13 +85,13 @@ export function SmartLedgerView() {
   if (rows.length === 0) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        transition={SNAP_SPRING}
       >
-        <Card className="overflow-hidden rounded-2xl border border-dashed border-border/50 bg-muted/5 shadow-sm">
+        <Card className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.08)]">
           <CardContent className="flex flex-col items-center justify-center gap-5 px-8 py-16">
-            <div className="flex size-14 items-center justify-center rounded-2xl border border-border/40 bg-background/60 backdrop-blur-md">
+            <div className="flex size-14 items-center justify-center rounded-2xl border border-slate-100 bg-slate-50/80">
               <Building2 className="size-7 text-muted-foreground" aria-hidden />
             </div>
             <div className="max-w-sm text-center">
@@ -104,7 +106,7 @@ export function SmartLedgerView() {
             <Button
               type="button"
               variant="outline"
-              className="rounded-xl border-border/40 transition-all duration-300 ease-out hover:bg-muted/50"
+              className="rounded-xl border-slate-200 transition-all duration-200 hover:bg-slate-50"
             >
               Import data
             </Button>
@@ -118,13 +120,13 @@ export function SmartLedgerView() {
     <LayoutGroup>
       <motion.div
         layout
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        transition={SNAP_SPRING}
       >
-        <Card className="overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-b from-card to-muted/5 shadow-sm">
-          <CardHeader className="sticky top-0 z-20 space-y-1 border-b border-border/40 bg-background/60 px-6 py-6 backdrop-blur-md">
-            <CardTitle className="text-lg font-semibold tracking-tight">
+        <Card className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.08)]">
+          <CardHeader className="sticky top-0 z-20 shrink-0 space-y-1 border-b border-slate-100 bg-white/75 px-6 py-5 backdrop-blur-md">
+            <CardTitle className="text-base font-semibold tracking-tight">
               Counterparties &amp; invoices
             </CardTitle>
             <CardDescription className="text-xs tracking-tight text-muted-foreground">
@@ -135,99 +137,101 @@ export function SmartLedgerView() {
           <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow className="border-border/40 bg-muted/15 hover:bg-transparent">
-                  <TableHead className="h-11 min-w-[200px] px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-transparent">
+                  <TableHead className="h-9 min-w-[200px] px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Counterparty
                   </TableHead>
-                  <TableHead className="h-11 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <TableHead className="h-9 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     VAT
                   </TableHead>
-                  <TableHead className="h-11 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <TableHead className="h-9 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     GEMI
                   </TableHead>
-                  <TableHead className="h-11 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <TableHead className="h-9 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Invoice
                   </TableHead>
-                  <TableHead className="h-11 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <TableHead className="h-9 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Issued
                   </TableHead>
-                  <TableHead className="h-11 px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <TableHead className="h-9 px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Amount
                   </TableHead>
-                  <TableHead className="h-11 min-w-[220px] px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <TableHead className="h-9 min-w-[200px] px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Category
                   </TableHead>
-                  <TableHead className="h-11 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <TableHead className="h-9 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     AI
                   </TableHead>
                 </TableRow>
               </TableHeader>
-                <TableBody>
-                  <AnimatePresence initial={false}>
-                    {rows.map(({ invoice, counterparty }, i) => (
-                      <motion.tr
-                        key={invoice.id}
-                        layout
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, x: -6 }}
-                        transition={{
-                          duration: 0.35,
-                          ease: [0.16, 1, 0.3, 1],
-                          delay: Math.min(i * 0.018, 0.18),
-                          layout: { duration: 0.35 },
-                        }}
-                        className={cn(
-                          "border-b border-border/40 transition-all duration-300 ease-out",
-                          "hover:bg-muted/50",
-                          (invoice.aiConfidence === "high" ||
-                            invoice.aiConfidence === "medium") &&
-                            "bg-indigo-50/[0.2] dark:bg-indigo-950/15"
-                        )}
-                      >
-                        <TableCell className="max-w-[260px] whitespace-normal px-4 py-3.5 align-top">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-medium tracking-tight text-foreground">
-                              {counterparty.legalName}
+              <TableBody>
+                <AnimatePresence initial={false}>
+                  {rows.map(({ invoice, counterparty }, i) => (
+                    <motion.tr
+                      key={invoice.id}
+                      layout
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -6 }}
+                      transition={{
+                        ...SNAP_SPRING,
+                        delay: Math.min(i * 0.012, 0.1),
+                        layout: {
+                          type: "spring",
+                          stiffness: 680,
+                          damping: 46,
+                        },
+                      }}
+                      className={cn(
+                        "border-b border-slate-100 transition-colors duration-200 hover:bg-slate-50/80",
+                        (invoice.aiConfidence === "high" ||
+                          invoice.aiConfidence === "medium") &&
+                          "bg-gradient-to-r from-indigo-50/35 via-white to-white dark:from-indigo-950/20"
+                      )}
+                    >
+                      <TableCell className="max-w-[260px] whitespace-normal px-3 py-2 align-top">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[13px] font-medium leading-snug tracking-tight text-foreground">
+                            {counterparty.legalName}
+                          </span>
+                          {invoice.description ? (
+                            <span className="line-clamp-2 text-[12px] tracking-tight text-muted-foreground">
+                              {invoice.description}
                             </span>
-                            {invoice.description ? (
-                              <span className="line-clamp-2 text-xs tracking-tight text-muted-foreground">
-                                {invoice.description}
-                              </span>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-4 py-3.5 align-top font-mono text-xs tabular-nums tracking-tight text-muted-foreground">
-                          {counterparty.vatId}
-                        </TableCell>
-                        <TableCell className="px-4 py-3.5 align-top">
-                          <GemiStatusBadge counterparty={counterparty} />
-                        </TableCell>
-                        <TableCell className="px-4 py-3.5 align-top font-mono text-sm tabular-nums tracking-tight text-foreground">
-                          {invoice.number}
-                        </TableCell>
-                        <TableCell className="px-4 py-3.5 align-top text-sm tabular-nums tracking-tight text-muted-foreground">
-                          {format(parseISO(invoice.issueDate), "d MMM yyyy")}
-                        </TableCell>
-                        <TableCell className="px-4 py-3.5 text-right align-top text-sm font-medium tabular-nums tracking-tight text-foreground">
-                          {formatMoneyEUR(invoice.amount)}
-                        </TableCell>
-                        <TableCell className="px-4 py-3.5 align-top">
-                          <CategoryAiCell
-                            invoiceId={invoice.id}
-                            suggestedCategory={invoice.suggestedCategory}
-                            aiConfidence={invoice.aiConfidence}
-                            verifiedCategory={categoryByInvoiceId[invoice.id]}
-                            onCategoryVerified={onCategoryVerified}
-                          />
-                        </TableCell>
-                        <TableCell className="px-4 py-3.5 align-top">
-                          <AiConfidenceBadge level={invoice.aiConfidence} />
-                        </TableCell>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                </TableBody>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-3 py-2 align-top font-mono text-[13px] tabular-nums tracking-tight text-muted-foreground">
+                        {counterparty.vatId}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 align-top">
+                        <GemiStatusBadge counterparty={counterparty} />
+                      </TableCell>
+                      <TableCell className="px-3 py-2 align-top font-mono text-[13px] tabular-nums tracking-tight text-foreground">
+                        {invoice.number}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 align-top font-mono text-[13px] tabular-nums tracking-tight text-muted-foreground">
+                        {format(parseISO(invoice.issueDate), "d MMM yyyy")}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right align-top font-mono text-[13px] font-semibold tabular-nums tracking-tight text-foreground">
+                        {formatMoneyEUR(invoice.amount)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 align-top">
+                        <CategoryAiCell
+                          invoiceId={invoice.id}
+                          suggestedCategory={invoice.suggestedCategory}
+                          aiConfidence={invoice.aiConfidence}
+                          verifiedCategory={categoryByInvoiceId[invoice.id]}
+                          onCategoryVerified={onCategoryVerified}
+                        />
+                      </TableCell>
+                      <TableCell className="px-3 py-2 align-top">
+                        <AiConfidenceBadge level={invoice.aiConfidence} />
+                      </TableCell>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </TableBody>
             </Table>
           </CardContent>
         </Card>
