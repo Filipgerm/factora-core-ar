@@ -23,6 +23,14 @@ import {
 
 const HIGH_CONFIDENCE_THRESHOLD = 80;
 
+/** Must stay in sync with column sub-grids in `reconciliation-view.tsx`. */
+export const RECON_ROW_OUTER =
+  "md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(7.25rem,auto)]";
+export const RECON_BANK_INNER =
+  "md:grid md:grid-cols-[4.25rem_minmax(0,1fr)_6.25rem_5rem] md:gap-x-2 md:items-start md:px-2";
+export const RECON_BOOK_INNER =
+  "md:grid md:grid-cols-[minmax(0,1fr)_minmax(6.5rem,9rem)_4.75rem] md:gap-x-2 md:items-start md:px-2";
+
 const BANK_LABEL: Record<ReconciliationBankId, string> = {
   eurobank: "Eurobank",
   revolut: "Revolut",
@@ -85,103 +93,137 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
   const isHighConfidence =
     isPending && pair.aiConfidencePercent >= HIGH_CONFIDENCE_THRESHOLD;
 
+  const accountLine = `${BANK_LABEL[transaction.bankId]} · ${transaction.maskedAccount}${transaction.memo ? ` · ${transaction.memo}` : ""}`;
+
   return (
     <div
       className={cn(
-        "group grid w-full grid-cols-1 border-b border-border/40 transition-colors duration-200 hover:bg-muted/30 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(7.25rem,auto)]"
+        "group grid w-full grid-cols-1 border-b border-border/40 transition-colors duration-200",
+        RECON_ROW_OUTER,
+        "md:items-stretch"
       )}
     >
-      {/* Bank */}
+      {/* Bank — pure white; subtle hover */}
       <div
         className={cn(
-          "flex min-w-0 items-start gap-2 border-border/40 py-2 pl-1 pr-2 md:border-r md:bg-muted/25 md:py-1.5"
+          "flex flex-col gap-2 py-2 pl-1 pr-2 md:bg-white md:py-1.5 dark:md:bg-background",
+          "md:transition-colors md:duration-200 md:group-hover:bg-muted/[0.06]"
         )}
       >
-        <div
-          className={cn(
-            "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md transition-colors duration-200",
-            BANK_ACCENT[transaction.bankId]
-          )}
-          aria-hidden
-        >
-          <Landmark className="size-3.5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[12px] font-semibold leading-tight tracking-tight text-foreground">
-            {transaction.merchant}
-          </p>
-          <p
-            className="mt-0.5 line-clamp-2 break-all font-mono text-[10px] leading-snug tracking-tight text-muted-foreground"
-            title={transaction.rawDescriptor}
-          >
-            {transaction.rawDescriptor}
-          </p>
-          <p className="mt-0.5 font-mono text-[10px] tabular-nums tracking-tight text-muted-foreground">
-            {BANK_LABEL[transaction.bankId]} · {transaction.maskedAccount}
-            {transaction.memo ? ` · ${transaction.memo}` : ""}
-          </p>
-        </div>
-        <div className="shrink-0 space-y-0.5 text-right">
-          <p className="font-mono text-[12px] tabular-nums tracking-tight text-muted-foreground">
+        <div className={cn("flex min-w-0 flex-col gap-2", RECON_BANK_INNER)}>
+          <div className="font-mono text-[12px] tabular-nums tracking-tight text-muted-foreground md:pt-0.5">
             {formatReconciliationDate(transaction.date)}
+          </div>
+
+          <div className="min-w-0 md:min-w-0">
+            <div className="flex items-start gap-2">
+              <div
+                className={cn(
+                  "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md transition-colors duration-200",
+                  BANK_ACCENT[transaction.bankId]
+                )}
+                aria-hidden
+              >
+                <Landmark className="size-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12px] font-semibold leading-tight tracking-tight text-foreground">
+                  {transaction.merchant}
+                </p>
+                <p
+                  className="mt-0.5 line-clamp-2 break-all font-mono text-[10px] leading-snug tracking-tight text-muted-foreground"
+                  title={transaction.rawDescriptor}
+                >
+                  {transaction.rawDescriptor}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <p
+            className="font-mono text-[10px] leading-snug tracking-tight text-muted-foreground md:text-right md:tabular-nums"
+            title={accountLine}
+          >
+            <span className="md:line-clamp-3 md:break-all">{accountLine}</span>
           </p>
-          <p className={cashflowAmountClass(bankOutflow)}>{bankSigned}</p>
+
+          <div className="text-left md:text-right">
+            <p className={cashflowAmountClass(bankOutflow)}>{bankSigned}</p>
+          </div>
         </div>
       </div>
 
-      {/* Factora (book) */}
-      <div className="flex min-w-0 items-start gap-2 border-border/40 py-2 pl-1 pr-1 md:border-r md:py-1.5 md:pl-2">
-        <div
-          className={cn(
-            "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground"
-          )}
-          title={invoice.role}
-        >
-          {invoice.role === "AR" ? (
-            <ArrowUpToLine className="size-3.5" aria-hidden />
-          ) : (
-            <ArrowDownToLine className="size-3.5" aria-hidden />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            <span className="text-[12px] font-semibold leading-tight tracking-tight text-foreground">
-              {invoice.counterpartyName}
-            </span>
-            <span className="rounded border border-border/60 px-1 py-px font-mono text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-              {invoice.role}
-            </span>
-            <span
+      {/* Factora + action — tinted pane, divide from bank */}
+      <div
+        className={cn(
+          "flex min-w-0 flex-col border-border/40 py-2 pl-1 pr-1 md:border-l md:border-border/60 md:bg-slate-50/90 md:py-1.5 md:pl-2 md:pr-0 md:shadow-[-4px_0_12px_rgba(0,0,0,0.02)] dark:md:bg-slate-900/30",
+          "md:transition-colors md:duration-200 md:group-hover:bg-slate-100/95 dark:md:group-hover:bg-slate-900/45"
+        )}
+      >
+        <div className={cn("flex min-w-0 flex-col gap-2", RECON_BOOK_INNER)}>
+          <div className="flex min-w-0 items-start gap-2 md:min-w-0">
+            <div
               className={cn(
-                "rounded px-1 py-px font-mono text-[9px] font-medium uppercase tracking-wide",
-                invoice.status === "Overdue"
-                  ? "bg-amber-500/15 text-amber-900 dark:text-amber-200"
-                  : "bg-muted/80 text-muted-foreground"
+                "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-white text-muted-foreground dark:bg-background"
               )}
+              title={invoice.role}
             >
-              {invoice.status}
-            </span>
+              {invoice.role === "AR" ? (
+                <ArrowUpToLine className="size-3.5" aria-hidden />
+              ) : (
+                <ArrowDownToLine className="size-3.5" aria-hidden />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                <span className="text-[12px] font-semibold leading-tight tracking-tight text-foreground">
+                  {invoice.counterpartyName}
+                </span>
+                <span className="rounded border border-border/60 px-1 py-px font-mono text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {invoice.role}
+                </span>
+                <span
+                  className={cn(
+                    "rounded px-1 py-px font-mono text-[9px] font-medium uppercase tracking-wide",
+                    invoice.status === "Overdue"
+                      ? "bg-amber-500/15 text-amber-900 dark:text-amber-200"
+                      : "bg-muted/80 text-muted-foreground"
+                  )}
+                >
+                  {invoice.status}
+                </span>
+              </div>
+              <p className="mt-0.5 font-mono text-[11px] tabular-nums tracking-tight text-muted-foreground">
+                {invoice.invoiceNumber}
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                Due {formatReconciliationDate(invoice.dueDate)}
+              </p>
+            </div>
           </div>
-          <p className="mt-0.5 font-mono text-[11px] tabular-nums tracking-tight text-muted-foreground">
-            {invoice.invoiceNumber}
-          </p>
+
           <p
-            className="mt-0.5 line-clamp-2 font-mono text-[11px] leading-snug tracking-tight text-foreground/90"
+            className="min-w-0 font-mono text-[11px] leading-snug tracking-tight text-foreground/90 md:pt-0.5"
             title={invoice.glAccount}
           >
-            {invoice.glAccount}
+            <span className="md:line-clamp-3 md:break-words">
+              {invoice.glAccount}
+            </span>
           </p>
-        </div>
-        <div className="shrink-0 space-y-0.5 text-right">
-          <p className={cashflowAmountClass(bankOutflow)}>{bookSigned}</p>
-          <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
-            Due {formatReconciliationDate(invoice.dueDate)}
-          </p>
+
+          <div className="text-left md:text-right md:pt-0.5">
+            <p className={cashflowAmountClass(bankOutflow)}>{bookSigned}</p>
+          </div>
         </div>
       </div>
 
-      {/* AI action */}
-      <div className="flex items-center justify-end gap-1.5 py-2 pr-1 md:py-1.5 md:pr-2">
+      {/* Action — same tint as book for one continuous ledger strip */}
+      <div
+        className={cn(
+          "flex items-center justify-end gap-1.5 border-border/40 py-2 pr-1 md:border-l md:border-border/50 md:bg-slate-50/90 md:py-1.5 md:pr-2 dark:md:bg-slate-900/30",
+          "md:transition-colors md:duration-200 md:group-hover:bg-slate-100/95 dark:md:group-hover:bg-slate-900/45"
+        )}
+      >
         {variant === "auto" ? (
           <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium tabular-nums text-emerald-800 dark:text-emerald-200">
             <CheckCircle2 className="size-3 shrink-0" aria-hidden />
