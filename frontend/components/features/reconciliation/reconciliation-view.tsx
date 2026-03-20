@@ -316,15 +316,19 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center"
+                "flex items-center justify-end pr-0.5 text-right"
               )}
             >
               Date
             </span>
-            <div className="flex items-center justify-center gap-1.5 text-center">
-              <div className="size-5 shrink-0" aria-hidden />
-              <span className={LEDGER_TH}>Payer</span>
-            </div>
+            <span
+              className={cn(
+                LEDGER_TH,
+                "flex items-center justify-start pl-0.5 text-left"
+              )}
+            >
+              Payer
+            </span>
             <span
               className={cn(LEDGER_TH, "flex items-center justify-center text-center")}
             >
@@ -364,7 +368,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center leading-tight"
+                "flex items-center justify-start pl-0.5 text-left leading-tight"
               )}
             >
               GL Account

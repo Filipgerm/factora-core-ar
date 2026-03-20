@@ -46,7 +46,7 @@ export function LedgerInvoiceCell({
           {status}
         </Badge>
       </div>
-      <p className="mt-1 font-mono text-[12px] leading-snug tracking-tight text-muted-foreground">
+      <p className="mt-1 text-[8px] font-medium leading-none tracking-wide text-muted-foreground/75">
         {invoiceSummary}
       </p>
       <p className="mt-0.5 font-mono text-[11px] tabular-nums tracking-tight text-muted-foreground/90">
