@@ -285,7 +285,7 @@ export function ReconciliationView() {
           <div
             className={cn(
               LEDGER_TH,
-              "bg-white px-2 py-1.5 dark:bg-background"
+              "bg-[var(--brand-primary-subtle)] px-2 py-1.5 shadow-[inset_0_0_0_1px_rgba(47,154,138,0.12)] dark:bg-teal-950/25 dark:shadow-[inset_0_0_0_1px_rgba(45,212,191,0.18)]"
             )}
           >
             Bank
@@ -310,7 +310,7 @@ export function ReconciliationView() {
           <div
             className={cn(
               RECON_BANK_INNER,
-              "border-border/30 bg-white py-1.5 dark:bg-background"
+              "border-border/30 bg-[var(--brand-primary-subtle)] py-1.5 shadow-[inset_0_0_0_1px_rgba(47,154,138,0.1)] dark:bg-teal-950/25 dark:shadow-[inset_0_0_0_1px_rgba(45,212,191,0.15)]"
             )}
           >
             <span className={cn(LEDGER_TH, "md:pt-1")}>Date</span>
@@ -351,7 +351,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "text-right leading-tight md:pt-1"
+                "text-center leading-tight md:pt-1"
               )}
             >
               AI
