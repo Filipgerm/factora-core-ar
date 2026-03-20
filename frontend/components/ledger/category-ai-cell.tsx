@@ -35,23 +35,34 @@ export function CategoryAiCell({
 }: CategoryAiCellProps) {
   if (aiConfidence === "high") {
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium text-foreground">{suggestedCategory}</span>
-        <Badge variant="aiHigh" className="gap-1 transition-all duration-200">
-          <Sparkles className="size-3" aria-hidden />
-          AI-Suggested
-        </Badge>
+      <div className="rounded-xl border border-border/30 bg-indigo-50/35 p-2.5 dark:border-indigo-950/40 dark:bg-indigo-950/25">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium tracking-tight text-foreground">
+            {suggestedCategory}
+          </span>
+          <Badge
+            variant="aiHigh"
+            className="gap-1 transition-all duration-300 ease-out"
+          >
+            <Sparkles className="size-3" aria-hidden />
+            AI-Suggested
+          </Badge>
+        </div>
       </div>
     );
   }
 
   if (aiConfidence === "medium") {
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium text-foreground">{suggestedCategory}</span>
-        <Badge variant="aiMedium" className="transition-all duration-200">
-          Medium
-        </Badge>
+      <div className="rounded-xl border border-border/30 bg-indigo-50/25 p-2.5 dark:border-indigo-950/35 dark:bg-indigo-950/20">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium tracking-tight text-foreground">
+            {suggestedCategory}
+          </span>
+          <Badge variant="aiMedium" className="transition-all duration-300 ease-out">
+            Medium
+          </Badge>
+        </div>
       </div>
     );
   }
@@ -62,8 +73,9 @@ export function CategoryAiCell({
   return (
     <div
       className={cn(
-        "max-w-[260px] rounded-md p-0.5 transition-all duration-200",
-        needsVerification && "ring-2 ring-violet-200/70 dark:ring-violet-900/50"
+        "max-w-[260px] rounded-xl border border-border/25 bg-muted/10 p-2 transition-all duration-300 ease-out",
+        needsVerification &&
+          "ring-2 ring-indigo-200/60 dark:ring-indigo-900/45"
       )}
     >
       <p className="mb-1.5 text-xs text-muted-foreground">
@@ -78,7 +90,7 @@ export function CategoryAiCell({
       >
         <SelectTrigger
           size="sm"
-          className="h-8 w-full min-w-[176px] transition-all duration-200"
+          className="h-8 w-full min-w-[176px] transition-all duration-300 ease-out"
         >
           <SelectValue placeholder="Verify category" />
         </SelectTrigger>
