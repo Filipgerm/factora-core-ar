@@ -23,11 +23,11 @@ export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-card">
-      <div className="flex h-14 items-center border-b border-slate-200 px-4">
+    <aside className="flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-[4px_0_28px_-12px_rgba(7,26,51,0.35)]">
+      <div className="flex h-14 items-center border-b border-sidebar-border px-4">
         <Link
           href="/ledger"
-          className="text-lg font-semibold tracking-tight text-foreground transition-all duration-200 hover:text-primary"
+          className="text-lg font-semibold tracking-tight text-sidebar-foreground transition-all duration-200 hover:text-[var(--sidebar-primary)]"
         >
           Factora
         </Link>
@@ -43,19 +43,19 @@ export function AppSidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                 active
-                  ? "bg-slate-100 text-foreground"
-                  : "text-muted-foreground hover:bg-slate-50 hover:text-foreground"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
               )}
             >
-              <Icon className="size-4 shrink-0 opacity-80" aria-hidden />
+              <Icon className="size-4 shrink-0 opacity-90" aria-hidden />
               {label}
             </Link>
           );
         })}
       </nav>
-      <div className="border-t border-slate-200 p-3">
-        <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-muted-foreground">
-          <BookOpen className="size-3.5 shrink-0" aria-hidden />
+      <div className="border-t border-sidebar-border p-3">
+        <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-sidebar-muted-foreground">
+          <BookOpen className="size-3.5 shrink-0 opacity-90" aria-hidden />
           <span className="truncate">Demo workspace</span>
         </div>
       </div>
