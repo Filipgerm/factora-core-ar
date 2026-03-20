@@ -58,7 +58,7 @@ export function AppSidebar() {
       <div className="border-t border-sidebar-border p-3">
         <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-sidebar-muted-foreground">
           <BookOpen className="size-3.5 shrink-0 opacity-90" aria-hidden />
-          <span className="truncate">Demo workspace</span>
+          <span className="truncate">Workspace</span>
         </div>
       </div>
     </aside>

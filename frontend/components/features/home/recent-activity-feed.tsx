@@ -67,19 +67,19 @@ export function RecentActivityFeed({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.28, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
-        "flex h-full min-h-[320px] flex-col overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-b from-card via-card to-muted/20 shadow-sm dark:to-muted/10",
+        "flex h-full max-h-[min(40vh,340px)] flex-col overflow-hidden rounded-xl border border-border/40 bg-gradient-to-b from-card via-card to-muted/15 shadow-sm lg:max-h-[min(36vh,300px)] dark:to-muted/10",
         className
       )}
     >
-      <div className="border-b border-border/30 px-8 py-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="shrink-0 border-b border-border/30 px-5 py-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Recent activity
         </h2>
-        <p className="mt-1 text-xs tracking-tight text-muted-foreground">
-          AI and user events across your workspace.
+        <p className="mt-0.5 text-[11px] leading-snug tracking-tight text-muted-foreground">
+          AI and user events.
         </p>
       </div>
-      <ul className="max-h-[min(560px,58vh)] flex-1 divide-y divide-border/25 overflow-y-auto">
+      <ul className="min-h-0 flex-1 divide-y divide-border/25 overflow-y-auto">
         {sorted.map((item, i) => {
           const Icon = ACTIVITY_ICONS[item.icon];
           return (
@@ -93,18 +93,18 @@ export function RecentActivityFeed({
                 ease: [0.16, 1, 0.3, 1],
               }}
             >
-              <div className="flex gap-4 px-8 py-4 transition-colors duration-200 hover:bg-muted/25">
+              <div className="flex gap-3 px-4 py-3 transition-colors duration-200 hover:bg-muted/20">
                 <div
-                  className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/40 bg-gradient-to-br from-card to-muted/30 text-[var(--brand-primary)] shadow-xs"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-card text-[var(--brand-primary)] shadow-xs"
                   aria-hidden
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm leading-snug tracking-tight text-foreground">
+                  <p className="text-xs leading-snug tracking-tight text-foreground">
                     {item.message}
                   </p>
-                  <p className="mt-1.5 text-xs tabular-nums tracking-tight text-muted-foreground">
+                  <p className="mt-1 text-[11px] tabular-nums tracking-tight text-muted-foreground">
                     {formatDistanceToNow(new Date(item.at), { addSuffix: true })}
                   </p>
                 </div>

@@ -19,68 +19,58 @@ interface HomeKpiBentoCardProps {
 
 export function HomeKpiBentoCard({ metric, index }: HomeKpiBentoCardProps) {
   const positive = metric.changePercent >= 0;
-  const isPrimary = metric.tier === "primary";
 
   return (
     <motion.article
-      initial={{ opacity: 0, y: 18 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
-        delay: 0.08 + index * 0.06,
-        duration: 0.45,
+        delay: 0.04 + index * 0.04,
+        duration: 0.4,
         ease: [0.16, 1, 0.3, 1],
       }}
-      whileHover={{ y: -2 }}
+      whileHover={{ y: -1 }}
       className={cn(
-        "flex h-full flex-col rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card to-muted/20 p-8 shadow-sm transition-shadow duration-300 hover:shadow-md dark:to-muted/10",
-        isPrimary && "min-h-[220px] lg:min-h-[240px]"
+        "flex min-w-0 flex-col rounded-xl border border-border/40 bg-gradient-to-br from-card via-card to-muted/15 p-4 shadow-sm transition-shadow duration-200 hover:shadow-md dark:to-muted/10",
+        "min-h-[132px] md:min-h-0"
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-medium tracking-tight text-muted-foreground">
-            {metric.title}
-          </h3>
-          {metric.asOfLabel ? (
-            <p className="mt-1 text-xs tracking-tight text-muted-foreground/80">
-              {metric.asOfLabel}
-            </p>
-          ) : null}
-        </div>
-      </div>
+      <h3 className="text-xs font-medium tracking-tight text-muted-foreground">
+        {metric.title}
+      </h3>
+      {metric.asOfLabel ? (
+        <p className="mt-0.5 line-clamp-1 text-[10px] leading-tight tracking-tight text-muted-foreground/75">
+          {metric.asOfLabel}
+        </p>
+      ) : null}
 
-      <div className="mt-6 flex flex-1 flex-col justify-between gap-4">
-        <div>
-          <AnimatedMetricValue
-            target={metric.animateTarget}
-            formatKey={metric.formatKey}
-            className={cn(
-              "block font-semibold tracking-tight text-foreground",
-              isPrimary ? "text-3xl md:text-4xl" : "text-2xl md:text-3xl"
-            )}
-          />
-          <div className="mt-3 flex flex-wrap items-baseline gap-2">
-            <span
-              className={cn(
-                "text-sm font-medium tabular-nums tracking-tight",
-                positive
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-red-600 dark:text-red-400"
-              )}
-            >
-              {formatDelta(metric.changePercent)}
-            </span>
-            <span className="text-xs tracking-tight text-muted-foreground">
-              {metric.comparisonLabel}
-            </span>
-          </div>
-        </div>
-        <KpiSparkline
-          data={metric.sparkline}
-          trendPositive={positive}
-          className={cn(isPrimary ? "h-14" : "h-12")}
+      <div className="mt-2 min-w-0 flex-1">
+        <AnimatedMetricValue
+          target={metric.animateTarget}
+          formatKey={metric.formatKey}
+          className="block truncate text-xl font-semibold tracking-tight text-foreground md:text-2xl"
         />
+        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+          <span
+            className={cn(
+              "text-xs font-medium tabular-nums tracking-tight",
+              positive
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400"
+            )}
+          >
+            {formatDelta(metric.changePercent)}
+          </span>
+          <span className="text-[10px] tracking-tight text-muted-foreground">
+            {metric.comparisonLabel}
+          </span>
+        </div>
       </div>
+      <KpiSparkline
+        data={metric.sparkline}
+        trendPositive={positive}
+        className="mt-2 h-7"
+      />
     </motion.article>
   );
 }

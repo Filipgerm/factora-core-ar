@@ -70,17 +70,17 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-      className="overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card to-muted/15 shadow-sm dark:to-muted/10"
+      className="overflow-hidden rounded-xl border border-border/40 bg-gradient-to-br from-card via-card to-muted/15 shadow-sm dark:to-muted/10"
     >
-      <div className="border-b border-border/30 px-8 py-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="border-b border-border/30 px-5 py-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Needs your attention
         </h2>
-        <p className="mt-1 text-xs tracking-tight text-muted-foreground">
-          AI-surfaced tasks — click through to resolve.
+        <p className="mt-0.5 text-[11px] leading-snug tracking-tight text-muted-foreground">
+          AI-surfaced tasks — click to open.
         </p>
       </div>
-      <ul className="flex flex-col gap-2 p-3">
+      <ul className="flex max-h-[min(40vh,340px)] flex-col gap-1.5 overflow-y-auto p-2 lg:max-h-[min(36vh,300px)]">
         <AnimatePresence initial={false}>
           {items.map((item, i) => {
             const u = urgencyStyles(item.urgency);
@@ -88,17 +88,17 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
               <Link
                 href={item.href}
                 className={cn(
-                  "group flex items-center gap-4 border-l-4 bg-gradient-to-r from-card to-transparent px-6 py-5 transition-colors duration-200",
+                  "group flex items-center gap-3 border-l-4 bg-gradient-to-r from-card to-transparent px-4 py-3.5 transition-colors duration-200",
                   u.inner
                 )}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium tracking-tight text-foreground transition-colors duration-200 group-hover:text-[var(--brand-primary)]">
+                  <p className="text-xs font-medium leading-snug tracking-tight text-foreground transition-colors duration-200 group-hover:text-[var(--brand-primary)]">
                     {item.label}
                   </p>
                 </div>
-                <span className="flex items-center gap-2 tabular-nums">
-                  <span className="text-lg font-semibold tracking-tight text-foreground">
+                <span className="flex items-center gap-1.5 tabular-nums">
+                  <span className="text-base font-semibold tracking-tight text-foreground">
                     {item.count}
                   </span>
                   <ChevronRight className="size-4 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
