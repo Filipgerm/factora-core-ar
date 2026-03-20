@@ -336,12 +336,28 @@ export interface ReconciliationBankTransaction {
   merchant: string;
   /** Raw narrative as it appears on the bank statement (POS / SEPA text) */
   rawDescriptor: string;
+  /** One-line summary for dense tables (full text stays in rawDescriptor) */
+  displayDescriptor?: string;
   bankId: ReconciliationBankId;
   maskedAccount: string;
   memo?: string;
 }
 
 export type ReconciliationInvoiceRole = "AR" | "AP";
+
+/** Drives the Type column icon in the reconciliation ledger */
+export type ReconciliationInvoiceCategory =
+  | "subscription"
+  | "services"
+  | "travel"
+  | "fee"
+  | "receivable"
+  | "payable"
+  | "logistics"
+  | "other";
+
+/** Vendor / Customer / Other column */
+export type ReconciliationCounterpartyKind = "vendor" | "customer" | "other";
 
 export interface ReconciliationBookInvoice {
   id: string;
@@ -354,6 +370,8 @@ export interface ReconciliationBookInvoice {
   status: "Open" | "Overdue" | "Partial";
   /** Suggested or posted GL mapping for the book side */
   glAccount: string;
+  invoiceCategory: ReconciliationInvoiceCategory;
+  counterpartyKind: ReconciliationCounterpartyKind;
 }
 
 export interface ReconciliationPendingPair {
@@ -381,6 +399,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       merchant: "GITHUB INC",
       rawDescriptor:
         "POS PURCHASE GITHUB INC SAN FRANCISCO US 10MAR EUR 2499.00 FX1.087 AUTH 884291",
+      displayDescriptor: "Card · GitHub · US · €2,499 · 10 Mar",
       bankId: "revolut",
       maskedAccount: "•••• 8821",
       memo: "Card payment",
@@ -395,6 +414,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       role: "AP",
       status: "Open",
       glAccount: "62810 — Software & SaaS",
+      invoiceCategory: "subscription",
+      counterpartyKind: "vendor",
     },
     aiConfidencePercent: 88,
     aiReasoning:
@@ -410,6 +431,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       merchant: "BERLIN ANALYTICS GMBH",
       rawDescriptor:
         "SEPA DD BERLIN ANALYTICS GMBH REF 2026-03-INV-8842 ENDTOEND NOTPROVIDED",
+      displayDescriptor: "SEPA DD · Berlin Analytics · ref INV-8842",
       bankId: "n26",
       maskedAccount: "•••• 4402",
     },
@@ -423,6 +445,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       role: "AR",
       status: "Open",
       glAccount: "40110 — Subscription Revenue",
+      invoiceCategory: "subscription",
+      counterpartyKind: "customer",
     },
     aiConfidencePercent: 72,
     aiReasoning:
@@ -438,6 +462,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       merchant: "DEUTSCHE BAHN AG",
       rawDescriptor:
         "CARD DB MOBILITY LOGISTICS FRANKFURT DE 09MAR 1890.45EUR MCC4112",
+      displayDescriptor: "Card · Deutsche Bahn · DE · €1,890 · 9 Mar",
       bankId: "deutschebank",
       maskedAccount: "•••• 9910",
       memo: "ICE tickets",
@@ -452,6 +477,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       role: "AP",
       status: "Open",
       glAccount: "62500 — Travel & Transport",
+      invoiceCategory: "travel",
+      counterpartyKind: "vendor",
     },
     aiConfidencePercent: 65,
     aiReasoning:
@@ -467,6 +494,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       merchant: "ΑΚΡΙΔΑΣ ΑΕ",
       rawDescriptor:
         "INSTANT IN ΑΚΡΙΔΑΣ ΑΕ /PIRAEUS/REF ERP-AR-5600/11MAR26 BENEF REF 99821",
+      displayDescriptor: "Inbound transfer · Ακρίδας · ref ERP-AR-5600",
       bankId: "piraeus",
       maskedAccount: "•••• 1204",
       memo: "Incoming transfer",
@@ -481,6 +509,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       role: "AR",
       status: "Overdue",
       glAccount: "12000 — Trade Receivables",
+      invoiceCategory: "receivable",
+      counterpartyKind: "customer",
     },
     aiConfidencePercent: 81,
     aiReasoning:
@@ -496,6 +526,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       merchant: "STRIPE PAYMENTS EU",
       rawDescriptor:
         "POS PUR STRIPE*PAYMENTS EU DUBLIN IE 07MAR 145.67 EUR CD 7733XXXX9012",
+      displayDescriptor: "Card · Stripe · IE · €145.67 · 7 Mar",
       bankId: "eurobank",
       maskedAccount: "•••• 7733",
     },
@@ -509,6 +540,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       role: "AP",
       status: "Open",
       glAccount: "65320 — Payment Processing Fees",
+      invoiceCategory: "fee",
+      counterpartyKind: "vendor",
     },
     aiConfidencePercent: 58,
     aiReasoning:
@@ -528,6 +561,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         merchant: "STRIPE PAYMENTS",
         rawDescriptor:
           "CARD STRIPE TECHNOLOGY EU LTD DUBLIN 06MAR412.18EUR AUTH STRP*INV-8840",
+        displayDescriptor: "Card · Stripe · €412.18 · 6 Mar",
         bankId: "revolut",
         maskedAccount: "•••• 8821",
       },
@@ -541,6 +575,8 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         role: "AP",
         status: "Open",
         glAccount: "65320 — Payment Processing Fees",
+        invoiceCategory: "fee",
+        counterpartyKind: "vendor",
       },
     },
     {
@@ -553,6 +589,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         merchant: "ΦΩΤΟΔΕΝΤΡΟ ΙΚΕ",
         rawDescriptor:
           "SEPA CT ΦΩΤΟΔΕΝΤΡΟ ΙΚΕ ATHENS REF AP-MKT-112/2026 ENDTOEND GR12PIR...",
+        displayDescriptor: "SEPA CT · Φωτόδεντρο · ref AP-MKT-112",
         bankId: "piraeus",
         maskedAccount: "•••• 1204",
       },
@@ -566,6 +603,8 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         role: "AP",
         status: "Open",
         glAccount: "62000 — Marketing & Advertising",
+        invoiceCategory: "services",
+        counterpartyKind: "vendor",
       },
     },
     {
@@ -578,6 +617,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         merchant: "ATHENS LOGISTICS SA",
         rawDescriptor:
           "INCOMING SEPA ATHENS LOGISTICS SA REF INV-AR-2026-0188 TRN EBC77330044921",
+        displayDescriptor: "Inbound SEPA · Athens Logistics · AR-0188",
         bankId: "eurobank",
         maskedAccount: "•••• 7733",
       },
@@ -591,6 +631,8 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         role: "AR",
         status: "Partial",
         glAccount: "40110 — Subscription Revenue",
+        invoiceCategory: "receivable",
+        counterpartyKind: "customer",
       },
     },
     {
@@ -603,6 +645,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         merchant: "CUSTOMS / PORT FEES",
         rawDescriptor:
           "SEPA DD ATHENS LOGISTICS SA ELPP CUSTOMS CLEAR 12890.00 REF AP-LOG-9901",
+        displayDescriptor: "SEPA DD · Customs / port · €12,890",
         bankId: "piraeus",
         maskedAccount: "•••• 1204",
         memo: "SEPA debit",
@@ -617,6 +660,8 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         role: "AP",
         status: "Open",
         glAccount: "62850 — Logistics & Customs",
+        invoiceCategory: "logistics",
+        counterpartyKind: "vendor",
       },
     },
   ];
