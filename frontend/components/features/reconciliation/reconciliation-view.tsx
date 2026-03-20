@@ -275,7 +275,7 @@ export function ReconciliationView() {
           </div>
         </div>
 
-        {/* Domain strip */}
+        {/* Domain strip — 50/50; AI lives inside Factora */}
         <div
           className={cn(
             "hidden border-t border-border/40 md:grid",
@@ -298,17 +298,9 @@ export function ReconciliationView() {
           >
             Factora
           </div>
-          <div
-            className={cn(
-              LEDGER_TH,
-              "border-l border-border/50 bg-slate-50/90 px-2 py-1.5 text-right dark:bg-slate-900/30"
-            )}
-          >
-            AI
-          </div>
         </div>
 
-        {/* Explicit column headers — aligned to row sub-grids */}
+        {/* Column headers — Bank inner + Factora inner (Type … AI) */}
         <div
           className={cn(
             "hidden border-t border-border/30 md:grid",
@@ -322,8 +314,8 @@ export function ReconciliationView() {
             )}
           >
             <span className={cn(LEDGER_TH, "md:pt-1")}>Date</span>
-            <div className="flex items-end gap-2">
-              <div className="size-7 shrink-0" aria-hidden />
+            <div className="flex items-end gap-1.5">
+              <div className="size-6 shrink-0" aria-hidden />
               <span className={cn(LEDGER_TH, "pb-0.5")}>Payer</span>
             </div>
             <span className={cn(LEDGER_TH, "text-left md:text-right md:pt-1")}>
@@ -339,24 +331,31 @@ export function ReconciliationView() {
               "border-l border-border/60 bg-slate-50/90 py-1.5 shadow-[-4px_0_12px_rgba(0,0,0,0.02)] dark:bg-slate-900/30"
             )}
           >
-            <div className="flex items-end gap-2">
-              <div className="size-7 shrink-0" aria-hidden />
-              <span className={cn(LEDGER_TH, "pb-0.5")}>
-                Counterparty / Entity
-              </span>
-            </div>
-            <span className={cn(LEDGER_TH, "md:pt-1")}>GL Account</span>
+            <span
+              className={cn(
+                LEDGER_TH,
+                "flex justify-center pt-1 text-center leading-tight"
+              )}
+            >
+              Type
+            </span>
+            <span className={cn(LEDGER_TH, "pt-1 leading-tight")}>
+              Vendor / Customer / Other
+            </span>
+            <span className={cn(LEDGER_TH, "pt-1 leading-tight")}>
+              GL Account
+            </span>
             <span className={cn(LEDGER_TH, "text-left md:text-right md:pt-1")}>
               Amount
             </span>
-          </div>
-          <div
-            className={cn(
-              LEDGER_TH,
-              "flex items-end justify-end border-l border-border/50 bg-slate-50/90 px-2 pb-1.5 pt-1 dark:bg-slate-900/30"
-            )}
-          >
-            Action
+            <span
+              className={cn(
+                LEDGER_TH,
+                "text-right leading-tight md:pt-1"
+              )}
+            >
+              AI
+            </span>
           </div>
         </div>
       </div>
