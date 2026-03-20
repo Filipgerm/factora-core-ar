@@ -5,7 +5,12 @@ import { CircleDot, Sparkles } from "lucide-react";
 
 import { MatchDetailSheet } from "@/components/features/reconciliation/match-detail-sheet";
 import { ReconciliationEmptyState } from "@/components/features/reconciliation/reconciliation-empty-state";
-import { ReconciliationMatchRow } from "@/components/features/reconciliation/reconciliation-match-row";
+import {
+  RECON_BANK_INNER,
+  RECON_BOOK_INNER,
+  RECON_ROW_OUTER,
+  ReconciliationMatchRow,
+} from "@/components/features/reconciliation/reconciliation-match-row";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -25,6 +30,9 @@ import {
 import { cn } from "@/lib/utils";
 
 const HIGH_CONFIDENCE_THRESHOLD = 80;
+
+const LEDGER_TH =
+  "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground";
 
 type MainTab = "action" | "matched";
 
@@ -168,8 +176,9 @@ export function ReconciliationView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="sticky top-0 z-20 border-b border-border/60 bg-background/95 py-2 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      {/* Toolbar + domain + column headers: one frozen stack (toggle order unchanged). */}
+      <div className="sticky top-0 z-20 border-b border-border/60 bg-background/95 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+        <div className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Select
               value={accountFilter}
@@ -265,18 +274,90 @@ export function ReconciliationView() {
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Dual-ledger column header */}
-      <div className="hidden md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(7.25rem,auto)] md:border-b md:border-border/50">
-        <div className="bg-muted/30 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Bank
+        {/* Domain strip */}
+        <div
+          className={cn(
+            "hidden border-t border-border/40 md:grid",
+            RECON_ROW_OUTER
+          )}
+        >
+          <div
+            className={cn(
+              LEDGER_TH,
+              "bg-white px-2 py-1.5 dark:bg-background"
+            )}
+          >
+            Bank
+          </div>
+          <div
+            className={cn(
+              LEDGER_TH,
+              "border-l border-border/60 bg-slate-50/90 py-1.5 pl-2 shadow-[-4px_0_12px_rgba(0,0,0,0.02)] dark:bg-slate-900/30"
+            )}
+          >
+            Factora
+          </div>
+          <div
+            className={cn(
+              LEDGER_TH,
+              "border-l border-border/50 bg-slate-50/90 px-2 py-1.5 text-right dark:bg-slate-900/30"
+            )}
+          >
+            AI
+          </div>
         </div>
-        <div className="border-l border-border/40 bg-background px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Factora
-        </div>
-        <div className="border-l border-border/40 bg-background px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          AI
+
+        {/* Explicit column headers — aligned to row sub-grids */}
+        <div
+          className={cn(
+            "hidden border-t border-border/30 md:grid",
+            RECON_ROW_OUTER
+          )}
+        >
+          <div
+            className={cn(
+              RECON_BANK_INNER,
+              "border-border/30 bg-white py-1.5 dark:bg-background"
+            )}
+          >
+            <span className={cn(LEDGER_TH, "md:pt-1")}>Date</span>
+            <div className="flex items-end gap-2">
+              <div className="size-7 shrink-0" aria-hidden />
+              <span className={cn(LEDGER_TH, "pb-0.5")}>Payer</span>
+            </div>
+            <span className={cn(LEDGER_TH, "text-left md:text-right md:pt-1")}>
+              Account
+            </span>
+            <span className={cn(LEDGER_TH, "text-left md:text-right md:pt-1")}>
+              Amount
+            </span>
+          </div>
+          <div
+            className={cn(
+              RECON_BOOK_INNER,
+              "border-l border-border/60 bg-slate-50/90 py-1.5 shadow-[-4px_0_12px_rgba(0,0,0,0.02)] dark:bg-slate-900/30"
+            )}
+          >
+            <div className="flex items-end gap-2">
+              <div className="size-7 shrink-0" aria-hidden />
+              <span className={cn(LEDGER_TH, "pb-0.5")}>
+                Counterparty / Entity
+              </span>
+            </div>
+            <span className={cn(LEDGER_TH, "md:pt-1")}>GL Account</span>
+            <span className={cn(LEDGER_TH, "text-left md:text-right md:pt-1")}>
+              Amount
+            </span>
+          </div>
+          <div
+            className={cn(
+              LEDGER_TH,
+              "flex items-end justify-end border-l border-border/50 bg-slate-50/90 px-2 pb-1.5 pt-1 dark:bg-slate-900/30"
+            )}
+          >
+            Action
+          </div>
         </div>
       </div>
 
