@@ -42,6 +42,12 @@ export function LedgerInvoiceCell({
       <p className="mt-1 font-mono text-[13px] tabular-nums tracking-tight text-muted-foreground">
         {invoiceNumber}
       </p>
+      <p
+        className="mt-0.5 line-clamp-2 font-mono text-[11px] leading-snug tracking-tight text-foreground/85"
+        title={invoice.glAccount}
+      >
+        {invoice.glAccount}
+      </p>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
         <span className="text-[13px] text-muted-foreground">
           Due{" "}

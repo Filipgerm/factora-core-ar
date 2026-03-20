@@ -79,7 +79,9 @@ export function BankTransactionCell({
           <span
             className={cn(
               "font-mono text-[13px] font-semibold tabular-nums tracking-tight",
-              isOutflow ? "text-foreground" : "text-emerald-700 dark:text-emerald-400"
+              isOutflow
+                ? "font-bold text-foreground"
+                : "font-semibold text-emerald-600 dark:text-emerald-400"
             )}
           >
             {isOutflow ? "−" : "+"}

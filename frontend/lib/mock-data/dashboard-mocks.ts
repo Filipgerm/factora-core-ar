@@ -352,6 +352,8 @@ export interface ReconciliationBookInvoice {
   currency: "EUR";
   role: ReconciliationInvoiceRole;
   status: "Open" | "Overdue" | "Partial";
+  /** Suggested or posted GL mapping for the book side */
+  glAccount: string;
 }
 
 export interface ReconciliationPendingPair {
@@ -392,6 +394,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       currency: "EUR",
       role: "AP",
       status: "Open",
+      glAccount: "62810 — Software & SaaS",
     },
     aiConfidencePercent: 88,
     aiReasoning:
@@ -419,6 +422,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       currency: "EUR",
       role: "AR",
       status: "Open",
+      glAccount: "40110 — Subscription Revenue",
     },
     aiConfidencePercent: 72,
     aiReasoning:
@@ -447,6 +451,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       currency: "EUR",
       role: "AP",
       status: "Open",
+      glAccount: "62500 — Travel & Transport",
     },
     aiConfidencePercent: 65,
     aiReasoning:
@@ -475,6 +480,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       currency: "EUR",
       role: "AR",
       status: "Overdue",
+      glAccount: "12000 — Trade Receivables",
     },
     aiConfidencePercent: 81,
     aiReasoning:
@@ -502,6 +508,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       currency: "EUR",
       role: "AP",
       status: "Open",
+      glAccount: "65320 — Payment Processing Fees",
     },
     aiConfidencePercent: 58,
     aiReasoning:
@@ -533,6 +540,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         currency: "EUR",
         role: "AP",
         status: "Open",
+        glAccount: "65320 — Payment Processing Fees",
       },
     },
     {
@@ -557,6 +565,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         currency: "EUR",
         role: "AP",
         status: "Open",
+        glAccount: "62000 — Marketing & Advertising",
       },
     },
     {
@@ -581,6 +590,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         currency: "EUR",
         role: "AR",
         status: "Partial",
+        glAccount: "40110 — Subscription Revenue",
       },
     },
     {
@@ -606,6 +616,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         currency: "EUR",
         role: "AP",
         status: "Open",
+        glAccount: "62850 — Logistics & Customs",
       },
     },
   ];
