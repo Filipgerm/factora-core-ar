@@ -67,11 +67,11 @@ export function RecentActivityFeed({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.28, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
-        "flex h-full max-h-[min(40vh,340px)] flex-col overflow-hidden rounded-xl border border-border/40 bg-gradient-to-b from-card via-card to-muted/15 shadow-sm lg:max-h-[min(36vh,300px)] dark:to-muted/10",
+        "flex h-full max-h-[min(40vh,340px)] flex-col overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-b from-card via-card to-muted/15 shadow-sm lg:max-h-[min(36vh,300px)] dark:to-muted/10",
         className
       )}
     >
-      <div className="shrink-0 border-b border-border/30 px-5 py-4">
+      <div className="shrink-0 border-b border-border/40 bg-background/50 px-6 py-5 backdrop-blur-sm">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Recent activity
         </h2>
@@ -79,7 +79,7 @@ export function RecentActivityFeed({
           AI and user events.
         </p>
       </div>
-      <ul className="min-h-0 flex-1 divide-y divide-border/25 overflow-y-auto">
+      <ul className="min-h-0 flex-1 divide-y divide-border/30 overflow-y-auto">
         {sorted.map((item, i) => {
           const Icon = ACTIVITY_ICONS[item.icon];
           return (
@@ -93,7 +93,7 @@ export function RecentActivityFeed({
                 ease: [0.16, 1, 0.3, 1],
               }}
             >
-              <div className="flex gap-3 px-4 py-3 transition-colors duration-200 hover:bg-muted/20">
+              <div className="flex gap-3 px-4 py-3.5 transition-all duration-300 ease-out hover:bg-muted/50">
                 <div
                   className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-card text-[var(--brand-primary)] shadow-xs"
                   aria-hidden

@@ -12,18 +12,15 @@ function urgencyStyles(urgency: HomeActionItem["urgency"]) {
   switch (urgency) {
     case "critical":
       return {
-        inner:
-          "border-l-destructive hover:border-destructive/50 hover:bg-destructive/[0.03]",
+        inner: "border-l-destructive",
       };
     case "attention":
       return {
-        inner:
-          "border-l-[var(--brand-primary)] hover:border-[var(--brand-primary)]/80 hover:bg-[var(--brand-primary-subtle)]/35",
+        inner: "border-l-[var(--brand-primary)]",
       };
     default:
       return {
-        inner:
-          "border-l-border hover:border-l-muted-foreground/40 hover:bg-muted/30",
+        inner: "border-l-border",
       };
   }
 }
@@ -70,9 +67,9 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-      className="overflow-hidden rounded-xl border border-border/40 bg-gradient-to-br from-card via-card to-muted/15 shadow-sm dark:to-muted/10"
+      className="overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card to-muted/15 shadow-sm dark:to-muted/10"
     >
-      <div className="border-b border-border/30 px-5 py-4">
+      <div className="border-b border-border/40 bg-background/50 px-6 py-5 backdrop-blur-sm">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Needs your attention
         </h2>
@@ -80,7 +77,7 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
           AI-surfaced tasks — click to open.
         </p>
       </div>
-      <ul className="flex max-h-[min(40vh,340px)] flex-col gap-1.5 overflow-y-auto p-2 lg:max-h-[min(36vh,300px)]">
+      <ul className="flex max-h-[min(40vh,340px)] flex-col gap-2 overflow-y-auto p-3 lg:max-h-[min(36vh,300px)]">
         <AnimatePresence initial={false}>
           {items.map((item, i) => {
             const u = urgencyStyles(item.urgency);
@@ -88,7 +85,7 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
               <Link
                 href={item.href}
                 className={cn(
-                  "group flex items-center gap-3 border-l-4 bg-gradient-to-r from-card to-transparent px-4 py-3.5 transition-colors duration-200",
+                  "group flex items-center gap-3 border-l-4 bg-gradient-to-r from-card to-transparent px-4 py-3.5 transition-all duration-300 ease-out hover:bg-muted/50",
                   u.inner
                 )}
               >
@@ -101,7 +98,7 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
                   <span className="text-base font-semibold tracking-tight text-foreground">
                     {item.count}
                   </span>
-                  <ChevronRight className="size-4 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
+                  <ChevronRight className="size-4 text-muted-foreground opacity-0 transition-all duration-300 ease-out group-hover:translate-x-0.5 group-hover:opacity-100" />
                 </span>
               </Link>
             );

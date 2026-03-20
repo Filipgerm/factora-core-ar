@@ -6,10 +6,10 @@ import { RecentActivityFeed } from "@/components/features/home/recent-activity-f
 
 export function HomeDashboardView() {
   return (
-    <div className="flex min-h-0 flex-col gap-5 lg:gap-6">
+    <div className="flex min-h-0 flex-col gap-6 lg:gap-8">
       <HomeKpiBento />
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-6">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
         <div className="min-h-0 lg:col-span-7">
           <ActionItemsList />
         </div>
