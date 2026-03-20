@@ -35,26 +35,26 @@ export function MatchDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col gap-0 border-slate-200 p-0 sm:max-w-xl"
+        className="flex w-full flex-col gap-0 border-border/40 p-0 sm:max-w-xl"
       >
         {pair ? (
           <>
-            <SheetHeader className="space-y-1 border-b border-slate-100 px-6 py-5 text-left">
-              <SheetTitle className="text-lg font-semibold">
+            <SheetHeader className="space-y-1.5 border-b border-border/40 bg-background/60 px-6 py-6 text-left backdrop-blur-md">
+              <SheetTitle className="text-lg font-semibold tracking-tight">
                 Review suggested match
               </SheetTitle>
-              <SheetDescription>
+              <SheetDescription className="text-xs tracking-tight text-muted-foreground">
                 Compare the bank line with the open invoice before confirming.
               </SheetDescription>
             </SheetHeader>
 
-            <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="flex-1 overflow-y-auto px-6 py-6">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Side-by-side
               </p>
               <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 bg-slate-50/50 dark:bg-slate-900/30">
-                  <p className="border-b border-slate-200 px-3 py-2 text-xs font-medium text-muted-foreground dark:border-slate-700">
+                <div className="overflow-hidden rounded-xl border border-border/40 bg-muted/10 shadow-sm">
+                  <p className="border-b border-border/40 bg-background/40 px-3 py-2 text-xs font-medium tracking-tight text-muted-foreground backdrop-blur-sm">
                     Bank transaction
                   </p>
                   <BankTransactionCell
@@ -62,37 +62,39 @@ export function MatchDetailSheet({
                     dense={false}
                   />
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50/50 dark:bg-slate-900/30">
-                  <p className="border-b border-slate-200 px-3 py-2 text-xs font-medium text-muted-foreground dark:border-slate-700">
+                <div className="overflow-hidden rounded-xl border border-border/40 bg-muted/10 shadow-sm">
+                  <p className="border-b border-border/40 bg-background/40 px-3 py-2 text-xs font-medium tracking-tight text-muted-foreground backdrop-blur-sm">
                     Suggested invoice
                   </p>
                   <LedgerInvoiceCell invoice={pair.invoice} dense={false} />
                 </div>
               </div>
 
-              <Separator className="my-6" />
+              <Separator className="my-6 bg-border/40" />
 
               <div
-                className="rounded-xl border border-violet-200/80 bg-gradient-to-br from-violet-50/95 via-card to-[var(--brand-primary-subtle)]/50 p-4 shadow-sm dark:border-violet-900/50 dark:from-violet-950/35"
+                className="rounded-xl border border-indigo-200/50 bg-gradient-to-br from-indigo-50/40 via-violet-50/25 to-[var(--brand-primary-subtle)]/30 p-4 shadow-sm dark:border-indigo-900/40 dark:from-indigo-950/30 dark:via-violet-950/20"
                 role="status"
               >
-                <div className="flex items-center gap-2 text-violet-800 dark:text-violet-200">
+                <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
                   <Sparkles className="size-4 shrink-0" aria-hidden />
-                  <span className="text-sm font-semibold">AI reasoning</span>
-                  <span className="ml-auto rounded-md bg-violet-100 px-2 py-0.5 text-xs font-medium tabular-nums text-violet-900 dark:bg-violet-900/60 dark:text-violet-100">
+                  <span className="text-sm font-semibold tracking-tight">
+                    AI reasoning
+                  </span>
+                  <span className="ml-auto rounded-md bg-indigo-100/90 px-2 py-0.5 text-xs font-medium tabular-nums tracking-tight text-indigo-900 dark:bg-indigo-900/55 dark:text-indigo-100">
                     {pair.aiConfidencePercent}% confidence
                   </span>
                 </div>
-                <p className="mt-3 text-sm leading-relaxed text-foreground/90">
+                <p className="mt-3 text-sm leading-relaxed tracking-tight text-foreground/90">
                   {pair.aiReasoning}
                 </p>
               </div>
             </div>
 
-            <SheetFooter className="flex-col gap-2 border-t border-slate-100 bg-slate-50/40 px-6 py-4 dark:border-slate-800 dark:bg-slate-900/40 sm:flex-col">
+            <SheetFooter className="flex-col gap-2 border-t border-border/40 bg-background/50 px-6 py-5 backdrop-blur-md sm:flex-col">
               <Button
                 type="button"
-                className="w-full transition-all duration-200"
+                className="w-full rounded-xl transition-all duration-300 ease-out"
                 onClick={() => onConfirmMatch(pair.id)}
               >
                 Confirm match
@@ -100,7 +102,7 @@ export function MatchDetailSheet({
               <Button
                 type="button"
                 variant="outline"
-                className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive dark:border-destructive/50"
+                className="w-full rounded-xl border-destructive/35 text-destructive transition-all duration-300 ease-out hover:bg-destructive/10 hover:text-destructive dark:border-destructive/45"
                 onClick={() => onRejectMatch(pair.id)}
               >
                 Reject &amp; find alternative

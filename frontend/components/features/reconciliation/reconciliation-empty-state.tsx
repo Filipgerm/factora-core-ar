@@ -17,11 +17,11 @@ export function ReconciliationEmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-card/50 px-6 py-14 text-center transition-all duration-200 dark:border-slate-700",
+        "flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/5 px-8 py-16 text-center shadow-sm transition-all duration-300 ease-out",
         className
       )}
     >
-      <div className="flex size-14 items-center justify-center rounded-full border border-dashed border-slate-300 bg-[var(--brand-primary-subtle)]/40 dark:border-slate-600">
+      <div className="flex size-14 items-center justify-center rounded-2xl border border-dashed border-border/50 bg-background/60 backdrop-blur-sm">
         <GitMerge
           className="size-7 text-[var(--brand-primary)] opacity-80"
           aria-hidden
@@ -30,11 +30,13 @@ export function ReconciliationEmptyState({
       <h3 className="mt-4 text-lg font-semibold tracking-tight text-foreground">
         {title}
       </h3>
-      <p className="mt-1 max-w-md text-sm text-muted-foreground">{description}</p>
+      <p className="mt-1 max-w-md text-sm tracking-tight text-muted-foreground">
+        {description}
+      </p>
       <Button
         type="button"
         variant="outline"
-        className="mt-6 transition-all duration-200"
+        className="mt-6 rounded-xl border-border/40 transition-all duration-300 ease-out hover:bg-muted/50"
       >
         Sync bank feed
       </Button>

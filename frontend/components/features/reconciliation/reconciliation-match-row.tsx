@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, Link2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 import { Badge } from "@/components/ui/badge";
 import type {
@@ -28,7 +29,8 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
   const isPending = variant === "pending";
 
   return (
-    <div
+    <motion.div
+      layout
       role={isPending ? "button" : undefined}
       tabIndex={isPending ? 0 : undefined}
       onClick={isPending ? () => props.onSelect(props.pair) : undefined}
@@ -42,21 +44,23 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
             }
           : undefined
       }
+      whileHover={isPending ? { scale: 1.002 } : undefined}
+      transition={{ type: "spring", stiffness: 520, damping: 38 }}
       className={cn(
-        "group overflow-hidden rounded-xl border border-slate-200 bg-card transition-all duration-200",
+        "group overflow-hidden rounded-2xl border border-border/40 bg-card shadow-sm transition-all duration-300 ease-out",
         variant === "auto" &&
-          "border-emerald-200/90 bg-gradient-to-br from-emerald-50/50 via-card to-[var(--brand-primary-subtle)]/30 dark:border-emerald-900/50 dark:from-emerald-950/20",
+          "border-emerald-200/70 bg-gradient-to-br from-indigo-50/25 via-emerald-50/30 to-[var(--brand-primary-subtle)]/25 dark:border-emerald-900/45 dark:from-indigo-950/20 dark:via-emerald-950/15",
         isPending &&
-          "cursor-pointer hover:border-slate-300 hover:bg-slate-50/90 hover:shadow-sm dark:hover:bg-slate-900/40",
+          "cursor-pointer hover:border-border/60 hover:bg-muted/40 hover:shadow-md dark:hover:bg-muted/25",
         isPending &&
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       )}
     >
       {variant === "auto" ? (
-        <div className="flex items-center justify-between border-b border-emerald-100/80 bg-emerald-50/40 px-3 py-1.5 dark:border-emerald-900/40 dark:bg-emerald-950/25">
+        <div className="flex items-center justify-between border-b border-border/30 bg-background/50 px-4 py-2 backdrop-blur-sm dark:bg-background/30">
           <Badge
             variant="outline"
-            className="gap-0.5 border-emerald-200 bg-emerald-50/90 text-emerald-800 transition-all duration-200 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
+            className="gap-1 border-emerald-200/80 bg-emerald-50/80 text-xs font-medium tracking-tight text-emerald-800 transition-all duration-300 ease-out dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200"
           >
             <CheckCircle2 className="size-3" aria-hidden />
             Auto-matched · 100% confidence
@@ -70,7 +74,7 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
         </div>
       ) : null}
       <div className="grid grid-cols-1 md:grid-cols-2">
-        <div className="border-b border-slate-100 md:border-b-0 md:border-r md:border-slate-100">
+        <div className="border-b border-border/30 md:border-b-0 md:border-r md:border-border/30">
           <BankTransactionCell transaction={pair.transaction} />
         </div>
         <div className="relative">
@@ -79,7 +83,7 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
               className="pointer-events-none absolute left-0 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 md:block"
               aria-hidden
             >
-              <span className="flex size-8 items-center justify-center rounded-full border border-emerald-200 bg-card text-emerald-600 shadow-sm dark:border-emerald-800 dark:text-emerald-400">
+              <span className="flex size-8 items-center justify-center rounded-full border border-emerald-200/80 bg-background/80 text-emerald-600 shadow-sm backdrop-blur-sm dark:border-emerald-800 dark:text-emerald-400">
                 <Link2 className="size-3.5" />
               </span>
             </div>
@@ -87,6 +91,6 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
           <LedgerInvoiceCell invoice={pair.invoice} />
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
