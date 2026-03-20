@@ -4,17 +4,16 @@ export interface UserSession {
   userId: string;
   userType: UserType;
   email?: string;
-  iat: number; // Issued at timestamp
+  iat: number;
 }
 
 export interface AuthToken {
-  token: string; // Mock JWT token string
+  token: string;
   payload: UserSession;
 }
 
 export interface SignInCredentials {
   username?: string;
-  password?: string;
   email?: string;
+  password?: string;
 }
-
