@@ -372,6 +372,8 @@ export interface ReconciliationBookInvoice {
   glAccount: string;
   invoiceCategory: ReconciliationInvoiceCategory;
   counterpartyKind: ReconciliationCounterpartyKind;
+  /** Short ledger line: reference, PO, period, or memo (not full metadata stack) */
+  invoiceSummary: string;
 }
 
 export interface ReconciliationPendingPair {
@@ -396,10 +398,10 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       date: "2026-03-10",
       amount: -2499.0,
       currency: "EUR",
-      merchant: "GITHUB INC",
+      merchant: "SALESFORCE INC",
       rawDescriptor:
-        "POS PURCHASE GITHUB INC SAN FRANCISCO US 10MAR EUR 2499.00 FX1.087 AUTH 884291",
-      displayDescriptor: "Card · GitHub · US · €2,499 · 10 Mar",
+        "POS PURCHASE SALESFORCE.COM SAN FRANCISCO US 10MAR EUR 2499.00 AUTH 991204",
+      displayDescriptor: "Card · Salesforce · US · €2,499 · 10 Mar",
       bankId: "revolut",
       maskedAccount: "•••• 8821",
       memo: "Card payment",
@@ -408,7 +410,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       id: "rap-01",
       invoiceNumber: "AP-INV-8841",
       dueDate: "2026-03-12",
-      counterpartyName: "Orpheus Cloud IKE",
+      counterpartyName: "Meridian Cloud Ltd",
       totalAmount: 2499.0,
       currency: "EUR",
       role: "AP",
@@ -416,10 +418,11 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       glAccount: "62810 — Software & SaaS",
       invoiceCategory: "subscription",
       counterpartyKind: "vendor",
+      invoiceSummary: "INV000000342 — FY26 CRM seats (annual)",
     },
     aiConfidencePercent: 88,
     aiReasoning:
-      "AI confidence: 88%. Exact amount match (€2,499.00) and vendor string similarity (GitHub vs Orpheus hosting context). Invoice due date is 2 days after bank posting — within tolerance.",
+      "AI confidence: 88%. Exact amount match (€2,499.00) and vendor string aligns with posted Salesforce subscription.",
   },
   {
     id: "rec-pend-02",
@@ -447,6 +450,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       glAccount: "40110 — Subscription Revenue",
       invoiceCategory: "subscription",
       counterpartyKind: "customer",
+      invoiceSummary: "PO-77821 · March analytics package",
     },
     aiConfidencePercent: 72,
     aiReasoning:
@@ -459,30 +463,31 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       date: "2026-03-09",
       amount: -1890.45,
       currency: "EUR",
-      merchant: "DEUTSCHE BAHN AG",
+      merchant: "COGNITIVE LEGAL LLP",
       rawDescriptor:
-        "CARD DB MOBILITY LOGISTICS FRANKFURT DE 09MAR 1890.45EUR MCC4112",
-      displayDescriptor: "Card · Deutsche Bahn · DE · €1,890 · 9 Mar",
+        "SEPA DD COGNITIVE LEGAL LLP LONDON REF RET-2026-Q1 INV 1890.45 GBP FX",
+      displayDescriptor: "SEPA DD · Cognitive Legal · retainer €1,890",
       bankId: "deutschebank",
       maskedAccount: "•••• 9910",
-      memo: "ICE tickets",
+      memo: "Legal retainer",
     },
     invoice: {
       id: "rap-03",
-      invoiceNumber: "EXP-TR-2203",
+      invoiceNumber: "LEG-RET-Q1-26",
       dueDate: "2026-03-20",
-      counterpartyName: "Deutsche Bahn AG",
+      counterpartyName: "Cognitive Legal LLP",
       totalAmount: 1890.45,
       currency: "EUR",
       role: "AP",
       status: "Open",
-      glAccount: "62500 — Travel & Transport",
-      invoiceCategory: "travel",
+      glAccount: "62100 — Professional Fees",
+      invoiceCategory: "services",
       counterpartyKind: "vendor",
+      invoiceSummary: "RET-2026-Q1 — outside counsel block",
     },
     aiConfidencePercent: 65,
     aiReasoning:
-      "AI confidence: 65%. Same amount and legal entity name. Travel expense classification uncertain — dates differ by 11 days; please confirm this is the same trip batch.",
+      "AI confidence: 65%. Amount matches quarterly retainer; bank value date differs from invoice date — confirm accrual period.",
   },
   {
     id: "rec-pend-04",
@@ -491,10 +496,10 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       date: "2026-03-11",
       amount: 5600.0,
       currency: "EUR",
-      merchant: "ΑΚΡΙΔΑΣ ΑΕ",
+      merchant: "NORTHERN SUPPLY CO LTD",
       rawDescriptor:
-        "INSTANT IN ΑΚΡΙΔΑΣ ΑΕ /PIRAEUS/REF ERP-AR-5600/11MAR26 BENEF REF 99821",
-      displayDescriptor: "Inbound transfer · Ακρίδας · ref ERP-AR-5600",
+        "INSTANT IN NORTHERN SUPPLY CO LTD REF ERP-AR-5600/11MAR26 BENEF REF 99821",
+      displayDescriptor: "Inbound transfer · Northern Supply · ref ERP-AR-5600",
       bankId: "piraeus",
       maskedAccount: "•••• 1204",
       memo: "Incoming transfer",
@@ -503,7 +508,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       id: "rar-04",
       invoiceNumber: "AR-2026-0201",
       dueDate: "2026-03-11",
-      counterpartyName: "Ακρίδας ΑΕ",
+      counterpartyName: "Northern Supply Co Ltd",
       totalAmount: 5600.0,
       currency: "EUR",
       role: "AR",
@@ -511,10 +516,11 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       glAccount: "12000 — Trade Receivables",
       invoiceCategory: "receivable",
       counterpartyKind: "customer",
+      invoiceSummary: "INV000000518 — hardware deposit (net 30)",
     },
     aiConfidencePercent: 81,
     aiReasoning:
-      "AI confidence: 81%. Inbound amount matches open AR; Greek legal name normalized from statement descriptor. Verify IBAN beneficiary matches Ακρίδας ΑΕ.",
+      "AI confidence: 81%. Inbound amount matches open AR; corporate name matches beneficiary reference.",
   },
   {
     id: "rec-pend-05",
@@ -542,6 +548,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       glAccount: "65320 — Payment Processing Fees",
       invoiceCategory: "fee",
       counterpartyKind: "vendor",
+      invoiceSummary: "Processing batch FEE-MAR-026 — card presentments",
     },
     aiConfidencePercent: 58,
     aiReasoning:
@@ -573,6 +580,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       glAccount: "62810 — Cloud Infrastructure",
       invoiceCategory: "subscription",
       counterpartyKind: "vendor",
+      invoiceSummary: "AWS-INV-2403-EU — usage + support (March)",
     },
     aiConfidencePercent: 45,
     aiReasoning:
@@ -585,10 +593,10 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       date: "2026-03-11",
       amount: 2200.0,
       currency: "EUR",
-      merchant: "ΝΕΟ ΣΧΗΜΑ ΑΕ",
+      merchant: "VERTEX ANALYTICS BV",
       rawDescriptor:
-        "SEPA INST ΝΕΟ ΣΧΗΜΑ ΑΕ REF AR-MAR-2200/2026 BENEF REF 77102",
-      displayDescriptor: "Inbound SEPA · Νέο Σχήμα · €2,200",
+        "SEPA INST VERTEX ANALYTICS BV AMSTERDAM REF AR-MAR-2200/2026 BENEF REF 77102",
+      displayDescriptor: "Inbound SEPA · Vertex Analytics · €2,200",
       bankId: "eurobank",
       maskedAccount: "•••• 7733",
     },
@@ -596,7 +604,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       id: "rar-07",
       invoiceNumber: "AR-2026-0210",
       dueDate: "2026-03-18",
-      counterpartyName: "Νέο Σχήμα ΑΕ",
+      counterpartyName: "Vertex Analytics BV",
       totalAmount: 2200.0,
       currency: "EUR",
       role: "AR",
@@ -604,10 +612,11 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       glAccount: "12000 — Trade Receivables",
       invoiceCategory: "receivable",
       counterpartyKind: "customer",
+      invoiceSummary: "Wire ref AR-MAR-2200 — milestone 2 invoice",
     },
     aiConfidencePercent: 76,
     aiReasoning:
-      "AI confidence: 76%. Inbound wire matches open AR; Greek corporate name variant on statement.",
+      "AI confidence: 76%. Inbound wire matches open AR; beneficiary matches Vertex Analytics.",
   },
   {
     id: "rec-pend-08",
@@ -635,6 +644,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       glAccount: "62810 — Software & SaaS",
       invoiceCategory: "subscription",
       counterpartyKind: "vendor",
+      invoiceSummary: "GSUITE-ORG-031 — 42 licensed users",
     },
     aiConfidencePercent: 92,
     aiReasoning:
@@ -666,6 +676,7 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       glAccount: "99990 — Suspense",
       invoiceCategory: "other",
       counterpartyKind: "other",
+      invoiceSummary: "Suspense match — awaiting vendor master update",
     },
     aiConfidencePercent: 38,
     aiReasoning:
@@ -701,6 +712,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         glAccount: "65320 — Payment Processing Fees",
         invoiceCategory: "fee",
         counterpartyKind: "vendor",
+        invoiceSummary: "Card presentment STRP-8840 — fee schedule A",
       },
     },
     {
@@ -710,10 +722,10 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         date: "2026-03-05",
         amount: -3200.0,
         currency: "EUR",
-        merchant: "ΦΩΤΟΔΕΝΤΡΟ ΙΚΕ",
+        merchant: "BRIGHTLEAF DIGITAL INC",
         rawDescriptor:
-          "SEPA CT ΦΩΤΟΔΕΝΤΡΟ ΙΚΕ ATHENS REF AP-MKT-112/2026 ENDTOEND GR12PIR...",
-        displayDescriptor: "SEPA CT · Φωτόδεντρο · ref AP-MKT-112",
+          "SEPA CT BRIGHTLEAF DIGITAL INC CHICAGO REF AP-MKT-112/2026 ENDTOEND US12CHI...",
+        displayDescriptor: "SEPA CT · Brightleaf Digital · ref AP-MKT-112",
         bankId: "piraeus",
         maskedAccount: "•••• 1204",
       },
@@ -721,7 +733,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         id: "rap-auto-02",
         invoiceNumber: "AP-MKT-112",
         dueDate: "2026-03-05",
-        counterpartyName: "Φωτόδεντρο Μονοπρόσωπη ΙΚΕ",
+        counterpartyName: "Brightleaf Digital Inc",
         totalAmount: 3200.0,
         currency: "EUR",
         role: "AP",
@@ -729,6 +741,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         glAccount: "62000 — Marketing & Advertising",
         invoiceCategory: "services",
         counterpartyKind: "vendor",
+        invoiceSummary: "Campaign sprint Q1 — paid social + creative",
       },
     },
     {
@@ -757,6 +770,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         glAccount: "40110 — Subscription Revenue",
         invoiceCategory: "receivable",
         counterpartyKind: "customer",
+        invoiceSummary: "INV000000401 — logistics subscription (partial pay)",
       },
     },
     {
@@ -786,6 +800,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         glAccount: "62850 — Logistics & Customs",
         invoiceCategory: "logistics",
         counterpartyKind: "vendor",
+        invoiceSummary: "Customs clearance batch — port fees March",
       },
     },
     {
@@ -814,6 +829,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         glAccount: "62810 — Software & SaaS",
         invoiceCategory: "subscription",
         counterpartyKind: "vendor",
+        invoiceSummary: "NOTION-TEAM-0226 — Business plan renewal",
       },
     },
     {
@@ -842,6 +858,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         glAccount: "40110 — Subscription Revenue",
         invoiceCategory: "receivable",
         counterpartyKind: "customer",
+        invoiceSummary: "SaaS invoice INV-AR-3100 — annual prepay",
       },
     },
     {
@@ -870,6 +887,7 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         glAccount: "62810 — Software & SaaS",
         invoiceCategory: "subscription",
         counterpartyKind: "vendor",
+        invoiceSummary: "Heroku dynos + Postgres — February cycle",
       },
     },
   ];
