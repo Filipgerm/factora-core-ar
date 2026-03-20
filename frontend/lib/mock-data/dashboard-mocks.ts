@@ -588,3 +588,196 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
       },
     },
   ];
+
+/* -----------------------------------------------------------------------------
+   Home dashboard — Agentic command center
+   ----------------------------------------------------------------------------- */
+
+export type HomeActionUrgency = "default" | "attention" | "critical";
+
+export interface HomeActionItem {
+  id: string;
+  /** Short label, e.g. "Uncategorized transactions" */
+  label: string;
+  count: number;
+  href: string;
+  urgency: HomeActionUrgency;
+}
+
+export interface HomeKpiSparkPoint {
+  i: number;
+  v: number;
+}
+
+export interface HomeKpiMetric {
+  id: string;
+  title: string;
+  /** Pre-formatted display value */
+  valueDisplay: string;
+  changePercent: number;
+  /** e.g. "vs last month" */
+  comparisonLabel: string;
+  sparkline: HomeKpiSparkPoint[];
+}
+
+export type HomeActivityIcon =
+  | "sparkles"
+  | "git-merge"
+  | "building"
+  | "file-text"
+  | "mail"
+  | "badge-check"
+  | "banknote";
+
+export interface HomeActivityItem {
+  id: string;
+  /** ISO timestamp */
+  at: string;
+  message: string;
+  icon: HomeActivityIcon;
+}
+
+export const mockHomeUserFirstName = "Filip";
+
+export const mockHomeActionItems: HomeActionItem[] = [
+  {
+    id: "act-01",
+    label: "Uncategorized transactions",
+    count: 3,
+    href: "/ledger",
+    urgency: "attention",
+  },
+  {
+    id: "act-02",
+    label: "Invoices pending reconciliation",
+    count: 5,
+    href: "/reconciliation",
+    urgency: "default",
+  },
+  {
+    id: "act-03",
+    label: "Overdue AR nudges to review",
+    count: 2,
+    href: "/ar-collections",
+    urgency: "critical",
+  },
+  {
+    id: "act-04",
+    label: "Bank connections need refresh",
+    count: 1,
+    href: "/integrations",
+    urgency: "attention",
+  },
+];
+
+export const mockHomeKpiMetrics: HomeKpiMetric[] = [
+  {
+    id: "kpi-cash",
+    title: "Net cash flow (30d)",
+    valueDisplay: "€184,200",
+    changePercent: 12.4,
+    comparisonLabel: "vs prior month",
+    sparkline: [
+      { i: 0, v: 120 },
+      { i: 1, v: 132 },
+      { i: 2, v: 128 },
+      { i: 3, v: 145 },
+      { i: 4, v: 158 },
+      { i: 5, v: 172 },
+      { i: 6, v: 184 },
+    ],
+  },
+  {
+    id: "kpi-ar",
+    title: "Total outstanding AR",
+    valueDisplay: "€892,450",
+    changePercent: -4.1,
+    comparisonLabel: "vs prior month",
+    sparkline: [
+      { i: 0, v: 980 },
+      { i: 1, v: 965 },
+      { i: 2, v: 940 },
+      { i: 3, v: 920 },
+      { i: 4, v: 910 },
+      { i: 5, v: 902 },
+      { i: 6, v: 892 },
+    ],
+  },
+  {
+    id: "kpi-ap",
+    title: "Total pending AP",
+    valueDisplay: "€241,880",
+    changePercent: 6.8,
+    comparisonLabel: "vs prior month",
+    sparkline: [
+      { i: 0, v: 210 },
+      { i: 1, v: 218 },
+      { i: 2, v: 225 },
+      { i: 3, v: 230 },
+      { i: 4, v: 235 },
+      { i: 5, v: 238 },
+      { i: 6, v: 242 },
+    ],
+  },
+  {
+    id: "kpi-runway",
+    title: "Cash runway",
+    valueDisplay: "9.2 mo",
+    changePercent: 3.2,
+    comparisonLabel: "vs prior month",
+    sparkline: [
+      { i: 0, v: 8.1 },
+      { i: 1, v: 8.3 },
+      { i: 2, v: 8.4 },
+      { i: 3, v: 8.6 },
+      { i: 4, v: 8.8 },
+      { i: 5, v: 9.0 },
+      { i: 6, v: 9.2 },
+    ],
+  },
+];
+
+export const mockHomeActivityFeed: HomeActivityItem[] = [
+  {
+    id: "feed-01",
+    at: "2026-03-20T09:14:00.000Z",
+    message: 'Agent categorized "SPOTIFY AB" as Software',
+    icon: "sparkles",
+  },
+  {
+    id: "feed-02",
+    at: "2026-03-20T08:52:00.000Z",
+    message: "Stripe payout reconciled to AR-2026-0188",
+    icon: "git-merge",
+  },
+  {
+    id: "feed-03",
+    at: "2026-03-20T08:10:00.000Z",
+    message: "New GEMI registry data synced for Ακρίδας ΑΕ",
+    icon: "building",
+  },
+  {
+    id: "feed-04",
+    at: "2026-03-19T17:22:00.000Z",
+    message: "Invoice INV-2026-0156 flagged for human category review",
+    icon: "file-text",
+  },
+  {
+    id: "feed-05",
+    at: "2026-03-19T15:05:00.000Z",
+    message: "Collections agent drafted follow-up for Orpheus Cloud IKE",
+    icon: "mail",
+  },
+  {
+    id: "feed-06",
+    at: "2026-03-19T11:40:00.000Z",
+    message: "SEPA import validated — 42 transactions ingested",
+    icon: "badge-check",
+  },
+  {
+    id: "feed-07",
+    at: "2026-03-19T09:00:00.000Z",
+    message: "Cash position snapshot exported to CSV",
+    icon: "banknote",
+  },
+];
