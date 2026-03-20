@@ -310,48 +310,57 @@ export function ReconciliationView() {
           <div
             className={cn(
               RECON_BANK_INNER,
-              "border-border/30 bg-white py-1.5 dark:bg-background"
+              "border-border/30 bg-white dark:bg-background"
             )}
           >
-            <span className={cn(LEDGER_TH, "md:pt-1")}>Date</span>
-            <div className="flex items-end gap-1.5">
-              <div className="size-6 shrink-0" aria-hidden />
-              <span className={cn(LEDGER_TH, "pb-0.5")}>Payer</span>
+            <span className={cn(LEDGER_TH, "flex items-center")}>Date</span>
+            <div className="flex items-center gap-1.5">
+              <div className="size-5 shrink-0" aria-hidden />
+              <span className={LEDGER_TH}>Payer</span>
             </div>
-            <span className={cn(LEDGER_TH, "text-center md:pt-1")}>
+            <span
+              className={cn(LEDGER_TH, "flex items-center justify-center text-center")}
+            >
               Account
             </span>
-            <span className={cn(LEDGER_TH, "text-left md:text-right md:pt-1")}>
+            <span
+              className={cn(LEDGER_TH, "flex items-center justify-end text-right")}
+            >
               Amount
             </span>
           </div>
           <div
             className={cn(
               RECON_BOOK_INNER,
-              "border-l border-border/60 bg-slate-50/90 py-1.5 shadow-[-4px_0_12px_rgba(0,0,0,0.02)] dark:bg-slate-900/30"
+              "border-l border-border/60 bg-slate-50/90 shadow-[-4px_0_12px_rgba(0,0,0,0.02)] dark:bg-slate-900/30"
             )}
           >
             <span
               className={cn(
                 LEDGER_TH,
-                "flex justify-center pt-1 text-center leading-tight"
+                "flex items-center justify-center text-center leading-tight"
               )}
             >
               Type
             </span>
-            <span className={cn(LEDGER_TH, "pt-1 leading-tight")}>
+            <span className={cn(LEDGER_TH, "flex items-center leading-tight")}>
               Vendor / Customer / Other
             </span>
-            <span className={cn(LEDGER_TH, "pt-1 leading-tight")}>
+            <span className={cn(LEDGER_TH, "flex items-center leading-tight")}>
               GL Account
             </span>
-            <span className={cn(LEDGER_TH, "text-left md:text-right md:pt-1")}>
+            <span
+              className={cn(
+                LEDGER_TH,
+                "flex items-center justify-end text-right leading-tight"
+              )}
+            >
               Amount
             </span>
             <span
               className={cn(
                 LEDGER_TH,
-                "text-center leading-tight md:pt-1"
+                "flex items-center justify-center text-center leading-tight"
               )}
             >
               AI
