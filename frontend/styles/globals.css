@@ -37,19 +37,20 @@
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: oklch(0.93 0.004 250);
+  --input: oklch(0.94 0.004 250);
   --ring: var(--brand-primary);
-  --radius: 0.625rem;
+  /* Modern app chrome — slightly larger radius, softer edges */
+  --radius: 0.75rem;
 
-  /* SIDEBAR DEFAULTS */
-  --sidebar: oklch(0.99 0 0);
-  --sidebar-foreground: oklch(0.15 0 0);
+  /* SIDEBAR DEFAULTS — airy, light rail */
+  --sidebar: oklch(0.985 0.002 250);
+  --sidebar-foreground: oklch(0.22 0.02 250);
   --sidebar-primary: var(--brand-primary);
-  --sidebar-primary-foreground: #f9fafb;
-  --sidebar-accent: oklch(0.96 0 0);
-  --sidebar-accent-foreground: var(--brand-primary);
-  --sidebar-border: oklch(0.92 0 0);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.02 200);
+  --sidebar-accent-foreground: oklch(0.35 0.08 200);
+  --sidebar-border: oklch(0.93 0.006 250);
   --sidebar-ring: var(--brand-primary);
   --sidebar-muted-foreground: oklch(0.55 0 0);
 
@@ -89,26 +90,26 @@
    Overrides the root tokens when wrapped inside the `.dashboard-theme` class
    ============================================================================= */
 .dashboard-theme {
-  /* Factora's Exact Palette */
-  --background: oklch(0.98 0.005 240);
-  --foreground: oklch(0.15 0.02 240);
+  /* Canvas: off-white app shell; cards stay pure white via --card */
+  --background: oklch(0.978 0.004 250);
+  --foreground: oklch(0.2 0.02 250);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.02 240);
+  --card-foreground: oklch(0.2 0.02 250);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.02 240);
+  --popover-foreground: oklch(0.2 0.02 250);
 
-  /* Made Factora's Teal the absolute primary for buttons */
   --primary: oklch(0.58 0.12 180);
-  --primary-foreground: oklch(0.98 0.005 240);
+  --primary-foreground: oklch(0.99 0.005 250);
 
-  --secondary: oklch(0.28 0.06 200);
-  --secondary-foreground: oklch(0.98 0.005 240);
-  --muted: oklch(0.96 0.01 240);
-  --muted-foreground: oklch(0.55 0.02 240);
-  --accent: oklch(0.58 0.12 180);
-  --accent-foreground: oklch(0.98 0.005 240);
-  --border: oklch(0.92 0.01 240);
-  --input: oklch(0.96 0.01 240);
+  --secondary: oklch(0.96 0.01 250);
+  --secondary-foreground: oklch(0.28 0.04 250);
+  --muted: oklch(0.965 0.006 250);
+  --muted-foreground: oklch(0.52 0.02 250);
+  --accent: oklch(0.94 0.03 190);
+  --accent-foreground: oklch(0.28 0.08 190);
+  /* Ultra-subtle borders (~ slate-100) */
+  --border: oklch(0.93 0.006 250);
+  --input: oklch(0.94 0.006 250);
   --ring: oklch(0.58 0.12 180);
 
   /* Overriding the "Brand" variables so any component using them turns Teal inside the Dashboard */
@@ -121,16 +122,16 @@
   --brand-grad-start: #071a33; /* Factora Navy */
   --brand-grad-end: #133b4f;
 
-  /* Factora Sidebar Colors */
-  --sidebar: oklch(0.18 0.08 210);
-  --sidebar-foreground: oklch(0.85 0.02 240);
-  --sidebar-primary: oklch(0.58 0.12 180); /* Teal active tabs */
-  --sidebar-primary-foreground: oklch(0.98 0.005 240);
-  --sidebar-accent: oklch(0.28 0.06 200);
-  --sidebar-accent-foreground: oklch(0.85 0.02 240);
-  --sidebar-border: oklch(0.28 0.06 200);
+  /* Light, airy sidebar — ~ hsl(0 0% 98%) rail */
+  --sidebar: oklch(0.985 0.003 250);
+  --sidebar-foreground: oklch(0.28 0.03 250);
+  --sidebar-primary: oklch(0.58 0.12 180);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.04 185);
+  --sidebar-accent-foreground: oklch(0.32 0.1 185);
+  --sidebar-border: oklch(0.92 0.008 250);
   --sidebar-ring: oklch(0.58 0.12 180);
-  --sidebar-muted-foreground: oklch(0.65 0.02 240);
+  --sidebar-muted-foreground: oklch(0.52 0.02 250);
 
   /* Factora Chart Colors */
   --chart-1: oklch(0.58 0.12 180); /* Teal */
