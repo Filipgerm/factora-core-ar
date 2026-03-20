@@ -1,9 +1,0 @@
-{
-  "kpis": [
-    {"label": "Total Revenue", "currency": "€", "digits": 2},
-    {"label": "Total Expenses", "currency": "€", "digits": 2},
-    {"label": "Average Monthly Cash Flow", "currency": "€", "digits": 2},
-    {"label": "Cash Flow Volatility Index", "suffix": "%"}
-  ]
-}
-
