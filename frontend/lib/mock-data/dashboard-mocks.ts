@@ -602,6 +602,8 @@ export interface HomeActionItem {
   count: number;
   href: string;
   urgency: HomeActionUrgency;
+  /** Subtle AI glow / gradient treatment */
+  aiRelated?: boolean;
 }
 
 export interface HomeKpiSparkPoint {
@@ -609,15 +611,25 @@ export interface HomeKpiSparkPoint {
   v: number;
 }
 
+/** How to format the animated numeric value */
+export type HomeKpiFormatKey =
+  | "eur_millions"
+  | "eur_integer"
+  | "months_1dp";
+
 export interface HomeKpiMetric {
   id: string;
   title: string;
-  /** Pre-formatted display value */
-  valueDisplay: string;
+  /** Layout tier: primary = large hero KPIs (ARR, outstanding AR) */
+  tier: "primary" | "secondary";
+  /** Numeric target for count-up animation */
+  animateTarget: number;
+  formatKey: HomeKpiFormatKey;
   changePercent: number;
-  /** e.g. "vs last month" */
   comparisonLabel: string;
   sparkline: HomeKpiSparkPoint[];
+  /** e.g. "As of 31 Jan 2026" */
+  asOfLabel?: string;
 }
 
 export type HomeActivityIcon =
@@ -642,10 +654,11 @@ export const mockHomeUserFirstName = "Filip";
 export const mockHomeActionItems: HomeActionItem[] = [
   {
     id: "act-01",
-    label: "Uncategorized transactions",
+    label: "AI categorization pending · uncategorized transactions",
     count: 3,
     href: "/ledger",
     urgency: "attention",
+    aiRelated: true,
   },
   {
     id: "act-02",
@@ -653,6 +666,7 @@ export const mockHomeActionItems: HomeActionItem[] = [
     count: 5,
     href: "/reconciliation",
     urgency: "default",
+    aiRelated: true,
   },
   {
     id: "act-03",
@@ -660,6 +674,7 @@ export const mockHomeActionItems: HomeActionItem[] = [
     count: 2,
     href: "/ar-collections",
     urgency: "critical",
+    aiRelated: true,
   },
   {
     id: "act-04",
@@ -672,67 +687,95 @@ export const mockHomeActionItems: HomeActionItem[] = [
 
 export const mockHomeKpiMetrics: HomeKpiMetric[] = [
   {
-    id: "kpi-cash",
-    title: "Net cash flow (30d)",
-    valueDisplay: "€184,200",
-    changePercent: 12.4,
+    id: "kpi-arr",
+    title: "ARR",
+    tier: "primary",
+    animateTarget: 4.24,
+    formatKey: "eur_millions",
+    changePercent: 11.2,
     comparisonLabel: "vs prior month",
+    asOfLabel: "As of 31 Jan 2026",
     sparkline: [
-      { i: 0, v: 120 },
-      { i: 1, v: 132 },
-      { i: 2, v: 128 },
-      { i: 3, v: 145 },
-      { i: 4, v: 158 },
-      { i: 5, v: 172 },
-      { i: 6, v: 184 },
+      { i: 0, v: 3.2 },
+      { i: 1, v: 3.35 },
+      { i: 2, v: 3.5 },
+      { i: 3, v: 3.72 },
+      { i: 4, v: 3.9 },
+      { i: 5, v: 4.05 },
+      { i: 6, v: 4.24 },
     ],
   },
   {
-    id: "kpi-ar",
-    title: "Total outstanding AR",
-    valueDisplay: "€892,450",
-    changePercent: -4.1,
+    id: "kpi-oar",
+    title: "Outstanding AR",
+    tier: "primary",
+    animateTarget: 892_450,
+    formatKey: "eur_integer",
+    changePercent: -3.8,
     comparisonLabel: "vs prior month",
+    asOfLabel: "As of 31 Jan 2026",
     sparkline: [
       { i: 0, v: 980 },
       { i: 1, v: 965 },
       { i: 2, v: 940 },
-      { i: 3, v: 920 },
-      { i: 4, v: 910 },
-      { i: 5, v: 902 },
+      { i: 3, v: 930 },
+      { i: 4, v: 915 },
+      { i: 5, v: 905 },
       { i: 6, v: 892 },
     ],
   },
   {
-    id: "kpi-ap",
-    title: "Total pending AP",
-    valueDisplay: "€241,880",
-    changePercent: 6.8,
+    id: "kpi-runway",
+    title: "Runway",
+    tier: "secondary",
+    animateTarget: 9.2,
+    formatKey: "months_1dp",
+    changePercent: 4.5,
     comparisonLabel: "vs prior month",
     sparkline: [
-      { i: 0, v: 210 },
-      { i: 1, v: 218 },
-      { i: 2, v: 225 },
-      { i: 3, v: 230 },
-      { i: 4, v: 235 },
-      { i: 5, v: 238 },
-      { i: 6, v: 242 },
+      { i: 0, v: 7.8 },
+      { i: 1, v: 8.0 },
+      { i: 2, v: 8.2 },
+      { i: 3, v: 8.5 },
+      { i: 4, v: 8.7 },
+      { i: 5, v: 8.95 },
+      { i: 6, v: 9.2 },
     ],
   },
   {
-    id: "kpi-runway",
-    title: "Cash runway",
-    valueDisplay: "9.2 mo",
-    changePercent: 3.2,
+    id: "kpi-net-burn",
+    title: "Net burn",
+    tier: "secondary",
+    animateTarget: 151_200,
+    formatKey: "eur_integer",
+    changePercent: -6.2,
     comparisonLabel: "vs prior month",
     sparkline: [
-      { i: 0, v: 8.1 },
-      { i: 1, v: 8.3 },
-      { i: 2, v: 8.4 },
-      { i: 3, v: 8.6 },
-      { i: 4, v: 8.8 },
-      { i: 5, v: 9.0 },
-      { i: 6, v: 9.2 },
+      { i: 0, v: 168 },
+      { i: 1, v: 165 },
+      { i: 2, v: 162 },
+      { i: 3, v: 158 },
+      { i: 4, v: 156 },
+      { i: 5, v: 154 },
+      { i: 6, v: 151 },
+    ],
+  },
+  {
+    id: "kpi-cash",
+    title: "Cash balance",
+    tier: "secondary",
+    animateTarget: 1_180_000,
+    formatKey: "eur_integer",
+    changePercent: 8.1,
+    comparisonLabel: "vs prior month",
+    sparkline: [
+      { i: 0, v: 980 },
+      { i: 1, v: 1020 },
+      { i: 2, v: 1050 },
+      { i: 3, v: 1080 },
+      { i: 4, v: 1120 },
+      { i: 5, v: 1150 },
+      { i: 6, v: 1180 },
     ],
   },
 ];

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 
 import type { HomeActionItem } from "@/lib/mock-data/dashboard-mocks";
@@ -11,23 +12,37 @@ function urgencyStyles(urgency: HomeActionItem["urgency"]) {
   switch (urgency) {
     case "critical":
       return {
-        border: "border-l-destructive",
-        hover:
-          "hover:border-destructive/40 hover:bg-destructive/[0.04] hover:shadow-sm",
+        inner:
+          "border-l-destructive hover:border-destructive/50 hover:bg-destructive/[0.03]",
       };
     case "attention":
       return {
-        border: "border-l-[var(--brand-primary)]",
-        hover:
-          "hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-subtle)]/45 hover:shadow-sm",
+        inner:
+          "border-l-[var(--brand-primary)] hover:border-[var(--brand-primary)]/80 hover:bg-[var(--brand-primary-subtle)]/35",
       };
     default:
       return {
-        border: "border-l-slate-200 dark:border-l-slate-700",
-        hover:
-          "hover:border-l-slate-400 hover:bg-slate-50/90 hover:shadow-sm dark:hover:bg-slate-900/40",
+        inner:
+          "border-l-border hover:border-l-muted-foreground/40 hover:bg-muted/30",
       };
   }
+}
+
+function AiGlowShell({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      className="rounded-xl p-[1px]"
+      style={{
+        backgroundImage:
+          "linear-gradient(110deg, rgba(167,139,250,0.45), rgba(129,140,248,0.55), rgba(192,132,252,0.45), rgba(129,140,248,0.5))",
+        backgroundSize: "260% 100%",
+      }}
+      animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+      transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+    >
+      {children}
+    </motion.div>
+  );
 }
 
 interface ActionItemsListProps {
@@ -37,40 +52,48 @@ interface ActionItemsListProps {
 export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsListProps) {
   if (items.length === 0) {
     return (
-      <div className="rounded-xl border-2 border-dashed border-slate-200 bg-card/40 px-6 py-10 text-center transition-all duration-200 dark:border-slate-700">
-        <p className="text-sm font-medium text-foreground">All clear</p>
-        <p className="mt-1 text-sm text-muted-foreground">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/5 p-10 text-center"
+      >
+        <p className="text-sm font-medium tracking-tight text-foreground">All clear</p>
+        <p className="mt-1 text-sm tracking-tight text-muted-foreground">
           No open action items — agents will surface new tasks here.
         </p>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-card shadow-sm transition-all duration-200 dark:border-slate-800">
-      <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+      className="overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card to-muted/15 shadow-sm dark:to-muted/10"
+    >
+      <div className="border-b border-border/30 px-8 py-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Needs your attention
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          AI-surfaced tasks — click to jump to the right workspace.
+        <p className="mt-1 text-xs tracking-tight text-muted-foreground">
+          AI-surfaced tasks — click through to resolve.
         </p>
       </div>
-      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-        {items.map((item) => {
-          const u = urgencyStyles(item.urgency);
-          return (
-            <li key={item.id}>
+      <ul className="flex flex-col gap-2 p-3">
+        <AnimatePresence initial={false}>
+          {items.map((item, i) => {
+            const u = urgencyStyles(item.urgency);
+            const linkInner = (
               <Link
                 href={item.href}
                 className={cn(
-                  "group flex items-center gap-4 border-l-4 bg-transparent px-5 py-3.5 transition-all duration-200",
-                  u.border,
-                  u.hover
+                  "group flex items-center gap-4 border-l-4 bg-gradient-to-r from-card to-transparent px-6 py-5 transition-colors duration-200",
+                  u.inner
                 )}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground transition-colors duration-200 group-hover:text-[var(--brand-primary)]">
+                  <p className="text-sm font-medium tracking-tight text-foreground transition-colors duration-200 group-hover:text-[var(--brand-primary)]">
                     {item.label}
                   </p>
                 </div>
@@ -81,10 +104,48 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
                   <ChevronRight className="size-4 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
                 </span>
               </Link>
-            </li>
-          );
-        })}
+            );
+
+            return (
+              <motion.li
+                key={item.id}
+                layout
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{
+                  delay: 0.22 + i * 0.05,
+                  duration: 0.38,
+                  ease: [0.16, 1, 0.3, 1],
+                }}
+              >
+                {item.aiRelated ? (
+                  <AiGlowShell>
+                    <div className="overflow-hidden rounded-[11px] border border-purple-200/35 bg-purple-50/40 dark:border-purple-900/35 dark:bg-purple-950/25">
+                      <motion.div
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.995 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 28 }}
+                      >
+                        {linkInner}
+                      </motion.div>
+                    </div>
+                  </AiGlowShell>
+                ) : (
+                  <motion.div
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.995 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 28 }}
+                    className="overflow-hidden rounded-xl border border-border/25 bg-card/80"
+                  >
+                    {linkInner}
+                  </motion.div>
+                )}
+              </motion.li>
+            );
+          })}
+        </AnimatePresence>
       </ul>
-    </section>
+    </motion.section>
   );
 }

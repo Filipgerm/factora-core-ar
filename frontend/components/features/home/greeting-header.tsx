@@ -20,13 +20,15 @@ export function GreetingHeader() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+      <h1 className="text-3xl font-semibold tracking-tighter text-foreground md:text-4xl">
         {greeting},{" "}
-        <span className="text-[var(--brand-primary)]">{mockHomeUserFirstName}</span>
+        <span className="bg-gradient-to-r from-[var(--brand-primary)] to-teal-600/90 bg-clip-text text-transparent dark:to-teal-400/90">
+          {mockHomeUserFirstName}
+        </span>
       </h1>
-      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-        Your agentic command center — prioritized actions, cash health, and what
-        changed since you last looked.
+      <p className="mt-3 max-w-xl text-sm leading-relaxed tracking-tight text-muted-foreground">
+        Command center for cash, collections, and agent workflows — tuned for
+        how European finance teams actually work.
       </p>
     </div>
   );

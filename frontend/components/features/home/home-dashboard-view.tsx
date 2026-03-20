@@ -1,23 +1,22 @@
 "use client";
 
 import { ActionItemsList } from "@/components/features/home/action-items-list";
-import { GreetingHeader } from "@/components/features/home/greeting-header";
-import { MetricsOverview } from "@/components/features/home/metrics-overview";
+import { HomeHeroCard } from "@/components/features/home/home-hero-card";
+import { HomeKpiBento } from "@/components/features/home/home-kpi-bento";
 import { RecentActivityFeed } from "@/components/features/home/recent-activity-feed";
 
 export function HomeDashboardView() {
   return (
-    <div className="space-y-8">
-      <GreetingHeader />
+    <div className="grid grid-cols-12 gap-4 md:gap-5 lg:gap-6">
+      <HomeHeroCard />
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:items-start">
-        <div className="space-y-8">
-          <ActionItemsList />
-          <MetricsOverview />
-        </div>
-        <aside className="lg:sticky lg:top-[4.5rem]">
-          <RecentActivityFeed />
-        </aside>
+      <HomeKpiBento />
+
+      <div className="col-span-12 lg:col-span-7">
+        <ActionItemsList />
+      </div>
+      <div className="col-span-12 lg:col-span-5">
+        <RecentActivityFeed className="lg:sticky lg:top-[4.75rem]" />
       </div>
     </div>
   );

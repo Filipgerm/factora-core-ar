@@ -42,7 +42,7 @@ export function KpiSparkline({
             cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
             content={({ active, payload }) =>
               active && payload?.[0] ? (
-                <div className="rounded-md border border-slate-200 bg-popover px-2 py-1 text-xs shadow-sm">
+                <div className="rounded-md border border-border/50 bg-popover/95 px-2 py-1 text-xs shadow-sm backdrop-blur-sm">
                   <span className="tabular-nums text-foreground">
                     {Number(payload[0].value).toLocaleString("el-GR", {
                       maximumFractionDigits: 1,
