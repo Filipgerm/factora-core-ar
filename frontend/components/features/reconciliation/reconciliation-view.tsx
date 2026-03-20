@@ -313,8 +313,15 @@ export function ReconciliationView() {
               "border-border/30 bg-white dark:bg-background"
             )}
           >
-            <span className={cn(LEDGER_TH, "flex items-center")}>Date</span>
-            <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                LEDGER_TH,
+                "flex items-center justify-center text-center"
+              )}
+            >
+              Date
+            </span>
+            <div className="flex items-center justify-center gap-1.5 text-center">
               <div className="size-5 shrink-0" aria-hidden />
               <span className={LEDGER_TH}>Payer</span>
             </div>
@@ -324,7 +331,10 @@ export function ReconciliationView() {
               Account
             </span>
             <span
-              className={cn(LEDGER_TH, "flex items-center justify-end text-right")}
+              className={cn(
+                LEDGER_TH,
+                "flex items-center justify-center text-center"
+              )}
             >
               Amount
             </span>
@@ -343,16 +353,26 @@ export function ReconciliationView() {
             >
               Type
             </span>
-            <span className={cn(LEDGER_TH, "flex items-center leading-tight")}>
+            <span
+              className={cn(
+                LEDGER_TH,
+                "flex items-center justify-center text-center leading-tight"
+              )}
+            >
               Vendor / Customer / Other
             </span>
-            <span className={cn(LEDGER_TH, "flex items-center leading-tight")}>
+            <span
+              className={cn(
+                LEDGER_TH,
+                "flex items-center justify-center text-center leading-tight"
+              )}
+            >
               GL Account
             </span>
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-end text-right leading-tight"
+                "flex items-center justify-center text-center leading-tight"
               )}
             >
               Amount

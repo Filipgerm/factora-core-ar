@@ -13,8 +13,15 @@ export function LedgerInvoiceCell({
   invoice,
   dense = true,
 }: LedgerInvoiceCellProps) {
-  const { invoiceNumber, dueDate, counterpartyName, totalAmount, role, status } =
-    invoice;
+  const {
+    invoiceNumber,
+    dueDate,
+    counterpartyName,
+    totalAmount,
+    role,
+    status,
+    invoiceSummary,
+  } = invoice;
 
   return (
     <div className={cn(dense ? "py-2 pl-2 pr-3 md:pl-3 md:pr-3" : "p-4")}>
@@ -39,7 +46,10 @@ export function LedgerInvoiceCell({
           {status}
         </Badge>
       </div>
-      <p className="mt-1 font-mono text-[13px] tabular-nums tracking-tight text-muted-foreground">
+      <p className="mt-1 font-mono text-[12px] leading-snug tracking-tight text-muted-foreground">
+        {invoiceSummary}
+      </p>
+      <p className="mt-0.5 font-mono text-[11px] tabular-nums tracking-tight text-muted-foreground/90">
         {invoiceNumber}
       </p>
       <p
