@@ -6,6 +6,7 @@ import {
   BookOpen,
   CreditCard,
   GitMerge,
+  Home,
   Layers,
   Plug,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV = [
+  { href: "/home", label: "Home", icon: Home },
   { href: "/ledger", label: "Smart Ledger", icon: Layers },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/reconciliation", label: "Reconciliation", icon: GitMerge },
@@ -26,7 +28,7 @@ export function AppSidebar() {
     <aside className="flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-[4px_0_28px_-12px_rgba(7,26,51,0.35)]">
       <div className="flex h-14 items-center border-b border-sidebar-border px-4">
         <Link
-          href="/ledger"
+          href="/home"
           className="text-lg font-semibold tracking-tight text-sidebar-foreground transition-all duration-200 hover:text-[var(--sidebar-primary)]"
         >
           Factora

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 
 const TITLE_BY_PREFIX: { prefix: string; title: string }[] = [
+  { prefix: "/home", title: "Home" },
   { prefix: "/ledger", title: "Smart Ledger" },
   { prefix: "/integrations", title: "Integrations" },
   { prefix: "/reconciliation", title: "Reconciliation" },
