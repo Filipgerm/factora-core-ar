@@ -53,7 +53,11 @@ export function AnimatedMetricValue({
       <motion.span
         initial={{ opacity: 0.65 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.35 }}
+        transition={{
+          type: "spring",
+          stiffness: 720,
+          damping: 48,
+        }}
       >
         {text}
       </motion.span>

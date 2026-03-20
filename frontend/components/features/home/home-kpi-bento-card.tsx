@@ -7,6 +7,8 @@ import { KpiArrAreaChart } from "@/components/features/home/kpi-arr-area-chart";
 import type { HomeKpiMetric } from "@/lib/mock-data/dashboard-mocks";
 import { cn } from "@/lib/utils";
 
+const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
+
 function formatDelta(pct: number): string {
   const sign = pct > 0 ? "+" : "";
   return `${sign}${pct.toFixed(1)}%`;
@@ -29,16 +31,15 @@ export function HomeKpiBentoCard({
   return (
     <motion.article
       layout
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
-        delay: 0.05 + index * 0.05,
-        duration: 0.45,
-        ease: [0.16, 1, 0.3, 1],
+        ...SNAP_SPRING,
+        delay: 0.04 + index * 0.04,
       }}
-      whileHover={{ y: -2 }}
+      whileHover={{ y: -1 }}
       className={cn(
-        "h-full rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card to-muted/10 shadow-sm transition-all duration-300 ease-out hover:shadow-md dark:to-muted/5",
+        "h-full rounded-2xl border border-slate-100 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-14px_rgba(15,23,42,0.08)] transition-shadow duration-200 hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)]",
         isArr ? "p-6 lg:p-8" : "p-6"
       )}
     >

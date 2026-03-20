@@ -8,6 +8,8 @@ import type { HomeActionItem } from "@/lib/mock-data/dashboard-mocks";
 import { mockHomeActionItems } from "@/lib/mock-data/dashboard-mocks";
 import { cn } from "@/lib/utils";
 
+const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
+
 function urgencyStyles(urgency: HomeActionItem["urgency"]) {
   switch (urgency) {
     case "critical":
@@ -20,7 +22,7 @@ function urgencyStyles(urgency: HomeActionItem["urgency"]) {
       };
     default:
       return {
-        inner: "border-l-border",
+        inner: "border-l-slate-200",
       };
   }
 }
@@ -52,7 +54,7 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/5 p-10 text-center"
+        className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm"
       >
         <p className="text-sm font-medium tracking-tight text-foreground">All clear</p>
         <p className="mt-1 text-sm tracking-tight text-muted-foreground">
@@ -64,12 +66,12 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
 
   return (
     <motion.section
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-      className="overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card to-muted/15 shadow-sm dark:to-muted/10"
+      transition={{ ...SNAP_SPRING, delay: 0.14 }}
+      className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-14px_rgba(15,23,42,0.08)]"
     >
-      <div className="border-b border-border/40 bg-background/50 px-6 py-5 backdrop-blur-sm">
+      <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-5">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Needs your attention
         </h2>
@@ -85,7 +87,7 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
               <Link
                 href={item.href}
                 className={cn(
-                  "group flex items-center gap-3 border-l-4 bg-gradient-to-r from-card to-transparent px-4 py-3.5 transition-all duration-300 ease-out hover:bg-muted/50",
+                  "group flex items-center gap-3 border-l-4 bg-white px-4 py-3.5 transition-all duration-200 ease-out hover:bg-slate-50/90",
                   u.inner
                 )}
               >
@@ -111,18 +113,17 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                 transition={{
-                  delay: 0.22 + i * 0.05,
-                  duration: 0.38,
-                  ease: [0.16, 1, 0.3, 1],
+                  ...SNAP_SPRING,
+                  delay: 0.12 + i * 0.035,
                 }}
               >
                 {item.aiRelated ? (
                   <AiGlowShell>
-                    <div className="overflow-hidden rounded-[11px] border border-purple-200/35 bg-purple-50/40 dark:border-purple-900/35 dark:bg-purple-950/25">
+                    <div className="overflow-hidden rounded-[11px] border border-indigo-100/80 bg-indigo-50/30 dark:border-indigo-900/35 dark:bg-indigo-950/20">
                       <motion.div
-                        whileHover={{ scale: 1.01 }}
+                        whileHover={{ scale: 1.005 }}
                         whileTap={{ scale: 0.995 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 28 }}
+                        transition={SNAP_SPRING}
                       >
                         {linkInner}
                       </motion.div>
@@ -130,10 +131,10 @@ export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsList
                   </AiGlowShell>
                 ) : (
                   <motion.div
-                    whileHover={{ scale: 1.01 }}
+                    whileHover={{ scale: 1.005 }}
                     whileTap={{ scale: 0.995 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 28 }}
-                    className="overflow-hidden rounded-xl border border-border/25 bg-card/80"
+                    transition={SNAP_SPRING}
+                    className="overflow-hidden rounded-xl border border-slate-100 bg-white"
                   >
                     {linkInner}
                   </motion.div>
