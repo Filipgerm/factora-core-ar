@@ -1,21 +1,63 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { CircleDot, Sparkles } from "lucide-react";
 
 import { MatchDetailSheet } from "@/components/features/reconciliation/match-detail-sheet";
 import { ReconciliationEmptyState } from "@/components/features/reconciliation/reconciliation-empty-state";
 import { ReconciliationMatchRow } from "@/components/features/reconciliation/reconciliation-match-row";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ReconciliationPendingPair } from "@/lib/mock-data/dashboard-mocks";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type {
+  ReconciliationBankId,
+  ReconciliationPendingPair,
+} from "@/lib/mock-data/dashboard-mocks";
 import {
   mockReconciliationAutoMatchedPairs,
   mockReconciliationPendingPairs,
 } from "@/lib/mock-data/dashboard-mocks";
+import { cn } from "@/lib/utils";
 
 const HIGH_CONFIDENCE_THRESHOLD = 80;
-const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
+
+type MainTab = "action" | "matched";
+
+type ConfidenceFilter = "all" | "high" | "medium" | "none";
+
+const BANK_ACCOUNT_OPTIONS: { value: "all" | ReconciliationBankId; label: string }[] =
+  [
+    { value: "all", label: "All bank accounts" },
+    { value: "eurobank", label: "Eurobank" },
+    { value: "revolut", label: "Revolut" },
+    { value: "n26", label: "N26" },
+    { value: "deutschebank", label: "Deutsche Bank" },
+    { value: "piraeus", label: "Piraeus Bank" },
+  ];
+
+function matchesConfidence(
+  pct: number,
+  filter: ConfidenceFilter
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "high") return pct >= HIGH_CONFIDENCE_THRESHOLD;
+  if (filter === "medium")
+    return pct >= 50 && pct < HIGH_CONFIDENCE_THRESHOLD;
+  return pct < 50;
+}
+
+function matchesAccount<T extends { transaction: { bankId: ReconciliationBankId } }>(
+  pair: T,
+  account: "all" | ReconciliationBankId
+): boolean {
+  if (account === "all") return true;
+  return pair.transaction.bankId === account;
+}
 
 export function ReconciliationView() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
@@ -23,11 +65,35 @@ export function ReconciliationView() {
   const [activePair, setActivePair] = useState<ReconciliationPendingPair | null>(
     null
   );
+  const [mainTab, setMainTab] = useState<MainTab>("action");
+  const [accountFilter, setAccountFilter] = useState<"all" | ReconciliationBankId>(
+    "all"
+  );
+  const [confidenceFilter, setConfidenceFilter] =
+    useState<ConfidenceFilter>("all");
 
   const pendingVisible = useMemo(
     () =>
       mockReconciliationPendingPairs.filter((p) => !dismissedIds.has(p.id)),
     [dismissedIds]
+  );
+
+  const pendingFiltered = useMemo(
+    () =>
+      pendingVisible.filter(
+        (p) =>
+          matchesAccount(p, accountFilter) &&
+          matchesConfidence(p.aiConfidencePercent, confidenceFilter)
+      ),
+    [pendingVisible, accountFilter, confidenceFilter]
+  );
+
+  const matchedFiltered = useMemo(
+    () =>
+      mockReconciliationAutoMatchedPairs.filter((p) =>
+        matchesAccount(p, accountFilter)
+      ),
+    [accountFilter]
   );
 
   const highConfidencePending = useMemo(
@@ -74,156 +140,188 @@ export function ReconciliationView() {
     if (!open) setActivePair(null);
   }, []);
 
+  const confidencePills: {
+    id: ConfidenceFilter;
+    label: string;
+    icon?: ReactNode;
+    className?: string;
+  }[] = [
+    { id: "all", label: "All" },
+    {
+      id: "high",
+      label: "High",
+      icon: <Sparkles className="size-3 text-violet-600 dark:text-violet-400" />,
+    },
+    {
+      id: "medium",
+      label: "Medium",
+      icon: (
+        <CircleDot className="size-3 text-amber-600 dark:text-amber-400" />
+      ),
+    },
+    {
+      id: "none",
+      label: "No suggestion",
+      className: "text-muted-foreground",
+    },
+  ];
+
   return (
-    <LayoutGroup>
-      <div className="space-y-6 lg:space-y-8">
-        <motion.div
-          layout
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={SNAP_SPRING}
-          className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_14px_40px_-18px_rgba(15,23,42,0.1)] md:p-8"
-        >
-          <h2 className="text-lg font-semibold tracking-tight text-foreground md:text-xl">
-            AI reconciliation
-          </h2>
-          <p className="mt-2 max-w-3xl text-xs leading-relaxed tracking-tight text-muted-foreground md:text-sm">
-            Bank transactions aligned with AR and AP invoices. Review
-            low-confidence pairs, or browse auto-matched lines the agent already
-            locked.
-          </p>
-        </motion.div>
-
-        <Tabs defaultValue="review" className="gap-5">
-          <TabsList className="h-auto w-full flex-wrap gap-1 rounded-xl border border-slate-100 bg-white p-1.5 shadow-sm">
-            <TabsTrigger
-              value="review"
-              className="rounded-lg px-4 py-2 text-sm font-medium tracking-tight transition-all duration-200 data-[state=active]:bg-slate-50 data-[state=active]:shadow-sm"
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="sticky top-0 z-20 border-b border-border/60 bg-background/95 py-2 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Select
+              value={accountFilter}
+              onValueChange={(v) =>
+                setAccountFilter(v as "all" | ReconciliationBankId)
+              }
             >
-              Needs review
-              <span className="ml-2 rounded-md bg-amber-100/90 px-2 py-0.5 text-xs font-medium tabular-nums tracking-tight text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
-                {pendingVisible.length}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="auto"
-              className="rounded-lg px-4 py-2 text-sm font-medium tracking-tight transition-all duration-200 data-[state=active]:bg-slate-50 data-[state=active]:shadow-sm"
-            >
-              Auto-matched
-              <span className="ml-2 rounded-md bg-emerald-100/90 px-2 py-0.5 text-xs font-medium tabular-nums tracking-tight text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
-                {mockReconciliationAutoMatchedPairs.length}
-              </span>
-            </TabsTrigger>
-          </TabsList>
+              <SelectTrigger
+                size="sm"
+                className="h-8 w-[min(100%,11.5rem)] rounded-lg border-border/70 text-[12px] font-medium shadow-none"
+              >
+                <SelectValue placeholder="Accounts" />
+              </SelectTrigger>
+              <SelectContent>
+                {BANK_ACCOUNT_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value} className="text-xs">
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <TabsContent value="review" className="mt-0 outline-none">
-            {pendingVisible.length === 0 ? (
-              <ReconciliationEmptyState
-                title="Queue cleared"
-                description="No pending AI matches. New bank lines will appear here when the reconciliation agent proposes a link that needs your confirmation."
-              />
-            ) : (
-              <>
-                {highConfidencePending.length > 0 ? (
-                  <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs leading-relaxed tracking-tight text-muted-foreground">
-                      <span className="font-medium text-foreground">
-                        {highConfidencePending.length}
-                      </span>{" "}
-                      suggested match
-                      {highConfidencePending.length === 1 ? "" : "es"} at{" "}
-                      {HIGH_CONFIDENCE_THRESHOLD}%+ confidence — confirm in one
-                      action for faster month-end close.
-                    </p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="shrink-0 shadow-sm"
-                      onClick={() => bulkConfirmHighConfidence()}
-                    >
-                      Bulk confirm high-confidence matches
-                    </Button>
-                  </div>
-                ) : null}
+            <div className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/20 p-0.5">
+              <button
+                type="button"
+                onClick={() => setMainTab("action")}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium tabular-nums transition-all duration-200",
+                  mainTab === "action"
+                    ? "bg-rose-500/12 text-rose-900 shadow-sm dark:bg-rose-950/40 dark:text-rose-100"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Action needed ({pendingVisible.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setMainTab("matched")}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium tabular-nums transition-all duration-200",
+                  mainTab === "matched"
+                    ? "bg-emerald-500/12 text-emerald-900 shadow-sm dark:bg-emerald-950/40 dark:text-emerald-100"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Matched ({mockReconciliationAutoMatchedPairs.length})
+              </button>
+            </div>
 
-                <div className="mb-3 hidden grid-cols-[1fr_2.75rem_1fr] gap-0 border-b border-slate-100 pb-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:grid">
-                  <div className="pl-2">Bank feed</div>
-                  <div className="text-center" aria-hidden>
-                    ·
-                  </div>
-                  <div className="pl-1">Book · AR / AP</div>
-                </div>
-                <ul className="flex flex-col gap-3">
-                  <AnimatePresence initial={false} mode="popLayout">
-                    {pendingVisible.map((pair) => (
-                      <motion.li
-                        key={pair.id}
-                        layout
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, x: -10, transition: { duration: 0.22 } }}
-                        transition={{
-                          ...SNAP_SPRING,
-                          layout: { type: "spring", stiffness: 680, damping: 46 },
-                        }}
-                      >
-                        <ReconciliationMatchRow
-                          variant="pending"
-                          pair={pair}
-                          onSelect={openPair}
-                        />
-                      </motion.li>
-                    ))}
-                  </AnimatePresence>
-                </ul>
-              </>
+            {mainTab === "action" && highConfidencePending.length > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                onClick={() => bulkConfirmHighConfidence()}
+              >
+                Confirm all high ({highConfidencePending.length})
+              </Button>
+            ) : null}
+          </div>
+
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-1 transition-opacity duration-200",
+              mainTab === "matched" && "pointer-events-none opacity-40"
             )}
-          </TabsContent>
-
-          <TabsContent value="auto" className="mt-0 outline-none">
-            {mockReconciliationAutoMatchedPairs.length === 0 ? (
-              <ReconciliationEmptyState
-                title="No auto-matches yet"
-                description="When the agent posts high-confidence matches, they will show here with a green linked treatment."
-              />
-            ) : (
-              <>
-                <div className="mb-3 hidden grid-cols-[1fr_2.75rem_1fr] gap-0 border-b border-slate-100 pb-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:grid">
-                  <div className="pl-2">Bank feed</div>
-                  <div className="text-center" aria-hidden>
-                    ·
-                  </div>
-                  <div className="pl-1">Book · AR / AP</div>
-                </div>
-                <ul className="flex flex-col gap-3">
-                  {mockReconciliationAutoMatchedPairs.map((pair, i) => (
-                    <motion.li
-                      key={pair.id}
-                      layout
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{
-                        ...SNAP_SPRING,
-                        delay: Math.min(i * 0.025, 0.12),
-                      }}
-                    >
-                      <ReconciliationMatchRow variant="auto" pair={pair} />
-                    </motion.li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </TabsContent>
-        </Tabs>
-
-        <MatchDetailSheet
-          open={sheetOpen}
-          onOpenChange={onSheetOpenChange}
-          pair={activePair}
-          onConfirmMatch={handleConfirmMatch}
-          onRejectMatch={handleRejectMatch}
-        />
+            title={
+              mainTab === "matched"
+                ? "AI confidence filters apply to the action queue only"
+                : undefined
+            }
+          >
+            <span className="mr-1 hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+              AI
+            </span>
+            {confidencePills.map((pill) => (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => setConfidenceFilter(pill.id)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium tabular-nums transition-all duration-200",
+                  confidenceFilter === pill.id
+                    ? "border-primary/35 bg-primary/10 text-foreground shadow-sm"
+                    : "border-transparent bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  pill.className
+                )}
+              >
+                {pill.icon}
+                {pill.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-    </LayoutGroup>
+
+      {/* Dual-ledger column header */}
+      <div className="hidden md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(7.25rem,auto)] md:border-b md:border-border/50">
+        <div className="bg-muted/30 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Bank
+        </div>
+        <div className="border-l border-border/40 bg-background px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Factora
+        </div>
+        <div className="border-l border-border/40 bg-background px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          AI
+        </div>
+      </div>
+
+      {mainTab === "action" ? (
+        pendingFiltered.length === 0 ? (
+          <ReconciliationEmptyState
+            title="Nothing in this view"
+            description="Adjust bank account or AI filters, or wait for new suggested matches from the reconciliation agent."
+          />
+        ) : (
+          <ul className="flex min-w-0 flex-col" role="list">
+            {pendingFiltered.map((pair) => (
+              <li key={pair.id} className="min-w-0">
+                <ReconciliationMatchRow
+                  variant="pending"
+                  pair={pair}
+                  onConfirm={handleConfirmMatch}
+                  onReview={openPair}
+                />
+              </li>
+            ))}
+          </ul>
+        )
+      ) : matchedFiltered.length === 0 ? (
+        <ReconciliationEmptyState
+          title="No rows for this filter"
+          description="Try widening the AI confidence filter or choosing all bank accounts."
+        />
+      ) : (
+        <ul className="flex min-w-0 flex-col" role="list">
+          {matchedFiltered.map((pair) => (
+            <li key={pair.id} className="min-w-0">
+              <ReconciliationMatchRow variant="auto" pair={pair} />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <MatchDetailSheet
+        open={sheetOpen}
+        onOpenChange={onSheetOpenChange}
+        pair={activePair}
+        onConfirmMatch={handleConfirmMatch}
+        onRejectMatch={handleRejectMatch}
+      />
+    </div>
   );
 }
