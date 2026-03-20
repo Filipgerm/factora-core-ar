@@ -39,8 +39,8 @@ export function AnimatedMetricValue({
   useEffect(() => {
     if (!isInView) return;
     const c = animate(mv, target, {
-      duration: 1.45,
-      ease: [0.16, 1, 0.3, 1],
+      duration: 0.88,
+      ease: [0.22, 1, 0.36, 1],
     });
     return () => c.stop();
   }, [isInView, target, mv]);
