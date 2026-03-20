@@ -310,7 +310,7 @@ export function ReconciliationView() {
           <div
             className={cn(
               RECON_BANK_INNER,
-              "border-border/30 bg-[var(--brand-primary-subtle)] py-1.5 shadow-[inset_0_0_0_1px_rgba(47,154,138,0.1)] dark:bg-teal-950/25 dark:shadow-[inset_0_0_0_1px_rgba(45,212,191,0.15)]"
+              "border-border/30 bg-white py-1.5 dark:bg-background"
             )}
           >
             <span className={cn(LEDGER_TH, "md:pt-1")}>Date</span>
@@ -318,7 +318,7 @@ export function ReconciliationView() {
               <div className="size-6 shrink-0" aria-hidden />
               <span className={cn(LEDGER_TH, "pb-0.5")}>Payer</span>
             </div>
-            <span className={cn(LEDGER_TH, "text-left md:text-right md:pt-1")}>
+            <span className={cn(LEDGER_TH, "text-center md:pt-1")}>
               Account
             </span>
             <span className={cn(LEDGER_TH, "text-left md:text-right md:pt-1")}>
