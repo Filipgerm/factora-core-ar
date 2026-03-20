@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BookOpen,
   ChevronDown,
@@ -59,6 +59,15 @@ export function AppSidebar() {
   const apOnPath = pathname.startsWith(AP_PREFIX);
   const arOpen = arOnPath || openKey === "ar";
   const apOpen = apOnPath || openKey === "ap";
+
+  useEffect(() => {
+    setOpenKey((k) => {
+      let next = k;
+      if (!pathname.startsWith(AR_PREFIX) && next === "ar") next = null;
+      if (!pathname.startsWith(AP_PREFIX) && next === "ap") next = null;
+      return next;
+    });
+  }, [pathname]);
 
   const toggleAr = () => {
     if (arOnPath) return;
