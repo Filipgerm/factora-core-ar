@@ -332,7 +332,10 @@ export interface ReconciliationBankTransaction {
   date: string;
   amount: number;
   currency: "EUR";
+  /** AI-normalized merchant / counterparty label */
   merchant: string;
+  /** Raw narrative as it appears on the bank statement (POS / SEPA text) */
+  rawDescriptor: string;
   bankId: ReconciliationBankId;
   maskedAccount: string;
   memo?: string;
@@ -374,6 +377,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       amount: -2499.0,
       currency: "EUR",
       merchant: "GITHUB INC",
+      rawDescriptor:
+        "POS PURCHASE GITHUB INC SAN FRANCISCO US 10MAR EUR 2499.00 FX1.087 AUTH 884291",
       bankId: "revolut",
       maskedAccount: "•••• 8821",
       memo: "Card payment",
@@ -400,6 +405,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       amount: -672.33,
       currency: "EUR",
       merchant: "BERLIN ANALYTICS GMBH",
+      rawDescriptor:
+        "SEPA DD BERLIN ANALYTICS GMBH REF 2026-03-INV-8842 ENDTOEND NOTPROVIDED",
       bankId: "n26",
       maskedAccount: "•••• 4402",
     },
@@ -425,6 +432,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       amount: -1890.45,
       currency: "EUR",
       merchant: "DEUTSCHE BAHN AG",
+      rawDescriptor:
+        "CARD DB MOBILITY LOGISTICS FRANKFURT DE 09MAR 1890.45EUR MCC4112",
       bankId: "deutschebank",
       maskedAccount: "•••• 9910",
       memo: "ICE tickets",
@@ -451,6 +460,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       amount: 5600.0,
       currency: "EUR",
       merchant: "ΑΚΡΙΔΑΣ ΑΕ",
+      rawDescriptor:
+        "INSTANT IN ΑΚΡΙΔΑΣ ΑΕ /PIRAEUS/REF ERP-AR-5600/11MAR26 BENEF REF 99821",
       bankId: "piraeus",
       maskedAccount: "•••• 1204",
       memo: "Incoming transfer",
@@ -477,6 +488,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
       amount: -145.67,
       currency: "EUR",
       merchant: "STRIPE PAYMENTS EU",
+      rawDescriptor:
+        "POS PUR STRIPE*PAYMENTS EU DUBLIN IE 07MAR 145.67 EUR CD 7733XXXX9012",
       bankId: "eurobank",
       maskedAccount: "•••• 7733",
     },
@@ -506,6 +519,8 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         amount: -412.18,
         currency: "EUR",
         merchant: "STRIPE PAYMENTS",
+        rawDescriptor:
+          "CARD STRIPE TECHNOLOGY EU LTD DUBLIN 06MAR412.18EUR AUTH STRP*INV-8840",
         bankId: "revolut",
         maskedAccount: "•••• 8821",
       },
@@ -528,6 +543,8 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         amount: -3200.0,
         currency: "EUR",
         merchant: "ΦΩΤΟΔΕΝΤΡΟ ΙΚΕ",
+        rawDescriptor:
+          "SEPA CT ΦΩΤΟΔΕΝΤΡΟ ΙΚΕ ATHENS REF AP-MKT-112/2026 ENDTOEND GR12PIR...",
         bankId: "piraeus",
         maskedAccount: "•••• 1204",
       },
@@ -550,6 +567,8 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         amount: 9900.0,
         currency: "EUR",
         merchant: "ATHENS LOGISTICS SA",
+        rawDescriptor:
+          "INCOMING SEPA ATHENS LOGISTICS SA REF INV-AR-2026-0188 TRN EBC77330044921",
         bankId: "eurobank",
         maskedAccount: "•••• 7733",
       },
@@ -572,6 +591,8 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         amount: -12890.0,
         currency: "EUR",
         merchant: "CUSTOMS / PORT FEES",
+        rawDescriptor:
+          "SEPA DD ATHENS LOGISTICS SA ELPP CUSTOMS CLEAR 12890.00 REF AP-LOG-9901",
         bankId: "piraeus",
         maskedAccount: "•••• 1204",
         memo: "SEPA debit",
