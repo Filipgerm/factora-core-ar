@@ -25,11 +25,11 @@ export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-[4px_0_28px_-12px_rgba(7,26,51,0.35)]">
-      <div className="flex h-14 items-center border-b border-sidebar-border px-4">
+    <aside className="flex w-56 shrink-0 flex-col border-r border-slate-100 bg-sidebar text-sidebar-foreground">
+      <div className="flex h-14 items-center border-b border-slate-100 px-4">
         <Link
           href="/home"
-          className="text-lg font-semibold tracking-tight text-sidebar-foreground transition-all duration-200 hover:text-[var(--sidebar-primary)]"
+          className="text-sm font-semibold tracking-tight text-sidebar-foreground transition-colors duration-200 hover:text-[var(--sidebar-primary)]"
         >
           Factora
         </Link>
@@ -43,10 +43,10 @@ export function AppSidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium tracking-tight transition-all duration-200 ease-out",
                 active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                  ? "bg-[var(--brand-primary-subtle)] text-foreground shadow-[inset_0_0_0_1px_rgba(47,154,138,0.12)]"
+                  : "text-sidebar-muted-foreground hover:bg-slate-100/80 hover:text-foreground"
               )}
             >
               <Icon className="size-4 shrink-0 opacity-90" aria-hidden />
@@ -55,9 +55,9 @@ export function AppSidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-sidebar-border p-3">
-        <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-sidebar-muted-foreground">
-          <BookOpen className="size-3.5 shrink-0 opacity-90" aria-hidden />
+      <div className="border-t border-slate-100 p-3">
+        <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium tracking-tight text-sidebar-muted-foreground">
+          <BookOpen className="size-3.5 shrink-0 opacity-80" aria-hidden />
           <span className="truncate">Workspace</span>
         </div>
       </div>
