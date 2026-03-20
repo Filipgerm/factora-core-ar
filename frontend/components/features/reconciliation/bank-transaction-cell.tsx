@@ -33,7 +33,8 @@ export function BankTransactionCell({
   transaction,
   dense = true,
 }: BankTransactionCellProps) {
-  const { date, amount, merchant, bankId, maskedAccount, memo } = transaction;
+  const { date, amount, merchant, bankId, maskedAccount, memo, rawDescriptor } =
+    transaction;
   const isOutflow = amount < 0;
   const displayAmount = Math.abs(amount);
 
@@ -41,33 +42,43 @@ export function BankTransactionCell({
     <div
       className={cn(
         "flex gap-3",
-        dense ? "py-2.5 pl-3 pr-2 md:pr-4" : "p-4"
+        dense ? "py-2 pl-3 pr-2 md:pr-3" : "p-4"
       )}
     >
       <div
         className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
+          "flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
           BANK_ACCENT[bankId]
         )}
         aria-hidden
       >
-        <Landmark className="size-5" />
+        <Landmark className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-foreground">{merchant}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="truncate text-[13px] font-medium leading-snug tracking-tight text-foreground">
+          {merchant}
+        </p>
+        <p
+          className="mt-1 line-clamp-2 break-all font-mono text-[11px] leading-relaxed tracking-tight text-muted-foreground/85"
+          title={rawDescriptor}
+        >
+          {rawDescriptor}
+        </p>
+        <p className="mt-1 font-mono text-[11px] tabular-nums tracking-tight text-muted-foreground">
           {BANK_LABEL[bankId]} · {maskedAccount}
         </p>
         {memo ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{memo}</p>
+          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground/80">
+            {memo}
+          </p>
         ) : null}
         <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          <span className="text-xs tabular-nums text-muted-foreground">
+          <span className="font-mono text-[13px] tabular-nums tracking-tight text-muted-foreground">
             {formatReconciliationDate(date)}
           </span>
           <span
             className={cn(
-              "text-sm font-semibold tabular-nums tracking-tight",
+              "font-mono text-[13px] font-semibold tabular-nums tracking-tight",
               isOutflow ? "text-foreground" : "text-emerald-700 dark:text-emerald-400"
             )}
           >

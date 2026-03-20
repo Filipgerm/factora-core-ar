@@ -17,12 +17,14 @@ export function LedgerInvoiceCell({
     invoice;
 
   return (
-    <div className={cn(dense ? "py-2.5 pl-2 pr-3 md:pl-4 md:pr-4" : "p-4")}>
+    <div className={cn(dense ? "py-2 pl-2 pr-3 md:pl-3 md:pr-3" : "p-4")}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium text-foreground">{counterpartyName}</span>
+        <span className="text-[13px] font-medium leading-snug tracking-tight text-foreground">
+          {counterpartyName}
+        </span>
         <Badge
           variant="outline"
-          className="h-5 border-slate-200 px-1.5 text-[10px] font-medium uppercase tracking-wide"
+          className="h-5 border-slate-200/90 px-1.5 text-[10px] font-medium uppercase tracking-wide"
         >
           {role}
         </Badge>
@@ -37,17 +39,17 @@ export function LedgerInvoiceCell({
           {status}
         </Badge>
       </div>
-      <p className="mt-1 font-mono text-xs text-muted-foreground tabular-nums">
+      <p className="mt-1 font-mono text-[13px] tabular-nums tracking-tight text-muted-foreground">
         {invoiceNumber}
       </p>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <span className="text-xs text-muted-foreground">
+        <span className="text-[13px] text-muted-foreground">
           Due{" "}
-          <span className="tabular-nums text-foreground">
+          <span className="font-mono tabular-nums text-foreground">
             {formatReconciliationDate(dueDate)}
           </span>
         </span>
-        <span className="text-sm font-semibold tabular-nums text-foreground">
+        <span className="font-mono text-[13px] font-semibold tabular-nums tracking-tight text-foreground">
           {formatReconciliationEUR(totalAmount)}
         </span>
       </div>

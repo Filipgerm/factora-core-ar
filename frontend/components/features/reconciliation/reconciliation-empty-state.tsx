@@ -17,11 +17,11 @@ export function ReconciliationEmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/5 px-8 py-16 text-center shadow-sm transition-all duration-300 ease-out",
+        "flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-8 py-16 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 ease-out",
         className
       )}
     >
-      <div className="flex size-14 items-center justify-center rounded-2xl border border-dashed border-border/50 bg-background/60 backdrop-blur-sm">
+      <div className="flex size-14 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80">
         <GitMerge
           className="size-7 text-[var(--brand-primary)] opacity-80"
           aria-hidden

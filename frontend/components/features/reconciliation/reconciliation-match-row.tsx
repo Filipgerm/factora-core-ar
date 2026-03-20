@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Link2 } from "lucide-react";
+import { CheckCircle2, GitMerge, Link2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,8 @@ type ReconciliationMatchRowProps =
       pair: ReconciliationAutoMatchedPair;
     };
 
+const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
+
 export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
   const { pair, variant } = props;
   const isPending = variant === "pending";
@@ -44,50 +46,61 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
             }
           : undefined
       }
-      whileHover={isPending ? { scale: 1.002 } : undefined}
-      transition={{ type: "spring", stiffness: 520, damping: 38 }}
+      whileHover={isPending ? { y: -1 } : undefined}
+      transition={SNAP_SPRING}
       className={cn(
-        "group overflow-hidden rounded-2xl border border-border/40 bg-card shadow-sm transition-all duration-300 ease-out",
+        "group overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-14px_rgba(15,23,42,0.09)] transition-shadow duration-200",
         variant === "auto" &&
-          "border-emerald-200/70 bg-gradient-to-br from-indigo-50/25 via-emerald-50/30 to-[var(--brand-primary-subtle)]/25 dark:border-emerald-900/45 dark:from-indigo-950/20 dark:via-emerald-950/15",
+          "border-indigo-100/60 bg-gradient-to-br from-white via-indigo-50/25 to-emerald-50/35 shadow-[0_1px_2px_rgba(99,102,241,0.06),0_12px_32px_-12px_rgba(47,154,138,0.12)]",
         isPending &&
-          "cursor-pointer hover:border-border/60 hover:bg-muted/40 hover:shadow-md dark:hover:bg-muted/25",
+          "cursor-pointer hover:border-slate-200/90 hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)]",
         isPending &&
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       )}
     >
       {variant === "auto" ? (
-        <div className="flex items-center justify-between border-b border-border/30 bg-background/50 px-4 py-2 backdrop-blur-sm dark:bg-background/30">
+        <div className="flex items-center justify-between border-b border-slate-100/90 bg-gradient-to-r from-indigo-50/40 via-white to-emerald-50/30 px-3 py-1.5 backdrop-blur-[2px]">
           <Badge
             variant="outline"
-            className="gap-1 border-emerald-200/80 bg-emerald-50/80 text-xs font-medium tracking-tight text-emerald-800 transition-all duration-300 ease-out dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200"
+            className="gap-1 border-emerald-200/70 bg-emerald-50/90 text-[11px] font-medium tracking-tight text-emerald-800 shadow-sm dark:border-emerald-800/50 dark:bg-emerald-950/35 dark:text-emerald-200"
           >
             <CheckCircle2 className="size-3" aria-hidden />
             Auto-matched · 100% confidence
           </Badge>
-          <span
-            className="hidden text-emerald-700 md:inline dark:text-emerald-400"
-            aria-hidden
-          >
-            <Link2 className="size-4" />
-          </span>
         </div>
       ) : null}
-      <div className="grid grid-cols-1 md:grid-cols-2">
-        <div className="border-b border-border/30 md:border-b-0 md:border-r md:border-border/30">
+
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_2.75rem_minmax(0,1fr)]">
+        <div className="border-b border-slate-100 bg-slate-50/80 md:border-b-0 md:border-r md:border-slate-100">
           <BankTransactionCell transaction={pair.transaction} />
         </div>
-        <div className="relative">
-          {variant === "auto" ? (
-            <div
-              className="pointer-events-none absolute left-0 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 md:block"
-              aria-hidden
-            >
-              <span className="flex size-8 items-center justify-center rounded-full border border-emerald-200/80 bg-background/80 text-emerald-600 shadow-sm backdrop-blur-sm dark:border-emerald-800 dark:text-emerald-400">
-                <Link2 className="size-3.5" />
-              </span>
-            </div>
-          ) : null}
+
+        <div
+          className={cn(
+            "flex min-h-[3.5rem] items-center justify-center border-b border-slate-100 bg-white md:border-b-0 md:border-x md:border-slate-100",
+            variant === "auto"
+              ? "bg-gradient-to-b from-indigo-50/30 via-white to-emerald-50/25"
+              : "md:bg-slate-50/60"
+          )}
+          aria-hidden
+        >
+          <span
+            className={cn(
+              "flex size-9 items-center justify-center rounded-full border shadow-sm",
+              variant === "auto"
+                ? "border-emerald-200/80 bg-white/90 text-emerald-600 ring-2 ring-indigo-100/50 dark:border-emerald-800 dark:text-emerald-400"
+                : "border-slate-200 bg-white text-slate-500"
+            )}
+          >
+            {variant === "auto" ? (
+              <Link2 className="size-3.5" />
+            ) : (
+              <GitMerge className="size-3.5" />
+            )}
+          </span>
+        </div>
+
+        <div className="bg-white">
           <LedgerInvoiceCell invoice={pair.invoice} />
         </div>
       </div>
