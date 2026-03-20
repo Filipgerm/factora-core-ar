@@ -13,6 +13,9 @@ import {
   Link as LinkIcon,
   AlertCircle,
   Blocks,
+  ScrollText,
+  GitCompare,
+  Inbox,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -65,6 +68,24 @@ export function BusinessSidebar() {
       label: "Integrations",
       href: "/integrations",
       active: pathname === "/integrations",
+    },
+    {
+      icon: ScrollText,
+      label: "Ledger",
+      href: "/ledger",
+      active: pathname === "/ledger",
+    },
+    {
+      icon: GitCompare,
+      label: "Reconciliation",
+      href: "/reconciliation",
+      active: pathname === "/reconciliation",
+    },
+    {
+      icon: Inbox,
+      label: "AR Collections",
+      href: "/ar-collections",
+      active: pathname === "/ar-collections",
     },
     // {
     //   icon: TrendingUp,
