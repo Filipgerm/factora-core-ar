@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { CircleDot, Sparkles } from "lucide-react";
+import { Bot, CircleDot, Sparkles } from "lucide-react";
 
 import { MatchDetailSheet } from "@/components/features/reconciliation/match-detail-sheet";
 import { ReconciliationEmptyState } from "@/components/features/reconciliation/reconciliation-empty-state";
@@ -26,6 +26,7 @@ import type {
   ReconciliationPendingPair,
 } from "@/lib/mock-data/dashboard-mocks";
 import {
+  MOCK_RECON_AUTO_MATCHED_COUNT,
   mockReconciliationAutoMatchedPairs,
   mockReconciliationPendingPairs,
 } from "@/lib/mock-data/dashboard-mocks";
@@ -189,7 +190,7 @@ export function ReconciliationView() {
       {/* Toolbar + domain + column headers: one frozen stack (toggle order unchanged). */}
       <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50/95 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-md supports-[backdrop-filter]:bg-slate-50/90 dark:border-slate-700/80 dark:bg-slate-950/90">
         <div className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:pr-2">
             <Select
               value={accountFilter}
               onValueChange={(v) =>
@@ -260,37 +261,51 @@ export function ReconciliationView() {
             </div>
           </div>
 
-          <div
-            className={cn(
-              "flex flex-wrap items-center gap-1 transition-opacity duration-200",
-              mainTab === "matched" && "pointer-events-none opacity-40"
-            )}
-            title={
-              mainTab === "matched"
-                ? "AI confidence filters apply to the action queue only"
-                : undefined
-            }
-          >
-            <span className="mr-1 hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
-              AI
-            </span>
-            {confidencePills.map((pill) => (
-              <button
-                key={pill.id}
-                type="button"
-                onClick={() => setConfidenceFilter(pill.id)}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium tabular-nums transition-all duration-200",
-                  confidenceFilter === pill.id
-                    ? "border-primary/35 bg-primary/10 text-foreground shadow-sm"
-                    : "border-transparent bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                  pill.className
-                )}
-              >
-                {pill.icon}
-                {pill.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
+            <div
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-white px-3 py-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-950/80"
+              title="Agent-confirmed auto matches (demo aggregate)"
+            >
+              <span className="text-[11px] font-semibold tabular-nums tracking-tight text-foreground">
+                {MOCK_RECON_AUTO_MATCHED_COUNT} Auto-Matched
+              </span>
+              <Bot
+                className="size-4 shrink-0 text-violet-600 dark:text-violet-400"
+                aria-hidden
+              />
+            </div>
+            <div
+              className={cn(
+                "flex flex-wrap items-center gap-1 transition-opacity duration-200",
+                mainTab === "matched" && "pointer-events-none opacity-40"
+              )}
+              title={
+                mainTab === "matched"
+                  ? "AI confidence filters apply to the action queue only"
+                  : undefined
+              }
+            >
+              <span className="mr-1 hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+                AI
+              </span>
+              {confidencePills.map((pill) => (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setConfidenceFilter(pill.id)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium tabular-nums transition-all duration-200",
+                    confidenceFilter === pill.id
+                      ? "border-primary/35 bg-primary/10 text-foreground shadow-sm"
+                      : "border-transparent bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    pill.className
+                  )}
+                >
+                  {pill.icon}
+                  {pill.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -383,10 +398,15 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex min-h-9 items-center justify-start text-left leading-tight"
+                "flex min-h-9 flex-col justify-center gap-0 text-left normal-case"
               )}
             >
-              Vendor / Customer / Other
+              <span className="block text-[9px] font-bold uppercase leading-tight tracking-wide">
+                Vendor / Customer
+              </span>
+              <span className="block text-[9px] font-bold uppercase leading-tight tracking-wide text-muted-foreground/90">
+                / Other
+              </span>
             </span>
             <span
               className={cn(

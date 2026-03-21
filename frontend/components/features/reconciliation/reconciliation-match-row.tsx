@@ -15,6 +15,12 @@ import {
   Truck,
 } from "lucide-react";
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
 import type {
   ReconciliationAutoMatchedPair,
   ReconciliationBankId,
@@ -43,6 +49,10 @@ function aiConfidenceTier(
 /** Slightly lighter than #E9EBEF for bank pane + type icon wells. */
 export const RECON_BANK_TINT_CLASS =
   "bg-[#EFF1F4] dark:bg-slate-800/90";
+
+/** Type column icon well — aligns with sidebar teal treatment. */
+export const RECON_TYPE_ICON_WELL =
+  "border border-teal-200/45 bg-[var(--brand-primary-subtle)] shadow-[inset_0_0_0_1px_rgba(47,154,138,0.08)] dark:border-teal-800/45 dark:bg-teal-950/25";
 
 /** 50/50 Bank | Factora */
 export const RECON_ROW_OUTER =
@@ -128,6 +138,14 @@ function tierLabel(tier: "high" | "medium" | "none"): string {
   return "No sugg.";
 }
 
+function defaultMatchLogicSummary(
+  transaction: ReconciliationBankTransaction,
+  invoice: { invoiceNumber: string; totalAmount: number }
+): string {
+  const amt = formatReconciliationEUR(Math.abs(transaction.amount));
+  return `Matched by: Amount (${amt}) and invoice reference (#${invoice.invoiceNumber}).`;
+}
+
 type ReconciliationMatchRowProps =
   | {
       variant: "pending";
@@ -159,15 +177,19 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
   const accountShort = `${BANK_LABEL[transaction.bankId]} ${transaction.maskedAccount}`;
   const aiTier = isPending ? aiConfidenceTier(pair.aiConfidencePercent) : null;
 
-  const bankPaneClass = "md:bg-[#EFF1F4] dark:md:bg-slate-800/90";
+  const bankPaneClass =
+    "md:bg-[#EFF1F4] md:transition-colors md:duration-200 dark:md:bg-slate-800/90 md:group-hover/reconrow:bg-slate-50 dark:md:group-hover/reconrow:bg-slate-900/70";
 
-  const aiChipShell =
-    "group/ai relative z-0 h-7 w-full max-w-[5.35rem] shrink-0 overflow-hidden rounded-md border shadow-sm transition-shadow duration-200 hover:shadow focus-within:shadow";
+  const matchTooltipText =
+    pair.matchLogicSummary ?? defaultMatchLogicSummary(transaction, invoice);
+
+  const aiChipBase =
+    "relative z-0 flex h-7 min-w-[4.75rem] shrink-0 items-center gap-1 rounded-md border px-1.5 shadow-sm transition-shadow duration-200";
 
   return (
     <div
       className={cn(
-        "group grid w-full grid-cols-1 border-b border-slate-200 transition-colors duration-200 dark:border-slate-700/80",
+        "group/reconrow grid w-full grid-cols-1 border-b border-slate-200 transition-colors duration-200 dark:border-slate-700/80",
         RECON_ROW_OUTER,
         "md:items-stretch"
       )}
@@ -176,7 +198,6 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
         className={cn(
           "py-2.5 pl-1 pr-2 md:py-0",
           bankPaneClass,
-          "md:transition-colors md:duration-200 md:group-hover:bg-[#e8eaef] dark:md:group-hover:bg-slate-800",
           isFirstRow && "md:rounded-tl-xl",
           isLastRow && "md:rounded-bl-xl"
         )}
@@ -223,7 +244,7 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
       <div
         className={cn(
           "min-w-0 py-2.5 pl-1 pr-2 md:border-l md:border-slate-200/80 md:bg-slate-50 md:py-0 md:pl-3 md:pr-3 dark:md:border-slate-700/80 dark:md:bg-slate-950/35",
-          "md:transition-colors md:duration-200 md:group-hover:bg-slate-100/90 dark:md:group-hover:bg-slate-900/45"
+          "md:transition-colors md:duration-200 md:group-hover/reconrow:bg-slate-50 dark:md:group-hover/reconrow:bg-slate-900/60"
         )}
       >
         <div className={cn("min-w-0", RECON_BOOK_INNER)}>
@@ -234,7 +255,7 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
             <span
               className={cn(
                 "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
-                RECON_BANK_TINT_CLASS
+                RECON_TYPE_ICON_WELL
               )}
             >
               <InvoiceCategoryIcon category={invoice.invoiceCategory} />
@@ -276,15 +297,15 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
             </p>
           </div>
 
-          <div className="flex min-w-0 items-center justify-end pl-1">
+          <div className="flex min-w-0 items-center justify-end gap-1 pl-1">
             {variant === "auto" ? (
-              <div
-                className={cn(
-                  aiChipShell,
-                  "border-emerald-500/35 bg-emerald-500/12 dark:border-emerald-500/25"
-                )}
-              >
-                <div className="flex h-full items-center justify-center gap-0.5 px-0.5">
+              <>
+                <div
+                  className={cn(
+                    aiChipBase,
+                    "border-emerald-500/35 bg-emerald-500/12 dark:border-emerald-500/25"
+                  )}
+                >
                   <Bot
                     className="size-3 shrink-0 text-emerald-700 dark:text-emerald-300"
                     aria-hidden
@@ -294,27 +315,38 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
                     Matched
                   </span>
                 </div>
-              </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-slate-100 hover:text-foreground dark:hover:bg-slate-800"
+                      aria-label="Match reasoning"
+                    >
+                      <HelpCircle className="size-3.5 opacity-70" aria-hidden />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="left"
+                    className="max-w-[280px] border border-slate-700/80 bg-slate-900 text-left text-slate-50 shadow-lg"
+                  >
+                    {matchTooltipText}
+                  </TooltipContent>
+                </Tooltip>
+              </>
             ) : (
-              <div
-                className={cn(
-                  aiChipShell,
-                  aiTier === "high" &&
-                    "border-violet-400/40 bg-violet-500/15 dark:border-violet-500/30 dark:bg-violet-950/45",
-                  aiTier === "medium" &&
-                    "border-amber-400/45 bg-amber-500/18 dark:border-amber-500/35 dark:bg-amber-950/40",
-                  aiTier === "none" &&
-                    "border-border/70 bg-muted/75 dark:bg-muted/35"
-                )}
-                role="group"
-                aria-label="AI suggestion and actions"
-              >
+              <>
                 <div
                   className={cn(
-                    "absolute inset-0 z-10 flex items-center gap-1 px-1 transition-all duration-200 ease-out",
-                    "group-hover/ai:pointer-events-none group-hover/ai:scale-95 group-hover/ai:opacity-0",
-                    "group-focus-within/ai:pointer-events-none group-focus-within/ai:scale-95 group-focus-within/ai:opacity-0"
+                    aiChipBase,
+                    aiTier === "high" &&
+                      "border-violet-400/40 bg-violet-500/15 dark:border-violet-500/30 dark:bg-violet-950/45",
+                    aiTier === "medium" &&
+                      "border-amber-400/45 bg-amber-500/18 dark:border-amber-500/35 dark:bg-amber-950/40",
+                    aiTier === "none" &&
+                      "border-border/70 bg-muted/75 dark:bg-muted/35"
                   )}
+                  role="status"
+                  aria-label={`AI suggestion: ${tierLabel(aiTier!)}`}
                 >
                   <Bot
                     className={cn(
@@ -336,19 +368,14 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
                         "text-amber-950 dark:text-amber-50",
                       aiTier === "none" && "text-muted-foreground"
                     )}
-                    title={
-                      aiTier === "none" ? "No suggestion" : tierLabel(aiTier!)
-                    }
                   >
                     {tierLabel(aiTier!)}
                   </span>
                 </div>
                 <div
                   className={cn(
-                    "absolute inset-0 z-20 flex items-center justify-center gap-0.5 px-0.5 transition-all duration-200 ease-out",
-                    "pointer-events-none scale-95 opacity-0",
-                    "group-hover/ai:pointer-events-auto group-hover/ai:scale-100 group-hover/ai:opacity-100",
-                    "group-focus-within/ai:pointer-events-auto group-focus-within/ai:scale-100 group-focus-within/ai:opacity-100"
+                    "flex items-center gap-0.5 opacity-0 pointer-events-none transition-all duration-200 ease-out",
+                    "md:group-hover/reconrow:pointer-events-auto md:group-hover/reconrow:opacity-100"
                   )}
                 >
                   <button
@@ -388,7 +415,24 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
                     <span className="sr-only">Reconcile</span>
                   </button>
                 </div>
-              </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-slate-100 hover:text-foreground dark:hover:bg-slate-800"
+                      aria-label="Match reasoning"
+                    >
+                      <HelpCircle className="size-3.5 opacity-70" aria-hidden />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="left"
+                    className="max-w-[280px] border border-slate-700/80 bg-slate-900 text-left text-slate-50 shadow-lg"
+                  >
+                    {matchTooltipText}
+                  </TooltipContent>
+                </Tooltip>
+              </>
             )}
           </div>
         </div>

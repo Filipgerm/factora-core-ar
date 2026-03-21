@@ -384,13 +384,19 @@ export interface ReconciliationPendingPair {
   matchCandidates?: ReconciliationBookInvoice[];
   aiConfidencePercent: number;
   aiReasoning: string;
+  /** Short line for match reasoning tooltip (e.g. exact amount + invoice ref). */
+  matchLogicSummary?: string;
 }
 
 export interface ReconciliationAutoMatchedPair {
   id: string;
   transaction: ReconciliationBankTransaction;
   invoice: ReconciliationBookInvoice;
+  matchLogicSummary?: string;
 }
+
+/** Mock aggregate for reconciliation header metric. */
+export const MOCK_RECON_AUTO_MATCHED_COUNT = 142;
 
 export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
   {
@@ -425,6 +431,8 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
     aiConfidencePercent: 88,
     aiReasoning:
       "AI confidence: 88%. Exact amount match (€2,499.00) and vendor string aligns with posted Salesforce subscription.",
+    matchLogicSummary:
+      "Matched by: Exact amount (€2,499.00) and invoice reference (#AP-INV-8841).",
     matchCandidates: [
       {
         id: "rap-01",
@@ -776,6 +784,8 @@ export const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[]
         counterpartyKind: "vendor",
         invoiceSummary: "Stripe presentment fee batch",
       },
+      matchLogicSummary:
+        "Matched by: Exact amount (€412.18) and card auth string (STRP*INV-8840).",
     },
     {
       id: "rec-auto-02",
