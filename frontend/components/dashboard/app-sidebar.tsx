@@ -9,7 +9,6 @@ import {
   ChevronDown,
   GitMerge,
   Home,
-  Layers,
   Plug,
   Wallet,
   CreditCard,
@@ -44,7 +43,6 @@ const SIMPLE_NAV = [
     label: "Cash Reconciliation",
     icon: GitMerge,
   },
-  { href: "/ledger", label: "Smart Ledger", icon: Layers },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/reporting", label: "Reporting", icon: BarChart3 },
 ] as const;

@@ -9,7 +9,7 @@ import { Check, FileText } from "lucide-react";
 import {
   SourceDocumentSheet,
   type SourceDocField,
-} from "@/components/ledger/source-document-sheet";
+} from "@/components/documents/source-document-sheet";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

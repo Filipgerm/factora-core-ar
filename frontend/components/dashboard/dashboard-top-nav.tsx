@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils";
 /** First path segment → section title */
 const ROOT_SEGMENT_LABEL: Record<string, string> = {
   home: "Home",
-  ledger: "Smart Ledger",
   integrations: "Integrations",
   reconciliation: "Cash Reconciliation",
   "ar-collections": "AR Collections",

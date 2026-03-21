@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, FileText, Search, Upload } from "lucide-react";
+import { BarChart3, Search, Upload } from "lucide-react";
 
 import {
   Command,
@@ -37,12 +37,6 @@ const NAV = [
     label: "Upload Document",
     href: "/reporting",
     icon: Upload,
-  },
-  {
-    id: "led",
-    label: "Smart Ledger",
-    href: "/ledger",
-    icon: FileText,
   },
 ] as const;
 
