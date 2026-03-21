@@ -27,11 +27,11 @@ export function HomeDashboardGreeting() {
       transition={SNAP_SPRING}
       className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between"
     >
-      <h1 className="text-sm font-medium tracking-tight text-muted-foreground">
+      <h1 className="text-3xl font-bold tracking-tight text-foreground">
         Hi, {mockHomeUserFirstName}
       </h1>
       <p
-        className="font-mono text-xs tabular-nums tracking-tight text-muted-foreground/90 sm:text-right"
+        className="font-mono text-base font-medium tabular-nums tracking-tight text-muted-foreground sm:mt-1 sm:text-right sm:text-lg sm:font-normal"
         suppressHydrationWarning
       >
         {formatNow(now)}
