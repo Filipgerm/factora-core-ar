@@ -1,28 +1,26 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { format, parseISO } from "date-fns";
-import { AnimatePresence, motion } from "framer-motion";
-import { Mail } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { Check, Hourglass, Plus } from "lucide-react";
 
+import { ArCreateInvoiceSheet } from "@/components/features/accounts-receivable/ar-create-invoice-sheet";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import type { ArInvoicePipeline, ArInvoiceRow } from "@/lib/mock-data/ar-mocks";
 import {
-  arAgingTotals,
+  arInvoicesSummaryKpis,
   mockArInvoiceRows,
 } from "@/lib/mock-data/ar-mocks";
-import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 function fmtEUR(n: number) {
   return new Intl.NumberFormat("el-GR", {
     style: "currency",
     currency: "EUR",
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 0,
   }).format(n);
 }
 
@@ -34,257 +32,273 @@ const PIPELINE_LABEL: Record<ArInvoicePipeline, string> = {
   overdue: "Overdue",
 };
 
-function pipelineBadge(p: ArInvoicePipeline) {
+function statusCell(pipeline: ArInvoicePipeline) {
+  if (pipeline === "draft") {
+    return (
+      <span className="text-sm font-medium text-muted-foreground">
+        {PIPELINE_LABEL.draft}
+      </span>
+    );
+  }
   const base =
-    "border-0 font-medium capitalize shadow-none transition-all duration-200";
-  switch (p) {
-    case "draft":
-      return <Badge className={cn(base, "bg-slate-100 text-slate-700")}>{PIPELINE_LABEL[p]}</Badge>;
-    case "sent":
-      return <Badge className={cn(base, "bg-sky-500/15 text-sky-900 dark:text-sky-200")}>{PIPELINE_LABEL[p]}</Badge>;
-    case "partially_paid":
-      return <Badge className={cn(base, "bg-amber-500/15 text-amber-900 dark:text-amber-100")}>{PIPELINE_LABEL[p]}</Badge>;
-    case "paid":
-      return <Badge className={cn(base, "bg-emerald-500/15 text-emerald-900 dark:text-emerald-100")}>{PIPELINE_LABEL[p]}</Badge>;
+    "border-0 px-2.5 py-0.5 text-xs font-semibold shadow-none transition-all duration-200";
+  switch (pipeline) {
     case "overdue":
-      return <Badge className={cn(base, "bg-rose-500/15 text-rose-900 dark:text-rose-100")}>{PIPELINE_LABEL[p]}</Badge>;
+      return (
+        <Badge
+          className={cn(
+            base,
+            "bg-rose-500/15 text-rose-900 dark:text-rose-100"
+          )}
+        >
+          {PIPELINE_LABEL.overdue}
+        </Badge>
+      );
+    case "sent":
+      return (
+        <Badge
+          className={cn(
+            base,
+            "bg-sky-500/15 text-sky-900 dark:text-sky-200"
+          )}
+        >
+          {PIPELINE_LABEL.sent}
+        </Badge>
+      );
+    case "paid":
+      return (
+        <Badge
+          className={cn(
+            base,
+            "bg-emerald-500/15 text-emerald-900 dark:text-emerald-100"
+          )}
+        >
+          {PIPELINE_LABEL.paid}
+        </Badge>
+      );
+    case "partially_paid":
+      return (
+        <Badge
+          className={cn(
+            base,
+            "bg-amber-500/15 text-amber-900 dark:text-amber-100"
+          )}
+        >
+          {PIPELINE_LABEL.partially_paid}
+        </Badge>
+      );
     default:
       return null;
   }
 }
 
-export function ArInvoicesView() {
-  const { toast } = useToast();
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+function dueCell(row: ArInvoiceRow) {
+  if (!row.dueDate) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const d = parseISO(row.dueDate);
+  const daysPast = differenceInCalendarDays(new Date(), d);
+  if (row.pipeline === "paid") {
+    return (
+      <span className="text-sm text-foreground">
+        {format(d, "d MMM yyyy")}
+      </span>
+    );
+  }
+  const showOverdue =
+    row.pipeline === "overdue" ||
+    (row.pipeline !== "paid" && daysPast > 0);
 
-  const aging = useMemo(() => arAgingTotals(mockArInvoiceRows), []);
+  if (showOverdue && daysPast > 0) {
+    return (
+      <span className="text-sm font-medium text-rose-600 dark:text-rose-400">
+        {daysPast} days ago
+      </span>
+    );
+  }
+  return (
+    <span className="text-sm text-foreground">{format(d, "d MMM yyyy")}</span>
+  );
+}
+
+function mydataCell(row: ArInvoiceRow) {
+  if (row.mydataStatus === "transmitted" && row.mydataMark) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+        <Check className="size-4 shrink-0" strokeWidth={2.5} aria-hidden />
+        MARK: {row.mydataMark}
+      </span>
+    );
+  }
+  if (row.mydataStatus === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400">
+        <Hourglass className="size-4 shrink-0" aria-hidden />
+        Pending
+      </span>
+    );
+  }
+  return (
+    <span className="text-sm font-medium text-rose-600 dark:text-rose-400">
+      Error
+    </span>
+  );
+}
+
+export function ArInvoicesView() {
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const kpis = arInvoicesSummaryKpis;
 
   const columns: ColumnDef<ArInvoiceRow>[] = useMemo(
     () => [
       {
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected()
-                ? true
-                : table.getIsSomePageRowsSelected()
-                  ? "indeterminate"
-                  : false
-            }
-            onCheckedChange={(v) =>
-              table.toggleAllPageRowsSelected(v === true)
-            }
-            aria-label="Select all overdue"
-            className="translate-y-0.5"
-          />
+        accessorKey: "invoiceNumber",
+        header: () => (
+          <span className="inline-flex min-h-10 items-center">Number</span>
         ),
-        cell: ({ row }) =>
-          row.getCanSelect() ? (
-            <Checkbox
-              checked={row.getIsSelected()}
-              onCheckedChange={(v) => row.toggleSelected(v === true)}
-              onClick={(e) => e.stopPropagation()}
-              aria-label="Select row"
-              className="translate-y-0.5"
-            />
-          ) : (
-            <span className="inline-block w-4" />
-          ),
-        enableSorting: false,
+        cell: ({ row }) => (
+          <span className="inline-flex min-h-10 items-center font-semibold text-foreground">
+            {row.original.invoiceNumber}
+          </span>
+        ),
       },
       {
-        accessorKey: "pipeline",
-        header: "Status",
-        cell: ({ row }) => pipelineBadge(row.original.pipeline),
+        accessorKey: "customerName",
+        header: () => (
+          <span className="inline-flex min-h-10 items-center">Customer</span>
+        ),
+        cell: ({ row }) => (
+          <div className="flex min-h-10 flex-col justify-center gap-0.5 py-0.5">
+            <p className="font-medium leading-tight text-foreground">
+              {row.original.customerName}
+            </p>
+            <p className="text-xs leading-tight text-muted-foreground">
+              {row.original.customerTaxLabel}
+            </p>
+          </div>
+        ),
       },
       {
         accessorKey: "amount",
-        header: () => <span className="text-right">Amount</span>,
+        header: () => (
+          <span className="flex min-h-10 w-full items-center justify-end">
+            Amount
+          </span>
+        ),
         cell: ({ row }) => (
-          <div className="text-right font-mono text-sm font-semibold tabular-nums">
+          <div className="flex min-h-10 items-center justify-end text-sm font-semibold tabular-nums text-foreground">
             {fmtEUR(row.original.amount)}
           </div>
         ),
       },
       {
-        accessorKey: "vat",
-        header: () => <span className="text-right">VAT</span>,
+        id: "due",
+        header: () => (
+          <span className="inline-flex min-h-10 items-center">Due date</span>
+        ),
         cell: ({ row }) => (
-          <div className="text-right font-mono text-sm tabular-nums text-muted-foreground">
-            {fmtEUR(row.original.vat)}
+          <div className="flex min-h-10 items-center">{dueCell(row.original)}</div>
+        ),
+      },
+      {
+        id: "mydata",
+        header: () => (
+          <span className="inline-flex min-h-10 items-center">myDATA</span>
+        ),
+        cell: ({ row }) => (
+          <div className="flex min-h-10 items-center">
+            {mydataCell(row.original)}
           </div>
         ),
       },
       {
-        accessorKey: "customerName",
-        header: "Customer",
-        cell: ({ row }) => (
-          <span className="font-medium">{row.original.customerName}</span>
+        accessorKey: "pipeline",
+        header: () => (
+          <span className="inline-flex min-h-10 items-center">Status</span>
         ),
-      },
-      {
-        accessorKey: "dueDate",
-        header: "Due date",
         cell: ({ row }) => (
-          <span className="font-mono text-xs text-muted-foreground">
-            {format(parseISO(row.original.dueDate), "d MMM yyyy")}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "daysOverdue",
-        header: () => <span className="text-right">Days overdue</span>,
-        cell: ({ row }) => (
-          <div
-            className={cn(
-              "text-right font-mono text-sm tabular-nums",
-              row.original.daysOverdue > 0
-                ? "font-semibold text-rose-600 dark:text-rose-400"
-                : "text-muted-foreground"
-            )}
-          >
-            {row.original.daysOverdue > 0 ? row.original.daysOverdue : "—"}
+          <div className="flex min-h-10 items-center">
+            {statusCell(row.original.pipeline)}
           </div>
         ),
-      },
-      {
-        accessorKey: "mydataStatus",
-        header: "myDATA",
-        cell: ({ row }) => {
-          const s = row.original.mydataStatus;
-          return (
-            <Badge
-              variant={
-                s === "transmitted"
-                  ? "gemiVerified"
-                  : s === "error"
-                    ? "destructive"
-                    : "secondary"
-              }
-              className="capitalize"
-            >
-              {s}
-            </Badge>
-          );
-        },
-      },
-      {
-        accessorKey: "paymentMatching",
-        header: "Matching",
-        cell: ({ row }) => (
-          <span className="text-xs capitalize text-muted-foreground">
-            {row.original.paymentMatching.replace("_", " ")}
-          </span>
-        ),
-      },
-      {
-        id: "remind",
-        header: "",
-        cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1 rounded-lg px-2 text-xs transition-all duration-200"
-            onClick={(e) => {
-              e.stopPropagation();
-              toast({
-                title: "Reminder queued",
-                description: `${row.original.customerName} — demo only.`,
-              });
-            }}
-          >
-            <Mail className="size-3.5" aria-hidden />
-            Remind
-          </Button>
-        ),
-        enableSorting: false,
       },
     ],
     []
   );
 
-  const selectedOverdueCount = useMemo(() => {
-    const ids = Object.keys(rowSelection).filter((k) => rowSelection[k]);
-    return mockArInvoiceRows.filter(
-      (r) => ids.includes(r.id) && r.pipeline === "overdue"
-    ).length;
-  }, [rowSelection]);
-
-  const bulkRemind = () => {
-    toast({
-      title: "Batch reminders sent",
-      description: `${selectedOverdueCount} overdue invoice(s) — demo.`,
-    });
-    setRowSelection({});
-  };
-
   return (
-    <div className="space-y-5 pb-24">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {(
-          [
-            { label: "Current", value: aging.current, tone: "slate" },
-            { label: "1–30 days", value: aging.d1_30, tone: "amber" },
-            { label: "31–60 days", value: aging.d31_60, tone: "orange" },
-            { label: "60+ days", value: aging.d60plus, tone: "rose" },
-          ] as const
-        ).map((c) => (
-          <div
-            key={c.label}
-            className={cn(
-              "rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-background",
-              c.tone === "amber" && "border-amber-200/50 bg-amber-50/30 dark:border-amber-900/30",
-              c.tone === "orange" && "border-orange-200/50 bg-orange-50/25 dark:border-orange-900/25",
-              c.tone === "rose" && "border-rose-200/50 bg-rose-50/25 dark:border-rose-900/25"
-            )}
-          >
-            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-              {c.label}
-            </p>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums">
-              {fmtEUR(c.value)}
-            </p>
-          </div>
-        ))}
+    <div className="space-y-6 pb-24">
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="lg"
+          className="h-11 gap-2 rounded-xl bg-[var(--brand-primary)] px-6 text-base font-semibold text-white shadow-md transition-all duration-200 hover:bg-[var(--brand-primary)]/90 hover:shadow-lg"
+          onClick={() => setCreateOpen(true)}
+        >
+          <Plus className="size-5" aria-hidden />
+          Create invoice
+        </Button>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={mockArInvoiceRows}
-        getRowId={(r) => r.id}
-        enableRowSelection
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
-        isRowSelectable={(r) => r.pipeline === "overdue"}
-      />
+      <ArCreateInvoiceSheet open={createOpen} onOpenChange={setCreateOpen} />
 
-      <AnimatePresence>
-        {selectedOverdueCount > 0 ? (
-          <motion.div
-            key="bulk"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-            className="pointer-events-none fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 justify-center px-4"
-          >
-            <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-slate-200/90 bg-white/95 px-5 py-3 shadow-lg backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/95">
-              <span className="text-sm font-medium text-muted-foreground">
-                {selectedOverdueCount} overdue selected
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                className="rounded-full px-5 font-semibold"
-                onClick={bulkRemind}
-              >
-                Send reminders to all overdue
-              </Button>
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-background sm:p-6">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-xl border border-slate-200/90 bg-white px-4 py-4 shadow-sm dark:border-slate-800 dark:bg-background">
+            <p className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+              {fmtEUR(kpis.totalOutstanding.amount)}
+            </p>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">
+              Total outstanding
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground/80">
+              {kpis.totalOutstanding.count} invoices
+            </p>
+          </div>
+          <div className="rounded-xl border border-amber-200/50 bg-amber-50/30 px-4 py-4 shadow-sm dark:border-amber-900/30 dark:bg-amber-950/20">
+            <p className="text-2xl font-semibold tabular-nums tracking-tight text-amber-950 dark:text-amber-100">
+              {fmtEUR(kpis.dueWithin30Days.amount)}
+            </p>
+            <p className="mt-1 text-xs font-medium text-amber-900/90 dark:text-amber-200/90">
+              Due within 30 days
+            </p>
+            <p className="mt-0.5 text-[11px] text-amber-800/70 dark:text-amber-200/60">
+              {kpis.dueWithin30Days.count} invoices
+            </p>
+          </div>
+          <div className="rounded-xl border border-rose-200/60 bg-rose-50/30 px-4 py-4 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/20">
+            <p className="text-2xl font-semibold tabular-nums tracking-tight text-rose-950 dark:text-rose-100">
+              {fmtEUR(kpis.overdue.amount)}
+            </p>
+            <p className="mt-1 text-xs font-medium text-rose-900/90 dark:text-rose-200/90">
+              Overdue
+            </p>
+            <p className="mt-0.5 text-[11px] text-rose-800/70 dark:text-rose-200/60">
+              {kpis.overdue.count} invoices
+            </p>
+          </div>
+          <div className="rounded-xl border border-emerald-200/50 bg-emerald-50/30 px-4 py-4 shadow-sm dark:border-emerald-900/30 dark:bg-emerald-950/20">
+            <p className="text-2xl font-semibold tabular-nums tracking-tight text-emerald-950 dark:text-emerald-100">
+              {fmtEUR(kpis.paidThisMonth.amount)}
+            </p>
+            <p className="mt-1 text-xs font-medium text-emerald-900/90 dark:text-emerald-200/90">
+              Paid this month
+            </p>
+            <p className="mt-0.5 text-[11px] text-emerald-800/70 dark:text-emerald-200/60">
+              {kpis.paidThisMonth.count} invoices
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <DataTable
+            columns={columns}
+            data={mockArInvoiceRows}
+            getRowId={(r) => r.id}
+          />
+        </div>
+      </div>
     </div>
   );
 }

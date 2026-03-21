@@ -89,7 +89,7 @@ export function DataTable<TData, TValue>({
               {headerGroup.headers.map((header) => (
                 <TableHead
                   key={header.id}
-                  className="h-9 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                  className="h-auto min-h-11 align-middle py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
                 >
                   {header.isPlaceholder
                     ? null
@@ -128,7 +128,7 @@ export function DataTable<TData, TValue>({
                 {row.getVisibleCells().map((cell) => (
                   <TableCell
                     key={cell.id}
-                    className="py-2.5 text-[13px] tracking-tight"
+                    className="align-middle py-3 text-[13px] tracking-tight"
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
@@ -139,7 +139,7 @@ export function DataTable<TData, TValue>({
             <TableRow>
               <TableCell
                 colSpan={columns.length}
-                className="h-24 text-center text-sm text-muted-foreground"
+                className="h-24 align-middle text-center text-sm text-muted-foreground"
               >
                 {emptyLabel}
               </TableCell>

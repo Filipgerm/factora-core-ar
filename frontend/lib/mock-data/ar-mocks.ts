@@ -70,17 +70,30 @@ export type ArInvoicePipeline =
 
 export type ArMydataTransmission = "transmitted" | "pending" | "error";
 
+/** AR invoices list row — matches invoices dashboard table layout. */
 export type ArInvoiceRow = {
   id: string;
-  pipeline: ArInvoicePipeline;
-  amount: number;
-  vat: number;
+  invoiceNumber: string;
   customerName: string;
-  dueDate: string;
-  daysOverdue: number;
+  /** e.g. `ΑΦΜ: 123456789` or `EU VAT: NL854123456B01` */
+  customerTaxLabel: string;
+  amount: number;
+  dueDate: string | null;
+  pipeline: ArInvoicePipeline;
   mydataStatus: ArMydataTransmission;
-  paymentMatching: "matched" | "partial" | "unmatched";
+  /** MARK when transmitted; null otherwise */
+  mydataMark: string | null;
+  /** ISO date — for `paid` rows, used in “Paid this month” KPI */
+  paidAt?: string | null;
 };
+
+/** KPI strip aligned with dashboard design (demo totals). */
+export const arInvoicesSummaryKpis = {
+  totalOutstanding: { amount: 67_300, count: 14 },
+  dueWithin30Days: { amount: 18_400, count: 6 },
+  overdue: { amount: 12_200, count: 3 },
+  paidThisMonth: { amount: 36_700, count: 8 },
+} as const;
 
 export type ArCreditMemoStatus = "draft" | "issued" | "applied";
 
@@ -293,87 +306,163 @@ export function contractRenewalAlert(
 
 export const mockArInvoiceRows: ArInvoiceRow[] = [
   {
-    id: "inv-r1",
+    id: "inv-47",
+    invoiceNumber: "ΤΠΥ-0047",
+    customerName: "Acme Software IKE",
+    customerTaxLabel: "ΑΦΜ: 123456789",
+    amount: 2976,
+    dueDate: "2025-03-08",
     pipeline: "overdue",
-    amount: 12840,
-    vat: 3081.6,
-    customerName: "Nordic Retail AB",
-    dueDate: "2026-01-18",
-    daysOverdue: 45,
     mydataStatus: "transmitted",
-    paymentMatching: "unmatched",
+    mydataMark: "40021847",
   },
   {
-    id: "inv-r2",
-    pipeline: "partially_paid",
-    amount: 8900.5,
-    vat: 2136.12,
-    customerName: "Nordic Retail AB",
-    dueDate: "2026-03-30",
-    daysOverdue: 0,
-    mydataStatus: "transmitted",
-    paymentMatching: "partial",
-  },
-  {
-    id: "inv-r3",
+    id: "inv-46",
+    invoiceNumber: "ΤΠΥ-0046",
+    customerName: "Hellas Ventures Ltd",
+    customerTaxLabel: "ΑΦΜ: 987654321",
+    amount: 14_880,
+    dueDate: "2025-04-15",
     pipeline: "sent",
-    amount: 3920.5,
-    vat: 940.92,
-    customerName: "Mediterranean Foods SA",
-    dueDate: "2026-04-05",
-    daysOverdue: 0,
-    mydataStatus: "pending",
-    paymentMatching: "unmatched",
-  },
-  {
-    id: "inv-r4",
-    pipeline: "paid",
-    amount: 2499,
-    vat: 599.76,
-    customerName: "Orpheus Cloud IKE",
-    dueDate: "2026-02-28",
-    daysOverdue: 0,
     mydataStatus: "transmitted",
-    paymentMatching: "matched",
+    mydataMark: "40021801",
   },
   {
-    id: "inv-r5",
+    id: "inv-45",
+    invoiceNumber: "ΤΠΥ-0045",
+    customerName: "TechStart BV (NL)",
+    customerTaxLabel: "EU VAT: NL854123456B01",
+    amount: 6000,
+    dueDate: "2025-04-08",
+    pipeline: "paid",
+    mydataStatus: "transmitted",
+    mydataMark: "40021774",
+    paidAt: "2025-03-18",
+  },
+  {
+    id: "inv-44",
+    invoiceNumber: "ΤΠΥ-0044",
+    customerName: "Marathon Ventures AE",
+    customerTaxLabel: "ΑΦΜ: 555123456",
+    amount: 4200,
+    dueDate: null,
     pipeline: "draft",
-    amount: 5600,
-    vat: 1344,
-    customerName: "Athens Logistics SA",
-    dueDate: "2026-04-20",
-    daysOverdue: 0,
     mydataStatus: "pending",
-    paymentMatching: "unmatched",
+    mydataMark: null,
   },
   {
-    id: "inv-r6",
+    id: "inv-43",
+    invoiceNumber: "ΤΠΥ-0043",
+    customerName: "Orpheus Cloud IKE",
+    customerTaxLabel: "ΑΦΜ: EL801813872",
+    amount: 8920,
+    dueDate: "2025-04-22",
+    pipeline: "sent",
+    mydataStatus: "transmitted",
+    mydataMark: "40021712",
+  },
+  {
+    id: "inv-42",
+    invoiceNumber: "ΤΠΥ-0042",
+    customerName: "Nordic Retail AB",
+    customerTaxLabel: "EU VAT: SE5566778890",
+    amount: 12_840,
+    dueDate: "2025-03-01",
     pipeline: "overdue",
-    amount: 684.9,
-    vat: 164.38,
+    mydataStatus: "transmitted",
+    mydataMark: "40021690",
+  },
+  {
+    id: "inv-41",
+    invoiceNumber: "ΤΠΥ-0041",
+    customerName: "Mediterranean Foods SA",
+    customerTaxLabel: "ΑΦΜ: EL099887766",
+    amount: 3920.5,
+    dueDate: "2025-04-28",
+    pipeline: "sent",
+    mydataStatus: "pending",
+    mydataMark: null,
+  },
+  {
+    id: "inv-40",
+    invoiceNumber: "ΤΠΥ-0040",
     customerName: "Alpine Components GmbH",
-    dueDate: "2026-02-28",
-    daysOverdue: 12,
+    customerTaxLabel: "EU VAT: DE811115368",
+    amount: 684.9,
+    dueDate: "2025-04-10",
+    pipeline: "partially_paid",
+    mydataStatus: "transmitted",
+    mydataMark: "40021501",
+  },
+  {
+    id: "inv-39",
+    invoiceNumber: "ΤΠΥ-0039",
+    customerName: "Athens Logistics SA",
+    customerTaxLabel: "ΑΦΜ: EL998877665",
+    amount: 5600,
+    dueDate: "2025-03-25",
+    pipeline: "overdue",
     mydataStatus: "error",
-    paymentMatching: "unmatched",
+    mydataMark: null,
+  },
+  {
+    id: "inv-38",
+    invoiceNumber: "ΤΠΥ-0038",
+    customerName: "Piraeus Marine Supplies ΕΠΕ",
+    customerTaxLabel: "ΑΦΜ: EL044512398",
+    amount: 3250,
+    dueDate: "2025-04-05",
+    pipeline: "sent",
+    mydataStatus: "transmitted",
+    mydataMark: "40021488",
+  },
+  {
+    id: "inv-37",
+    invoiceNumber: "ΤΠΥ-0037",
+    customerName: "Stripe Payments Europe Ltd",
+    customerTaxLabel: "EU VAT: IE3206488LH",
+    amount: 412.18,
+    dueDate: "2025-04-18",
+    pipeline: "paid",
+    mydataStatus: "transmitted",
+    mydataMark: "40021402",
+    paidAt: "2025-03-12",
+  },
+  {
+    id: "inv-36",
+    invoiceNumber: "ΤΠΥ-0036",
+    customerName: "Amsterdam Design BV",
+    customerTaxLabel: "EU VAT: NL855512345B01",
+    amount: 7800,
+    dueDate: "2025-04-12",
+    pipeline: "sent",
+    mydataStatus: "transmitted",
+    mydataMark: "40021355",
+  },
+  {
+    id: "inv-35",
+    invoiceNumber: "ΤΠΥ-0035",
+    customerName: "Lyon Ingénierie SAS",
+    customerTaxLabel: "EU VAT: FR33456789012",
+    amount: 9550,
+    dueDate: "2025-03-14",
+    pipeline: "paid",
+    mydataStatus: "transmitted",
+    mydataMark: "40021290",
+    paidAt: "2025-03-20",
+  },
+  {
+    id: "inv-34",
+    invoiceNumber: "ΤΠΥ-0034",
+    customerName: "Φωτόδεντρο Μονοπρόσωπη ΙΚΕ",
+    customerTaxLabel: "ΑΦΜ: EL090270128",
+    amount: 1890,
+    dueDate: "2025-04-30",
+    pipeline: "sent",
+    mydataStatus: "pending",
+    mydataMark: null,
   },
 ];
-
-export function arAgingTotals(rows: ArInvoiceRow[]) {
-  let current = 0;
-  let d1_30 = 0;
-  let d31_60 = 0;
-  let d60plus = 0;
-  for (const r of rows) {
-    if (r.pipeline === "paid") continue;
-    if (r.daysOverdue <= 0) current += r.amount;
-    else if (r.daysOverdue <= 30) d1_30 += r.amount;
-    else if (r.daysOverdue <= 60) d31_60 += r.amount;
-    else d60plus += r.amount;
-  }
-  return { current, d1_30, d31_60, d60plus };
-}
 
 export const mockArCreditMemos: ArCreditMemo[] = [
   {
