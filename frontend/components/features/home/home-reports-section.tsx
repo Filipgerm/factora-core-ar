@@ -9,9 +9,9 @@ import { cn } from "@/lib/utils";
 const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
 
 const LINKS = [
-  { href: "/reporting", label: "Income Statement" },
-  { href: "/reporting", label: "Cashflow Statement" },
-  { href: "/reporting", label: "Executive P&L" },
+  { href: "/reporting/income-statement", label: "Income Statement" },
+  { href: "/reporting/cash-flow", label: "Cashflow Statement" },
+  { href: "/reporting/executive-metrics", label: "Executive P&L" },
 ] as const;
 
 export function HomeReportsSection({ className }: { className?: string }) {
@@ -36,7 +36,7 @@ export function HomeReportsSection({ className }: { className?: string }) {
       <ul className="divide-y divide-teal-200/25 dark:divide-teal-800/25">
         {LINKS.map((item, i) => (
           <motion.li
-            key={`${item.label}-${i}`}
+            key={item.href}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...SNAP_SPRING, delay: 0.16 + i * 0.04 }}
