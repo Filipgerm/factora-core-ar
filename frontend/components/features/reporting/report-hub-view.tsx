@@ -134,27 +134,37 @@ export function ReportHubView() {
                     </>
                   )}
                   <div className="flex shrink-0 items-center gap-0.5">
-                    <button
-                      type="button"
-                      title={star ? "Remove from favorites" : "Add to favorites"}
-                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground dark:hover:bg-slate-800"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleStar(r.id);
-                      }}
-                    >
-                      <Star
-                        className={cn(
-                          "size-4",
-                          star
-                            ? "fill-amber-400 text-amber-500"
-                            : "opacity-60"
-                        )}
+                    {section.id === "favorites" ? (
+                      <span
+                        className="flex size-8 items-center justify-center text-amber-500"
+                        title="In Favourites"
                         aria-hidden
-                      />
-                      <span className="sr-only">Favorite</span>
-                    </button>
+                      >
+                        <Star className="size-4 fill-amber-400 text-amber-500" />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        title={star ? "Remove from favorites" : "Add to favorites"}
+                        className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground dark:hover:bg-slate-800"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleStar(r.id);
+                        }}
+                      >
+                        <Star
+                          className={cn(
+                            "size-4",
+                            star
+                              ? "fill-amber-400 text-amber-500"
+                              : "opacity-60"
+                          )}
+                          aria-hidden
+                        />
+                        <span className="sr-only">Favorite</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       title={pin ? "Unpin" : "Pin"}

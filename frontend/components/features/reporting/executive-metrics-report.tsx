@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 export function ExecutiveMetricsReport() {
   return (
     <ReportPageShell
-      title="Executive SaaS metrics"
+      title="SaaS metrics"
       subtitle="High-level subscription economics and efficiency indicators."
       exportFileStem="executive-saas-metrics"
     >

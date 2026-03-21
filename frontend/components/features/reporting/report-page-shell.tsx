@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
 import { ReportExportMenu } from "@/components/features/reporting/report-export-menu";
-import { ReportStatementTabs } from "@/components/features/reporting/report-statement-tabs";
 import { cn } from "@/lib/utils";
 
 export function ReportPageShell({
@@ -37,8 +36,7 @@ export function ReportPageShell({
         </div>
         <ReportExportMenu fileStem={exportFileStem} className="shrink-0" />
       </div>
-      <ReportStatementTabs />
-      <div className="mt-6">{children}</div>
+      <div className="mt-2">{children}</div>
     </div>
   );
 }

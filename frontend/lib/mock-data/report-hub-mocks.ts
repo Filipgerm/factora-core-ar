@@ -36,7 +36,7 @@ export interface ReportHubSection {
 export const reportHubSections: ReportHubSection[] = [
   {
     id: "favorites",
-    title: "Favorites",
+    title: "Favourites",
     reports: [
       {
         id: "fav-income",
@@ -57,14 +57,14 @@ export const reportHubSections: ReportHubSection[] = [
         id: "fav-usage-waterfall",
         title: "Usage Waterfall",
         icon: LineChart,
-        defaultStarred: false,
+        defaultStarred: true,
         defaultPinned: true,
       },
       {
         id: "fav-bva",
         title: "Budget vs Actual",
         icon: PieChart,
-        defaultStarred: false,
+        defaultStarred: true,
         defaultPinned: false,
       },
     ],
@@ -98,8 +98,8 @@ export const reportHubSections: ReportHubSection[] = [
         defaultPinned: false,
       },
       {
-        id: "fs-exec-pnl",
-        title: "Executive P&L",
+        id: "fs-saas-metrics",
+        title: "SaaS Metrics",
         icon: TrendingUp,
         href: "/reporting/executive-metrics",
         defaultStarred: false,
