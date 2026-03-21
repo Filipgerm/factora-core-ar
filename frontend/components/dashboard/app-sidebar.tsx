@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   BookOpen,
+  ChevronDown,
   GitMerge,
   Home,
   Layers,
@@ -53,101 +54,93 @@ const navBtn =
 const flyoutLink =
   "block rounded-md px-3 py-2 text-xs font-medium tracking-tight text-foreground/90 transition-colors duration-200 hover:bg-white/60 hover:text-foreground";
 
+/** Sidebar width in px — must match `w-56` (14rem). */
+const SIDEBAR_WIDTH_PX = 224;
+const FLYOUT_WIDTH_PX = 208; // w-52
+
 export function AppSidebar() {
   const pathname = usePathname() || "";
-  const [openKey, setOpenKey] = useState<"ar" | "ap" | null>(null);
-  const [flyoutLayout, setFlyoutLayout] = useState<{
-    top: number;
-    bottom: number;
-  }>({ top: 0, bottom: 0 });
+  /** Flyout open section; not tied to current route so outside-click can dismiss on AR/AP pages. */
+  const [expanded, setExpanded] = useState<"ar" | "ap" | null>(null);
+  const [flyoutTopPx, setFlyoutTopPx] = useState(0);
 
   const railRef = useRef<HTMLDivElement>(null);
   const asideRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const flyoutRef = useRef<HTMLElement>(null);
   const arTriggerRef = useRef<HTMLButtonElement>(null);
   const apTriggerRef = useRef<HTMLButtonElement>(null);
-  const footerRef = useRef<HTMLDivElement>(null);
 
   const arOnPath = pathname.startsWith(AR_PREFIX);
   const apOnPath = pathname.startsWith(AP_PREFIX);
-  const showArFlyout = arOnPath || openKey === "ar";
-  const showApFlyout = apOnPath || openKey === "ap";
-  const flyoutVisible = showArFlyout || showApFlyout;
-  const flyoutMode = showApFlyout ? "ap" : "ar";
+  const flyoutVisible = expanded !== null;
+  const flyoutMode = expanded ?? "ar";
 
-  useEffect(() => {
-    setOpenKey((k) => {
-      let next = k;
-      if (!pathname.startsWith(AR_PREFIX) && next === "ar") next = null;
-      if (!pathname.startsWith(AP_PREFIX) && next === "ap") next = null;
-      return next;
-    });
-  }, [pathname]);
-
-  const updateFlyoutLayout = useCallback(() => {
-    const rail = railRef.current;
-    const aside = asideRef.current;
-    const footer = footerRef.current;
+  const updateFlyoutTop = useCallback(() => {
     const trigger =
       flyoutMode === "ap" ? apTriggerRef.current : arTriggerRef.current;
-    if (!rail || !aside || !footer || !trigger) return;
-
-    const railRect = rail.getBoundingClientRect();
-    const triggerRect = trigger.getBoundingClientRect();
-    const footerRect = footer.getBoundingClientRect();
-
-    const top = Math.max(0, triggerRect.top - railRect.top);
-    /** Inset from rail bottom so flyout ends at workspace footer top. */
-    const bottom = Math.max(0, railRect.bottom - footerRect.top);
-
-    setFlyoutLayout({ top, bottom });
+    if (!trigger) return;
+    setFlyoutTopPx(Math.round(trigger.getBoundingClientRect().top));
   }, [flyoutMode]);
 
   useLayoutEffect(() => {
     if (!flyoutVisible) return;
-    updateFlyoutLayout();
-  }, [flyoutVisible, flyoutMode, pathname, updateFlyoutLayout]);
+    updateFlyoutTop();
+  }, [flyoutVisible, flyoutMode, pathname, updateFlyoutTop]);
 
   useEffect(() => {
     if (!flyoutVisible) return;
-    const ro = new ResizeObserver(() => updateFlyoutLayout());
+    const ro = new ResizeObserver(() => updateFlyoutTop());
     if (railRef.current) ro.observe(railRef.current);
-    window.addEventListener("resize", updateFlyoutLayout);
+    window.addEventListener("resize", updateFlyoutTop);
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", updateFlyoutLayout);
+      window.removeEventListener("resize", updateFlyoutTop);
     };
-  }, [flyoutVisible, updateFlyoutLayout]);
+  }, [flyoutVisible, updateFlyoutTop]);
+
+  useEffect(() => {
+    if (!flyoutVisible) return;
+    const nav = navRef.current;
+    if (!nav) return;
+    nav.addEventListener("scroll", updateFlyoutTop, { passive: true });
+    return () => nav.removeEventListener("scroll", updateFlyoutTop);
+  }, [flyoutVisible, updateFlyoutTop]);
+
+  useEffect(() => {
+    if (!flyoutVisible) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (flyoutRef.current?.contains(t)) return;
+      if (arTriggerRef.current?.contains(t)) return;
+      if (apTriggerRef.current?.contains(t)) return;
+      setExpanded(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [flyoutVisible]);
 
   useEffect(() => {
     if (!flyoutVisible) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (arOnPath || apOnPath) return;
-        setOpenKey(null);
-      }
+      if (e.key === "Escape") setExpanded(null);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [flyoutVisible, arOnPath, apOnPath]);
+  }, [flyoutVisible]);
 
-  const arParentActive = arOnPath || openKey === "ar";
-  const apParentActive = apOnPath || openKey === "ap";
+  const arParentActive = arOnPath || expanded === "ar";
+  const apParentActive = apOnPath || expanded === "ap";
 
   const onArClick = () => {
-    setOpenKey((k) => {
-      if (arOnPath) return k;
-      if (k === "ar") return null;
-      return "ar";
-    });
+    setExpanded((e) => (e === "ar" ? null : "ar"));
   };
 
   const onApClick = () => {
-    setOpenKey((k) => {
-      if (apOnPath) return k;
-      if (k === "ap") return null;
-      return "ap";
-    });
+    setExpanded((e) => (e === "ap" ? null : "ap"));
   };
+
+  const closeFlyout = () => setExpanded(null);
 
   const links = flyoutMode === "ap" ? AP_CHILDREN : AR_CHILDREN;
   const flyoutLabel =
@@ -173,7 +166,10 @@ export function AppSidebar() {
             Factora
           </Link>
         </div>
-        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+        <nav
+          ref={navRef}
+          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2"
+        >
           {SIMPLE_NAV.slice(0, 2).map(({ href, label, icon: Icon }) => {
             const active =
               pathname === href || pathname.startsWith(`${href}/`);
@@ -198,7 +194,7 @@ export function AppSidebar() {
             <button
               ref={arTriggerRef}
               type="button"
-              aria-expanded={showArFlyout}
+              aria-expanded={expanded === "ar"}
               aria-controls="sidebar-ar-ap-flyout"
               onClick={onArClick}
               className={cn(
@@ -212,6 +208,13 @@ export function AppSidebar() {
               <span className="min-w-0 flex-1 text-left">
                 Accounts Receivable
               </span>
+              <ChevronDown
+                className={cn(
+                  "size-4 shrink-0 opacity-70 transition-transform duration-200",
+                  expanded === "ar" && "rotate-180"
+                )}
+                aria-hidden
+              />
             </button>
           </div>
 
@@ -219,7 +222,7 @@ export function AppSidebar() {
             <button
               ref={apTriggerRef}
               type="button"
-              aria-expanded={showApFlyout}
+              aria-expanded={expanded === "ap"}
               aria-controls="sidebar-ar-ap-flyout"
               onClick={onApClick}
               className={cn(
@@ -233,6 +236,13 @@ export function AppSidebar() {
               <span className="min-w-0 flex-1 text-left">
                 Accounts Payable
               </span>
+              <ChevronDown
+                className={cn(
+                  "size-4 shrink-0 opacity-70 transition-transform duration-200",
+                  expanded === "ap" && "rotate-180"
+                )}
+                aria-hidden
+              />
             </button>
           </div>
 
@@ -256,7 +266,7 @@ export function AppSidebar() {
             );
           })}
         </nav>
-        <div ref={footerRef} className="border-t border-slate-100 p-3">
+        <div className="border-t border-slate-100 p-3">
           <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium tracking-tight text-sidebar-muted-foreground">
             <BookOpen className="size-3.5 shrink-0 opacity-80" aria-hidden />
             <span className="truncate">Workspace</span>
@@ -266,20 +276,21 @@ export function AppSidebar() {
 
       {flyoutVisible ? (
         <nav
+          ref={flyoutRef}
           id="sidebar-ar-ap-flyout"
           role="navigation"
           aria-label={flyoutLabel}
           className={cn(
-            "absolute z-30 w-52 border-l border-teal-200/45 bg-[var(--brand-primary-subtle)] shadow-sm transition-all duration-200 ease-out",
-            "dark:border-teal-800/45 dark:bg-teal-950/25"
+            "fixed z-40 overflow-hidden rounded-r-xl border border-l-0 border-teal-200/45 bg-[var(--brand-primary-subtle)] shadow-md transition-[opacity,transform] duration-200 ease-out dark:border-teal-800/45 dark:bg-teal-950/25"
           )}
           style={{
-            left: "100%",
-            top: flyoutLayout.top,
-            bottom: flyoutLayout.bottom,
+            left: SIDEBAR_WIDTH_PX,
+            top: flyoutTopPx,
+            bottom: 0,
+            width: FLYOUT_WIDTH_PX,
           }}
         >
-          <div className="flex h-full flex-col gap-0.5 overflow-y-auto p-2 pt-3 shadow-[inset_0_0_0_1px_rgba(47,154,138,0.06)]">
+          <div className="flex h-full max-h-full flex-col gap-0.5 overflow-y-auto p-2 pt-3 shadow-[inset_0_0_0_1px_rgba(47,154,138,0.06)]">
             {links.map(({ href, label }) => {
               const subActive =
                 pathname === href || pathname.startsWith(`${href}/`);
@@ -287,6 +298,7 @@ export function AppSidebar() {
                 <Link
                   key={href}
                   href={href}
+                  onClick={closeFlyout}
                   className={cn(
                     flyoutLink,
                     subActive &&
