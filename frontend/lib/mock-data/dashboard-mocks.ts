@@ -315,6 +315,47 @@ export const mockInvoices: MockInvoice[] = [
   },
 ];
 
+/** Outbound AR — overdue for collections demo (past due vs. current date). */
+export interface MockArOverdueInvoice {
+  id: string;
+  invoiceNumber: string;
+  customerLegalName: string;
+  contactFirstName: string;
+  amount: number;
+  currency: "EUR";
+  dueDate: string;
+}
+
+export const mockArOverdueInvoices: MockArOverdueInvoice[] = [
+  {
+    id: "ar-col-1",
+    invoiceNumber: "INV-2025-0041",
+    customerLegalName: "Nordic Retail AB",
+    contactFirstName: "Erik",
+    amount: 12840.0,
+    currency: "EUR",
+    dueDate: "2025-01-18",
+  },
+  {
+    id: "ar-col-2",
+    invoiceNumber: "INV-2025-0056",
+    customerLegalName: "Mediterranean Foods SA",
+    contactFirstName: "Sofia",
+    amount: 3920.5,
+    currency: "EUR",
+    dueDate: "2025-02-02",
+  },
+  {
+    id: "ar-col-3",
+    invoiceNumber: "INV-2025-0063",
+    customerLegalName: "Alpine Components GmbH",
+    contactFirstName: "Thomas",
+    amount: 684.9,
+    currency: "EUR",
+    dueDate: "2025-02-28",
+  },
+];
+
 /* -----------------------------------------------------------------------------
    Reconciliation (bank ↔ AR/AP) — Phase 2
    ----------------------------------------------------------------------------- */
