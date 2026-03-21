@@ -31,6 +31,10 @@ const LEAF_LABEL: Record<string, string> = {
   bills: "Bills",
   charges: "Charges",
   reimbursements: "Reimbursements",
+  "income-statement": "Income statement",
+  "balance-sheet": "Balance sheet",
+  "cash-flow": "Cash flow",
+  "executive-metrics": "SaaS metrics",
 };
 
 function labelForSegment(segment: string, index: number): string {
