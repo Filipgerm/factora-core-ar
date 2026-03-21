@@ -222,15 +222,6 @@ export function ArInvoicesView() {
 
   return (
     <div className="space-y-5 pb-24">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Invoices
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm tracking-tight text-muted-foreground">
-          AR pipeline, myDATA transmission, and collections actions.
-        </p>
-      </div>
-
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(
           [

@@ -125,15 +125,7 @@ export function ApReimbursementsView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Reimbursements
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm tracking-tight text-muted-foreground">
-            Employee expense claims with payroll-oriented monthly rollups.
-          </p>
-        </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
         <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-background">
           <Switch
             id="ap-rb-approval"

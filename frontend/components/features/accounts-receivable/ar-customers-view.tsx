@@ -143,16 +143,6 @@ export function ArCustomersView() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Customers
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm tracking-tight text-muted-foreground">
-          Legal entities with open AR, DSO, and payment behaviour — drill into
-          invoices and aging.
-        </p>
-      </div>
-
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/90 bg-white p-4 dark:border-slate-800 dark:bg-background">
         <div className="flex items-center gap-2">
           <input

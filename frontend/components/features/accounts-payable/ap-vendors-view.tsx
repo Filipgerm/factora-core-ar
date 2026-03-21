@@ -103,16 +103,6 @@ export function ApVendorsView() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Vendors
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm tracking-tight text-muted-foreground">
-          Payables by vendor with default categories and bank details — open a
-          row for bills and payment cadence.
-        </p>
-      </div>
-
       <DataTable
         columns={columns}
         data={mockApVendors}

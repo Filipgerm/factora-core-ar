@@ -223,16 +223,6 @@ export function ApChargesView() {
 
   return (
     <div className="space-y-5 pb-24">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Charges
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm tracking-tight text-muted-foreground">
-          Card feeds with AI suggestions — bulk recategorize or drop receipts on
-          rows.
-        </p>
-      </div>
-
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/90 bg-white p-4 dark:border-slate-800 dark:bg-background">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Card</Label>

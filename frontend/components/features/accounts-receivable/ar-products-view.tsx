@@ -136,15 +136,7 @@ export function ArProductsView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Products
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm tracking-tight text-muted-foreground">
-            Sellable items with GL and myDATA mapping — demo CRUD adds rows locally.
-          </p>
-        </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button type="button" className="rounded-lg transition-all duration-200">

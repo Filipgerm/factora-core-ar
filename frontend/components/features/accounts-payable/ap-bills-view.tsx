@@ -258,16 +258,6 @@ export function ApBillsView() {
 
   return (
     <div className="space-y-5 pb-24">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Bills
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm tracking-tight text-muted-foreground">
-          AP pipeline, due dates, and myDATA — quick approve trusted vendors in
-          bulk.
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {(
           [

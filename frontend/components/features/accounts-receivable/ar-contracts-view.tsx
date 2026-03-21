@@ -148,16 +148,6 @@ export function ArContractsView() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Contracts
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm tracking-tight text-muted-foreground">
-          Revenue contracts with renewal risk — open a row for recognition
-          schedule.
-        </p>
-      </div>
-
       <DataTable
         columns={columns}
         data={mockArContracts}
