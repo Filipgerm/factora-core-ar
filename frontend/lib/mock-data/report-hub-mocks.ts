@@ -12,6 +12,7 @@ import {
   Receipt,
   Scale,
   ScrollText,
+  ShieldCheck,
   TrendingDown,
   TrendingUp,
   Wallet,
@@ -34,6 +35,20 @@ export interface ReportHubSection {
 }
 
 export const reportHubSections: ReportHubSection[] = [
+  {
+    id: "tax-compliance",
+    title: "Tax & compliance",
+    reports: [
+      {
+        id: "tax-vat-return",
+        title: "VAT Return",
+        icon: ShieldCheck,
+        href: "/reporting/vat-return",
+        defaultStarred: false,
+        defaultPinned: false,
+      },
+    ],
+  },
   {
     id: "favorites",
     title: "Favourites",

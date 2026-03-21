@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 
+import { ReportDatePresetBar } from "@/components/features/reporting/report-date-preset-bar";
 import { ReportPageShell } from "@/components/features/reporting/report-page-shell";
 import { TransactionDetailSheet } from "@/components/features/reporting/transaction-detail-sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -169,6 +170,7 @@ export function IncomeStatementReport() {
       subtitle="Summary performance for the current period and year-to-date, with a month-over-month comparison."
       exportFileStem="income-statement"
     >
+      <ReportDatePresetBar className="mb-5" />
       <Tabs defaultValue="summary" className="gap-4">
         <TabsList className="h-10 rounded-full border border-slate-200/80 bg-slate-50/80 p-1 dark:border-slate-800 dark:bg-slate-900/40">
           <TabsTrigger

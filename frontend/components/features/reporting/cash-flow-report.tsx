@@ -1,5 +1,6 @@
 "use client";
 
+import { ReportDatePresetBar } from "@/components/features/reporting/report-date-preset-bar";
 import { ReportPageShell } from "@/components/features/reporting/report-page-shell";
 import {
   CASH_FLOW_INSIGHT,
@@ -35,6 +36,7 @@ export function CashFlowReport() {
       subtitle="Operating, investing, and financing cash movements for the period."
       exportFileStem="cash-flow-statement"
     >
+      <ReportDatePresetBar className="mb-5" />
       <div className="overflow-x-auto rounded-xl border border-slate-200/90 dark:border-slate-800">
         <table className="w-full min-w-[520px] border-collapse text-left">
           <thead>

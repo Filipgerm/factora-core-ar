@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 
+import { ReportDatePresetBar } from "@/components/features/reporting/report-date-preset-bar";
 import { ReportPageShell } from "@/components/features/reporting/report-page-shell";
 import { TransactionDetailSheet } from "@/components/features/reporting/transaction-detail-sheet";
 import {
@@ -85,6 +86,7 @@ export function BalanceSheetReport() {
       subtitle="Assets, liabilities, and equity with prior-month comparison."
       exportFileStem="balance-sheet"
     >
+      <ReportDatePresetBar className="mb-5" />
       <div className="overflow-x-auto rounded-xl border border-slate-200/90 dark:border-slate-800">
         <table className="w-full min-w-[560px] border-collapse text-left">
           <thead>

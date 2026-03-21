@@ -35,6 +35,7 @@ const LEAF_LABEL: Record<string, string> = {
   "balance-sheet": "Balance sheet",
   "cash-flow": "Cash flow",
   "executive-metrics": "SaaS metrics",
+  "vat-return": "VAT return",
 };
 
 function labelForSegment(segment: string, index: number): string {
