@@ -44,6 +44,10 @@ function aiConfidenceTier(
 export const RECON_BANK_TINT_CLASS =
   "bg-[#EFF1F4] dark:bg-slate-800/90";
 
+/** Midpoint between bank tint (#EFF1F4) and ledger pane (slate-50 ≈ #f8fafc) — full-row hover. */
+const RECON_ROW_HOVER_PANE =
+  "group-hover/reconrow:bg-[#F4F6F8] dark:group-hover/reconrow:bg-slate-800/78";
+
 /** Type column icon well — aligns with sidebar teal treatment. */
 export const RECON_TYPE_ICON_WELL =
   "border border-teal-200/45 bg-[var(--brand-primary-subtle)] shadow-[inset_0_0_0_1px_rgba(47,154,138,0.08)] dark:border-teal-800/45 dark:bg-teal-950/25";
@@ -163,8 +167,11 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
   const accountShort = `${BANK_LABEL[transaction.bankId]} ${transaction.maskedAccount}`;
   const aiTier = isPending ? aiConfidenceTier(pair.aiConfidencePercent) : null;
 
-  const bankPaneClass =
-    "md:bg-[#EFF1F4] md:transition-colors md:duration-200 dark:md:bg-slate-800/90 md:group-hover/reconrow:bg-slate-50 dark:md:group-hover/reconrow:bg-slate-900/70";
+  const bankPaneClass = cn(
+    "transition-colors duration-200 ease-out",
+    "md:bg-[#EFF1F4] dark:md:bg-slate-800/90",
+    RECON_ROW_HOVER_PANE
+  );
 
   const aiChipBase =
     "relative z-0 flex h-7 min-w-[4.75rem] shrink-0 items-center gap-1 rounded-md border px-1.5 shadow-sm transition-shadow duration-200";
@@ -172,7 +179,7 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
   return (
     <div
       className={cn(
-        "group/reconrow grid w-full grid-cols-1 border-b border-slate-200 transition-colors duration-200 dark:border-slate-700/80",
+        "group/reconrow grid w-full grid-cols-1 border-b border-slate-200 dark:border-slate-700/80",
         RECON_ROW_OUTER,
         "md:items-stretch"
       )}
@@ -226,8 +233,8 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
 
       <div
         className={cn(
-          "min-w-0 py-2.5 pl-1 pr-2 md:border-l md:border-slate-200/80 md:bg-slate-50 md:py-0 md:pl-3 md:pr-3 dark:md:border-slate-700/80 dark:md:bg-slate-950/35",
-          "md:transition-colors md:duration-200 md:group-hover/reconrow:bg-slate-50 dark:md:group-hover/reconrow:bg-slate-900/60"
+          "min-w-0 py-2.5 pl-1 pr-2 transition-colors duration-200 ease-out md:border-l md:border-slate-200/80 md:bg-slate-50 md:py-0 md:pl-3 md:pr-3 dark:md:border-slate-700/80 dark:md:bg-slate-950/35",
+          RECON_ROW_HOVER_PANE
         )}
       >
         <div className={cn("min-w-0", RECON_BOOK_INNER)}>
