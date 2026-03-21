@@ -202,7 +202,7 @@ export function ArInvoicesView() {
         enableSorting: false,
       },
     ],
-    [toast]
+    []
   );
 
   const selectedOverdueCount = useMemo(() => {
