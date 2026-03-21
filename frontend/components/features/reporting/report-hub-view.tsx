@@ -79,12 +79,7 @@ export function ReportHubView() {
           <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             {section.title}
           </h2>
-          <div
-            className={cn(
-              "grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
-              section.id === "tax-compliance" && "max-w-lg xl:max-w-xl"
-            )}
-          >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {section.reports.map((r, ri) => {
               const idx = si * 40 + ri;
               const Icon = r.icon;
@@ -92,7 +87,6 @@ export function ReportHubView() {
                 star: false,
                 pin: false,
               };
-              const taxProminent = section.id === "tax-compliance";
               return (
                 <motion.div
                   key={r.id}
@@ -103,11 +97,7 @@ export function ReportHubView() {
                     ...SNAP_SPRING,
                     delay: Math.min(0.12 + idx * 0.012, 0.45),
                   }}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg border border-slate-200/90 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-shadow duration-200 hover:shadow-md dark:border-slate-800 dark:bg-background",
-                    taxProminent &&
-                      "rounded-xl border-2 border-teal-200/55 bg-[var(--brand-primary-subtle)] p-4 shadow-[0_8px_32px_-14px_rgba(47,154,138,0.22)] dark:border-teal-800/50 dark:bg-teal-950/20"
-                  )}
+                  className="flex items-center gap-3 rounded-lg border border-slate-200/90 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-shadow duration-200 hover:shadow-md dark:border-slate-800 dark:bg-background"
                 >
                   {r.href ? (
                     <Link

@@ -12,7 +12,6 @@ import {
   Receipt,
   Scale,
   ScrollText,
-  ShieldCheck,
   TrendingDown,
   TrendingUp,
   Wallet,
@@ -35,20 +34,6 @@ export interface ReportHubSection {
 }
 
 export const reportHubSections: ReportHubSection[] = [
-  {
-    id: "tax-compliance",
-    title: "Tax & compliance",
-    reports: [
-      {
-        id: "tax-vat-return",
-        title: "VAT Return",
-        icon: ShieldCheck,
-        href: "/reporting/vat-return",
-        defaultStarred: false,
-        defaultPinned: false,
-      },
-    ],
-  },
   {
     id: "favorites",
     title: "Favourites",
@@ -149,7 +134,12 @@ export const reportHubSections: ReportHubSection[] = [
       { id: "cr-gl", title: "General Ledger", icon: BookOpen },
       { id: "cr-1099", title: "1099 Report", icon: Receipt },
       { id: "cr-sales-tax", title: "Sales Tax Report", icon: Calculator },
-      { id: "cr-vat", title: "VAT Report", icon: ScrollText },
+      {
+        id: "cr-vat",
+        title: "VAT Report",
+        icon: ScrollText,
+        href: "/reporting/vat-return",
+      },
       { id: "cr-cash-rec", title: "Cash Reconciliation", icon: Landmark },
       { id: "cr-billing", title: "Billing Forecast", icon: TrendingUp },
       { id: "cr-depr", title: "Depreciation Schedule", icon: PieChart },
