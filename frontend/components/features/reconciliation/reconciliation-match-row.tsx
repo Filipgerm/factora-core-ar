@@ -48,13 +48,18 @@ export const RECON_BANK_TINT_CLASS =
 export const RECON_ROW_OUTER =
   "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]";
 
-/** Bank pane: room between Date and Payer; Account column sized for masked IBAN-style labels. */
+/** Bank pane: consistent start positions per column; wider gaps for readability. */
 export const RECON_BANK_INNER =
-  "md:grid md:grid-cols-[3.1rem_minmax(0,1fr)_minmax(5.5rem,7rem)_minmax(4.25rem,5.25rem)] md:gap-x-2 md:items-center md:px-2 md:py-2";
+  "md:grid md:grid-cols-[3.35rem_minmax(0,1fr)_minmax(6.25rem,8.5rem)_minmax(5.25rem,6rem)] md:items-center md:gap-x-3 md:px-3 md:py-3";
 
-/** Factora pane: extra space before AI so Amount stays clear of the chip. */
+/** Factora pane: extra space before AI; aligned with headers. */
 export const RECON_BOOK_INNER =
-  "md:grid md:grid-cols-[2.25rem_minmax(0,1.15fr)_minmax(0,1fr)_minmax(5.25rem,6.25rem)_minmax(5.5rem,6.25rem)] md:items-center md:gap-x-2 md:px-2 md:py-2";
+  "md:grid md:grid-cols-[2.5rem_minmax(0,1.15fr)_minmax(0,1fr)_minmax(5.75rem,6.75rem)_minmax(6rem,6.75rem)] md:items-center md:gap-x-3 md:px-3 md:py-3";
+
+export type ReconciliationRowMeta = {
+  isFirst: boolean;
+  isLast: boolean;
+};
 
 const BANK_LABEL: Record<ReconciliationBankId, string> = {
   eurobank: "Eurobank",
@@ -129,14 +134,18 @@ type ReconciliationMatchRowProps =
       pair: ReconciliationPendingPair;
       onConfirm: (pairId: string) => void;
       onReview: (pair: ReconciliationPendingPair) => void;
+      rowMeta?: ReconciliationRowMeta;
     }
   | {
       variant: "auto";
       pair: ReconciliationAutoMatchedPair;
+      rowMeta?: ReconciliationRowMeta;
     };
 
 export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
-  const { pair, variant } = props;
+  const { pair, variant, rowMeta } = props;
+  const isFirstRow = rowMeta?.isFirst ?? false;
+  const isLastRow = rowMeta?.isLast ?? false;
   const { transaction, invoice } = pair;
   const isPending = variant === "pending";
   const bankOutflow = transaction.amount < 0;
@@ -165,47 +174,46 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
     >
       <div
         className={cn(
-          "py-2 pl-1 pr-2 md:py-0",
+          "py-2.5 pl-1 pr-2 md:py-0",
           bankPaneClass,
-          "md:transition-colors md:duration-200 md:group-hover:bg-[#e8eaef] dark:md:group-hover:bg-slate-800"
+          "md:transition-colors md:duration-200 md:group-hover:bg-[#e8eaef] dark:md:group-hover:bg-slate-800",
+          isFirstRow && "md:rounded-tl-xl",
+          isLastRow && "md:rounded-bl-xl"
         )}
       >
         <div className={cn("min-w-0", RECON_BANK_INNER)}>
-          <div className="flex min-w-0 items-center justify-center px-0.5">
-            <p className="w-full min-w-0 truncate text-center font-mono text-[11px] font-semibold tabular-nums leading-none text-muted-foreground">
+          <div className="flex min-w-0 items-center justify-end">
+            <p className="w-full min-w-0 truncate text-right font-mono text-[11px] font-semibold tabular-nums leading-none text-muted-foreground">
               {formatReconciliationDate(transaction.date)}
             </p>
           </div>
 
           <div
-            className="flex min-w-0 max-w-full flex-nowrap items-center justify-center gap-1 overflow-hidden px-0.5"
+            className="flex min-w-0 flex-col justify-center gap-0.5"
             title={`${transaction.merchant} · ${payerHintLine(transaction)}`}
           >
-            <span className="min-w-0 max-w-[58%] shrink truncate text-center text-[12px] font-semibold leading-none tracking-tight text-[var(--brand-primary)] dark:text-teal-400">
+            <p className="w-full min-w-0 truncate text-left text-[12px] font-semibold leading-tight tracking-tight text-[var(--brand-primary)] dark:text-teal-400">
               {transaction.merchant}
-            </span>
-            <span
-              className="shrink-0 text-[10px] font-semibold leading-none text-muted-foreground"
-              aria-hidden
+            </p>
+            <p
+              className="w-full min-w-0 truncate text-left text-[10px] font-semibold leading-tight tracking-wide text-muted-foreground"
+              title={transaction.rawDescriptor}
             >
-              ·
-            </span>
-            <span className="min-w-0 flex-1 truncate text-center text-[10px] font-semibold leading-none tracking-wide text-muted-foreground">
               {payerHintLine(transaction)}
-            </span>
+            </p>
           </div>
 
-          <div className="flex min-w-0 items-center justify-center px-0.5">
+          <div className="flex min-w-0 items-center justify-start">
             <p
-              className="w-full min-w-0 truncate text-center font-mono text-[11px] font-semibold tabular-nums leading-none text-muted-foreground"
+              className="w-full min-w-0 truncate text-left font-mono text-[11px] font-semibold tabular-nums leading-none text-muted-foreground"
               title={accountShort}
             >
               {accountShort}
             </p>
           </div>
 
-          <div className="flex min-w-0 items-center justify-center">
-            <p className={cn(cashflowAmountClass(bankOutflow), "truncate")}>
+          <div className="flex min-w-0 items-center justify-end">
+            <p className={cn(cashflowAmountClass(bankOutflow), "truncate text-right")}>
               {bankSigned}
             </p>
           </div>
@@ -214,7 +222,7 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
 
       <div
         className={cn(
-          "min-w-0 py-2 pl-1 pr-2 md:border-l md:border-slate-200/80 md:bg-slate-50 md:py-0 md:pl-2 md:pr-2 dark:md:border-slate-700/80 dark:md:bg-slate-950/35",
+          "min-w-0 py-2.5 pl-1 pr-2 md:border-l md:border-slate-200/80 md:bg-slate-50 md:py-0 md:pl-3 md:pr-3 dark:md:border-slate-700/80 dark:md:bg-slate-950/35",
           "md:transition-colors md:duration-200 md:group-hover:bg-slate-100/90 dark:md:group-hover:bg-slate-900/45"
         )}
       >
@@ -234,39 +242,41 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
           </div>
 
           <div
-            className="flex min-w-0 max-w-full flex-nowrap items-center justify-center gap-1 overflow-hidden px-0.5"
+            className="flex min-w-0 flex-col justify-center gap-0.5"
             title={`${invoice.counterpartyName} · ${invoice.invoiceSummary}`}
           >
-            <span className="min-w-0 max-w-[58%] shrink truncate text-center text-[12px] font-semibold leading-none tracking-tight text-foreground">
+            <p className="w-full min-w-0 truncate text-left text-[12px] font-semibold leading-tight tracking-tight text-foreground">
               {invoice.counterpartyName}
-            </span>
-            <span
-              className="shrink-0 text-[10px] font-semibold leading-none text-muted-foreground"
-              aria-hidden
+            </p>
+            <p
+              className="w-full min-w-0 truncate text-left text-[10px] font-semibold leading-tight tracking-wide text-muted-foreground"
+              title={invoice.invoiceSummary}
             >
-              ·
-            </span>
-            <span className="min-w-0 flex-1 truncate text-center text-[10px] font-semibold leading-none tracking-wide text-muted-foreground">
               {invoice.invoiceSummary}
-            </span>
+            </p>
           </div>
 
-          <div className="flex min-w-0 items-center justify-center px-0.5">
+          <div className="flex min-w-0 items-center justify-start">
             <p
-              className="w-full min-w-0 truncate text-center font-mono text-[11px] font-semibold leading-none tracking-tight text-foreground/90"
+              className="w-full min-w-0 truncate text-left font-mono text-[11px] font-semibold leading-tight tracking-tight text-foreground/90"
               title={invoice.glAccount}
             >
               {invoice.glAccount}
             </p>
           </div>
 
-          <div className="flex min-w-0 items-center justify-center pr-1">
-            <p className={cn(cashflowAmountClass(bankOutflow), "truncate")}>
+          <div className="flex min-w-0 items-center justify-end pr-0.5">
+            <p
+              className={cn(
+                cashflowAmountClass(bankOutflow),
+                "truncate text-right"
+              )}
+            >
               {bookSigned}
             </p>
           </div>
 
-          <div className="flex min-w-0 items-center justify-center pl-1">
+          <div className="flex min-w-0 items-center justify-end pl-1">
             {variant === "auto" ? (
               <div
                 className={cn(

@@ -296,7 +296,7 @@ export function ReconciliationView() {
             className={cn(
               LEDGER_TH,
               RECON_BANK_TINT_CLASS,
-              "px-2 py-1.5 text-[var(--brand-primary)] dark:text-teal-400"
+              "rounded-l-xl px-3 py-2 text-[var(--brand-primary)] dark:text-teal-400"
             )}
           >
             Bank
@@ -321,13 +321,14 @@ export function ReconciliationView() {
           <div
             className={cn(
               RECON_BANK_INNER,
-              "bg-slate-50 dark:bg-slate-950/40"
+              RECON_BANK_TINT_CLASS,
+              "dark:bg-slate-800/90"
             )}
           >
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center"
+                "flex min-h-9 items-center justify-end tabular-nums"
               )}
             >
               Date
@@ -335,7 +336,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center"
+                "flex min-h-9 items-center justify-start text-left"
               )}
             >
               Payer
@@ -343,7 +344,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center"
+                "flex min-h-9 items-center justify-start text-left"
               )}
             >
               Account
@@ -351,7 +352,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center"
+                "flex min-h-9 items-center justify-end tabular-nums"
               )}
             >
               Amount
@@ -366,7 +367,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center leading-tight"
+                "flex min-h-9 items-center justify-center leading-tight"
               )}
             >
               Type
@@ -374,7 +375,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center leading-tight"
+                "flex min-h-9 items-center justify-start text-left leading-tight"
               )}
             >
               Vendor / Customer / Other
@@ -382,7 +383,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center leading-tight"
+                "flex min-h-9 items-center justify-start text-left leading-tight"
               )}
             >
               GL Account
@@ -390,7 +391,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center leading-tight"
+                "flex min-h-9 items-center justify-end pr-0.5 tabular-nums leading-tight"
               )}
             >
               Amount
@@ -398,7 +399,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-center text-center leading-tight"
+                "flex min-h-9 items-center justify-end leading-tight"
               )}
             >
               AI
@@ -415,13 +416,17 @@ export function ReconciliationView() {
           />
         ) : (
           <ul className="flex min-w-0 flex-col" role="list">
-            {pendingFiltered.map((pair) => (
+            {pendingFiltered.map((pair, i) => (
               <li key={pair.id} className="min-w-0">
                 <ReconciliationMatchRow
                   variant="pending"
                   pair={pair}
                   onConfirm={handleConfirmMatch}
                   onReview={openPair}
+                  rowMeta={{
+                    isFirst: i === 0,
+                    isLast: i === pendingFiltered.length - 1,
+                  }}
                 />
               </li>
             ))}
@@ -434,9 +439,16 @@ export function ReconciliationView() {
         />
       ) : (
         <ul className="flex min-w-0 flex-col" role="list">
-          {matchedFiltered.map((pair) => (
+          {matchedFiltered.map((pair, i) => (
             <li key={pair.id} className="min-w-0">
-              <ReconciliationMatchRow variant="auto" pair={pair} />
+              <ReconciliationMatchRow
+                variant="auto"
+                pair={pair}
+                rowMeta={{
+                  isFirst: i === 0,
+                  isLast: i === matchedFiltered.length - 1,
+                }}
+              />
             </li>
           ))}
         </ul>
