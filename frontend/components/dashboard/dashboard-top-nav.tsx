@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Search } from "lucide-react";
 
+import { ImportDataButton } from "@/components/dashboard/import-data-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { mockHomeUserFirstName } from "@/lib/mock-data/dashboard-mocks";
@@ -113,6 +114,7 @@ export function DashboardTopNav() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <ImportDataButton />
           <Avatar className="size-8 border border-slate-100 shadow-sm">
             <AvatarFallback className="bg-[var(--brand-primary-subtle)] text-xs font-semibold text-[var(--brand-primary)]">
               {initials}
