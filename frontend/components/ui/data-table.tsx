@@ -31,6 +31,8 @@ export type DataTableProps<TData, TValue> = {
   getRowClassName?: (row: TData) => string | undefined;
   emptyLabel?: string;
   className?: string;
+  /** When provided, only matching rows can be selected (e.g. bulk actions on overdue only). */
+  isRowSelectable?: (row: TData) => boolean;
 };
 
 export function DataTable<TData, TValue>({
@@ -44,6 +46,7 @@ export function DataTable<TData, TValue>({
   getRowClassName,
   emptyLabel = "No results.",
   className,
+  isRowSelectable,
 }: DataTableProps<TData, TValue>) {
   const [internalSelection, setInternalSelection] =
     React.useState<RowSelectionState>({});
@@ -60,7 +63,11 @@ export function DataTable<TData, TValue>({
           onRowSelectionChange: resolvedOnSelectionChange,
         }
       : {}),
-    enableRowSelection: enableRowSelection ?? false,
+    enableRowSelection: !enableRowSelection
+      ? false
+      : typeof isRowSelectable === "function"
+        ? (row) => isRowSelectable(row.original)
+        : true,
     getCoreRowModel: getCoreRowModel(),
     getRowId,
   });

@@ -25,6 +25,8 @@ const ROOT_SEGMENT_LABEL: Record<string, string> = {
 /** Leaf slug → label (kebab-case keys) */
 const LEAF_LABEL: Record<string, string> = {
   customers: "Customers",
+  products: "Products",
+  contracts: "Contracts",
   invoices: "Invoices",
   "credit-memos": "Credit memos",
   vendors: "Vendors",
