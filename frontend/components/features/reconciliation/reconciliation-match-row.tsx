@@ -44,12 +44,13 @@ function aiConfidenceTier(
 export const RECON_ROW_OUTER =
   "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]";
 
-/** All cells vertically centered with row content. Date + payer share a tight gutter. */
+/** Bank pane: room between Date and Payer; Account column sized for masked IBAN-style labels. */
 export const RECON_BANK_INNER =
-  "md:grid md:grid-cols-[2.15rem_minmax(0,1fr)_minmax(4.75rem,5.5rem)_3.35rem] md:gap-x-0.5 md:items-center md:px-2 md:py-2";
+  "md:grid md:grid-cols-[3.1rem_minmax(0,1fr)_minmax(5.5rem,7rem)_minmax(4.25rem,5.25rem)] md:gap-x-2 md:items-center md:px-2 md:py-2";
 
+/** Factora pane: extra space before AI so Amount stays clear of the chip. */
 export const RECON_BOOK_INNER =
-  "md:grid md:grid-cols-[1.125rem_minmax(0,1fr)_minmax(0,1fr)_3.1rem_minmax(3.85rem,4.65rem)] md:gap-x-1.5 md:items-center md:px-1.5 md:py-2";
+  "md:grid md:grid-cols-[2.25rem_minmax(0,1.15fr)_minmax(0,1fr)_minmax(5.25rem,6.25rem)_minmax(5.5rem,6.25rem)] md:items-center md:gap-x-2 md:px-2 md:py-2";
 
 const BANK_LABEL: Record<ReconciliationBankId, string> = {
   eurobank: "Eurobank",
@@ -97,7 +98,7 @@ function InvoiceCategoryIcon({
 
 function cashflowAmountClass(isOutflow: boolean) {
   return cn(
-    "font-mono text-[11px] tabular-nums tracking-tight",
+    "font-mono text-[12px] tabular-nums tracking-tight",
     isOutflow
       ? "font-bold text-foreground"
       : "font-semibold text-emerald-600 dark:text-emerald-400"
@@ -146,15 +147,15 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
   const aiTier = isPending ? aiConfidenceTier(pair.aiConfidencePercent) : null;
 
   const bankPaneClass =
-    "md:bg-[var(--brand-primary-subtle)] md:shadow-[inset_0_0_0_1px_rgba(47,154,138,0.12)] dark:md:bg-teal-950/25 dark:md:shadow-[inset_0_0_0_1px_rgba(45,212,191,0.18)]";
+    "md:bg-[#E9EBEF] dark:md:bg-slate-800/90";
 
   const aiChipShell =
-    "group/ai relative z-0 h-8 w-full max-w-[4.65rem] shrink-0 overflow-hidden rounded-md border shadow-sm transition-shadow duration-200 hover:shadow focus-within:shadow";
+    "group/ai relative z-0 h-7 w-full max-w-[5.35rem] shrink-0 overflow-hidden rounded-md border shadow-sm transition-shadow duration-200 hover:shadow focus-within:shadow";
 
   return (
     <div
       className={cn(
-        "group grid w-full grid-cols-1 border-b border-slate-100 transition-colors duration-200 dark:border-slate-800/80",
+        "group grid w-full grid-cols-1 border-b border-slate-200 transition-colors duration-200 dark:border-slate-700/80",
         RECON_ROW_OUTER,
         "md:items-stretch"
       )}
@@ -163,20 +164,20 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
         className={cn(
           "py-2 pl-1 pr-2 md:py-0",
           bankPaneClass,
-          "md:transition-colors md:duration-200 md:group-hover:bg-[var(--brand-primary-muted)]/45 dark:md:group-hover:bg-teal-950/40"
+          "md:transition-colors md:duration-200 md:group-hover:bg-[#e2e5ec] dark:md:group-hover:bg-slate-800"
         )}
       >
         <div className={cn("min-w-0", RECON_BANK_INNER)}>
-          <div className="flex min-w-0 items-center justify-end pr-0.5 font-mono text-[10px] tabular-nums leading-none text-muted-foreground">
+          <div className="flex min-w-0 items-center justify-center px-0.5 font-mono text-[11px] tabular-nums leading-none text-muted-foreground">
             {formatReconciliationDate(transaction.date)}
           </div>
 
-          <div className="flex min-w-0 flex-col items-start justify-center gap-0.5 py-0.5 pl-0.5 text-left">
-            <p className="line-clamp-1 w-full text-[11px] font-semibold leading-tight tracking-tight text-foreground">
+          <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 py-0.5 text-center">
+            <p className="line-clamp-2 w-full text-[12px] font-semibold leading-snug tracking-tight text-foreground">
               {transaction.merchant}
             </p>
             <p
-              className="line-clamp-1 w-full text-[8px] font-medium leading-none tracking-wide text-muted-foreground/75"
+              className="line-clamp-2 w-full text-[10px] font-medium leading-snug tracking-wide text-muted-foreground"
               title={transaction.rawDescriptor}
             >
               {payerHintLine(transaction)}
@@ -185,7 +186,7 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
 
           <div className="flex min-w-0 items-center justify-center px-0.5">
             <p
-              className="w-full truncate text-center font-mono text-[10px] tabular-nums leading-tight text-muted-foreground"
+              className="w-full truncate text-center font-mono text-[11px] tabular-nums leading-snug text-muted-foreground"
               title={accountShort}
             >
               {accountShort}
@@ -200,8 +201,8 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
 
       <div
         className={cn(
-          "min-w-0 py-2 pl-1 pr-2 md:border-l md:border-border/60 md:bg-slate-50/90 md:py-0 md:pl-1.5 md:shadow-[-4px_0_12px_rgba(0,0,0,0.02)] dark:md:bg-slate-900/30",
-          "md:transition-colors md:duration-200 md:group-hover:bg-slate-100/95 dark:md:group-hover:bg-slate-900/45"
+          "min-w-0 py-2 pl-1 pr-2 md:border-l md:border-slate-200/80 md:bg-slate-50 md:py-0 md:pl-2 md:pr-2 dark:md:border-slate-700/80 dark:md:bg-slate-950/35",
+          "md:transition-colors md:duration-200 md:group-hover:bg-slate-100/90 dark:md:group-hover:bg-slate-900/45"
         )}
       >
         <div className={cn("min-w-0", RECON_BOOK_INNER)}>
@@ -209,18 +210,18 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
             className="flex items-center justify-center"
             title={invoice.invoiceCategory}
           >
-            <span className="flex size-5 items-center justify-center rounded border border-border/50 bg-white text-muted-foreground dark:bg-background">
+            <span className="flex size-7 items-center justify-center rounded-md bg-[#E9EBEF] text-muted-foreground dark:bg-slate-800/90">
               <InvoiceCategoryIcon category={invoice.invoiceCategory} />
             </span>
           </div>
 
           <div className="flex min-w-0 items-center justify-center">
             <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 py-0.5 text-center">
-              <p className="line-clamp-2 w-full text-[11px] font-semibold leading-tight text-foreground">
+              <p className="line-clamp-2 w-full text-[12px] font-semibold leading-snug tracking-tight text-foreground">
                 {invoice.counterpartyName}
               </p>
               <p
-                className="line-clamp-1 w-full text-[8px] font-medium leading-none tracking-wide text-muted-foreground/75"
+                className="line-clamp-2 w-full text-[10px] font-medium leading-snug tracking-wide text-muted-foreground"
                 title={invoice.invoiceSummary}
               >
                 {invoice.invoiceSummary}
@@ -228,31 +229,20 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
             </div>
           </div>
 
-          <div className="flex min-w-0 items-center justify-start pl-0.5 md:pl-0">
-            <div
-              className="flex min-w-0 items-center gap-1.5"
+          <div className="flex min-w-0 items-center justify-center px-0.5">
+            <p
+              className="line-clamp-2 w-full text-center font-mono text-[11px] leading-snug tracking-tight text-foreground/90"
               title={invoice.glAccount}
             >
-              <span
-                className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/55 bg-white text-muted-foreground shadow-sm dark:bg-background"
-                aria-hidden
-              >
-                <InvoiceCategoryIcon
-                  category={invoice.invoiceCategory}
-                  className="size-2.5"
-                />
-              </span>
-              <p className="line-clamp-2 min-w-0 flex-1 text-left font-mono text-[10px] leading-snug tracking-tight text-foreground/90">
-                {invoice.glAccount}
-              </p>
-            </div>
+              {invoice.glAccount}
+            </p>
           </div>
 
-          <div className="flex items-center justify-center">
+          <div className="flex min-w-0 items-center justify-center pr-1">
             <p className={cashflowAmountClass(bankOutflow)}>{bookSigned}</p>
           </div>
 
-          <div className="flex min-w-0 items-center justify-center">
+          <div className="flex min-w-0 items-center justify-center pl-1">
             {variant === "auto" ? (
               <div
                 className={cn(

@@ -177,9 +177,9 @@ export function ReconciliationView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Toolbar + domain + column headers: one frozen stack (toggle order unchanged). */}
-      <div className="sticky top-0 z-20 border-b border-border/60 bg-background/95 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+      <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50/95 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-md supports-[backdrop-filter]:bg-slate-50/90 dark:border-slate-700/80 dark:bg-slate-950/90">
         <div className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <Select
               value={accountFilter}
               onValueChange={(v) =>
@@ -228,17 +228,26 @@ export function ReconciliationView() {
               </button>
             </div>
 
-            {mainTab === "action" && highConfidencePending.length > 0 ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                onClick={() => bulkConfirmHighConfidence()}
-              >
-                Confirm all high ({highConfidencePending.length})
-              </Button>
-            ) : null}
+            <div className="flex min-h-7 min-w-[min(100%,13.5rem)] shrink-0 items-center justify-start">
+              {mainTab === "action" && highConfidencePending.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                  onClick={() => bulkConfirmHighConfidence()}
+                >
+                  Confirm all high ({highConfidencePending.length})
+                </Button>
+              ) : (
+                <span
+                  className="pointer-events-none invisible inline-flex h-7 items-center whitespace-nowrap px-2 text-[11px] font-medium"
+                  aria-hidden
+                >
+                  Confirm all high (00)
+                </span>
+              )}
+            </div>
           </div>
 
           <div
@@ -278,14 +287,14 @@ export function ReconciliationView() {
         {/* Domain strip — 50/50; AI lives inside Factora */}
         <div
           className={cn(
-            "hidden border-t border-border/40 md:grid",
+            "hidden border-t border-slate-200/80 md:grid dark:border-slate-700/80",
             RECON_ROW_OUTER
           )}
         >
           <div
             className={cn(
               LEDGER_TH,
-              "bg-[var(--brand-primary-subtle)] px-2 py-1.5 shadow-[inset_0_0_0_1px_rgba(47,154,138,0.12)] dark:bg-teal-950/25 dark:shadow-[inset_0_0_0_1px_rgba(45,212,191,0.18)]"
+              "bg-[#E9EBEF] px-2 py-1.5 dark:bg-slate-800/90"
             )}
           >
             Bank
@@ -293,7 +302,7 @@ export function ReconciliationView() {
           <div
             className={cn(
               LEDGER_TH,
-              "border-l border-border/60 bg-slate-50/90 py-1.5 pl-2 shadow-[-4px_0_12px_rgba(0,0,0,0.02)] dark:bg-slate-900/30"
+              "border-l border-slate-200/80 bg-slate-50 py-1.5 pl-2 dark:border-slate-700/80 dark:bg-slate-950/40"
             )}
           >
             Factora
@@ -303,20 +312,20 @@ export function ReconciliationView() {
         {/* Column headers — Bank inner + Factora inner (Type … AI) */}
         <div
           className={cn(
-            "hidden border-t border-border/30 md:grid",
+            "hidden border-t border-slate-200/80 md:grid dark:border-slate-700/80",
             RECON_ROW_OUTER
           )}
         >
           <div
             className={cn(
               RECON_BANK_INNER,
-              "border-border/30 bg-white dark:bg-background"
+              "bg-slate-50 dark:bg-slate-950/40"
             )}
           >
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-end pr-0.5 text-right"
+                "flex items-center justify-center text-center"
               )}
             >
               Date
@@ -324,13 +333,16 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-start pl-0.5 text-left"
+                "flex items-center justify-center text-center"
               )}
             >
               Payer
             </span>
             <span
-              className={cn(LEDGER_TH, "flex items-center justify-center text-center")}
+              className={cn(
+                LEDGER_TH,
+                "flex items-center justify-center text-center"
+              )}
             >
               Account
             </span>
@@ -346,7 +358,7 @@ export function ReconciliationView() {
           <div
             className={cn(
               RECON_BOOK_INNER,
-              "border-l border-border/60 bg-slate-50/90 shadow-[-4px_0_12px_rgba(0,0,0,0.02)] dark:bg-slate-900/30"
+              "border-l border-slate-200/80 bg-slate-50 dark:border-slate-700/80 dark:bg-slate-950/40"
             )}
           >
             <span
@@ -368,7 +380,7 @@ export function ReconciliationView() {
             <span
               className={cn(
                 LEDGER_TH,
-                "flex items-center justify-start pl-0.5 text-left leading-tight"
+                "flex items-center justify-center text-center leading-tight"
               )}
             >
               GL Account

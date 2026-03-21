@@ -8,9 +8,8 @@ export function formatReconciliationEUR(value: number): string {
 
 export function formatReconciliationDate(iso: string): string {
   const d = new Date(iso + "T12:00:00Z");
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(d);
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = d.getUTCFullYear();
+  return `${dd}/${mm}/${yyyy}`;
 }
