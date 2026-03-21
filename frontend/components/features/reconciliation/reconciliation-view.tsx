@@ -7,6 +7,7 @@ import { MatchDetailSheet } from "@/components/features/reconciliation/match-det
 import { ReconciliationEmptyState } from "@/components/features/reconciliation/reconciliation-empty-state";
 import {
   RECON_BANK_INNER,
+  RECON_BANK_TINT_CLASS,
   RECON_BOOK_INNER,
   RECON_ROW_OUTER,
   ReconciliationMatchRow,
@@ -32,7 +33,7 @@ import { cn } from "@/lib/utils";
 const HIGH_CONFIDENCE_THRESHOLD = 80;
 
 const LEDGER_TH =
-  "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground";
+  "text-[10px] font-bold uppercase tracking-wider text-muted-foreground";
 
 type MainTab = "action" | "matched";
 
@@ -294,7 +295,8 @@ export function ReconciliationView() {
           <div
             className={cn(
               LEDGER_TH,
-              "bg-[#E9EBEF] px-2 py-1.5 dark:bg-slate-800/90"
+              RECON_BANK_TINT_CLASS,
+              "px-2 py-1.5 text-[var(--brand-primary)] dark:text-teal-400"
             )}
           >
             Bank
@@ -302,7 +304,7 @@ export function ReconciliationView() {
           <div
             className={cn(
               LEDGER_TH,
-              "border-l border-slate-200/80 bg-slate-50 py-1.5 pl-2 dark:border-slate-700/80 dark:bg-slate-950/40"
+              "border-l border-slate-200/80 bg-slate-50 py-1.5 pl-2 text-[var(--brand-primary)] dark:border-slate-700/80 dark:bg-slate-950/40 dark:text-teal-400"
             )}
           >
             Factora

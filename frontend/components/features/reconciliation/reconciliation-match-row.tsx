@@ -40,6 +40,10 @@ function aiConfidenceTier(
   return "none";
 }
 
+/** Slightly lighter than #E9EBEF for bank pane + type icon wells. */
+export const RECON_BANK_TINT_CLASS =
+  "bg-[#EFF1F4] dark:bg-slate-800/90";
+
 /** 50/50 Bank | Factora */
 export const RECON_ROW_OUTER =
   "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]";
@@ -98,7 +102,7 @@ function InvoiceCategoryIcon({
 
 function cashflowAmountClass(isOutflow: boolean) {
   return cn(
-    "font-mono text-[12px] tabular-nums tracking-tight",
+    "min-w-0 max-w-full font-mono text-[12px] tabular-nums tracking-tight",
     isOutflow
       ? "font-bold text-foreground"
       : "font-semibold text-emerald-600 dark:text-emerald-400"
@@ -146,8 +150,7 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
   const accountShort = `${BANK_LABEL[transaction.bankId]} ${transaction.maskedAccount}`;
   const aiTier = isPending ? aiConfidenceTier(pair.aiConfidencePercent) : null;
 
-  const bankPaneClass =
-    "md:bg-[#E9EBEF] dark:md:bg-slate-800/90";
+  const bankPaneClass = "md:bg-[#EFF1F4] dark:md:bg-slate-800/90";
 
   const aiChipShell =
     "group/ai relative z-0 h-7 w-full max-w-[5.35rem] shrink-0 overflow-hidden rounded-md border shadow-sm transition-shadow duration-200 hover:shadow focus-within:shadow";
@@ -164,37 +167,47 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
         className={cn(
           "py-2 pl-1 pr-2 md:py-0",
           bankPaneClass,
-          "md:transition-colors md:duration-200 md:group-hover:bg-[#e2e5ec] dark:md:group-hover:bg-slate-800"
+          "md:transition-colors md:duration-200 md:group-hover:bg-[#e8eaef] dark:md:group-hover:bg-slate-800"
         )}
       >
         <div className={cn("min-w-0", RECON_BANK_INNER)}>
-          <div className="flex min-w-0 items-center justify-center px-0.5 font-mono text-[11px] tabular-nums leading-none text-muted-foreground">
-            {formatReconciliationDate(transaction.date)}
+          <div className="flex min-w-0 items-center justify-center px-0.5">
+            <p className="w-full min-w-0 truncate text-center font-mono text-[11px] font-semibold tabular-nums leading-none text-muted-foreground">
+              {formatReconciliationDate(transaction.date)}
+            </p>
           </div>
 
-          <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 py-0.5 text-center">
-            <p className="line-clamp-2 w-full text-[12px] font-semibold leading-snug tracking-tight text-foreground">
+          <div
+            className="flex min-w-0 max-w-full flex-nowrap items-center justify-center gap-1 overflow-hidden px-0.5"
+            title={`${transaction.merchant} · ${payerHintLine(transaction)}`}
+          >
+            <span className="min-w-0 max-w-[58%] shrink truncate text-center text-[12px] font-semibold leading-none tracking-tight text-[var(--brand-primary)] dark:text-teal-400">
               {transaction.merchant}
-            </p>
-            <p
-              className="line-clamp-2 w-full text-[10px] font-medium leading-snug tracking-wide text-muted-foreground"
-              title={transaction.rawDescriptor}
+            </span>
+            <span
+              className="shrink-0 text-[10px] font-semibold leading-none text-muted-foreground"
+              aria-hidden
             >
+              ·
+            </span>
+            <span className="min-w-0 flex-1 truncate text-center text-[10px] font-semibold leading-none tracking-wide text-muted-foreground">
               {payerHintLine(transaction)}
-            </p>
+            </span>
           </div>
 
           <div className="flex min-w-0 items-center justify-center px-0.5">
             <p
-              className="w-full truncate text-center font-mono text-[11px] tabular-nums leading-snug text-muted-foreground"
+              className="w-full min-w-0 truncate text-center font-mono text-[11px] font-semibold tabular-nums leading-none text-muted-foreground"
               title={accountShort}
             >
               {accountShort}
             </p>
           </div>
 
-          <div className="flex items-center justify-center">
-            <p className={cashflowAmountClass(bankOutflow)}>{bankSigned}</p>
+          <div className="flex min-w-0 items-center justify-center">
+            <p className={cn(cashflowAmountClass(bankOutflow), "truncate")}>
+              {bankSigned}
+            </p>
           </div>
         </div>
       </div>
@@ -210,28 +223,37 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
             className="flex items-center justify-center"
             title={invoice.invoiceCategory}
           >
-            <span className="flex size-7 items-center justify-center rounded-md bg-[#E9EBEF] text-muted-foreground dark:bg-slate-800/90">
+            <span
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+                RECON_BANK_TINT_CLASS
+              )}
+            >
               <InvoiceCategoryIcon category={invoice.invoiceCategory} />
             </span>
           </div>
 
-          <div className="flex min-w-0 items-center justify-center">
-            <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 py-0.5 text-center">
-              <p className="line-clamp-2 w-full text-[12px] font-semibold leading-snug tracking-tight text-foreground">
-                {invoice.counterpartyName}
-              </p>
-              <p
-                className="line-clamp-2 w-full text-[10px] font-medium leading-snug tracking-wide text-muted-foreground"
-                title={invoice.invoiceSummary}
-              >
-                {invoice.invoiceSummary}
-              </p>
-            </div>
+          <div
+            className="flex min-w-0 max-w-full flex-nowrap items-center justify-center gap-1 overflow-hidden px-0.5"
+            title={`${invoice.counterpartyName} · ${invoice.invoiceSummary}`}
+          >
+            <span className="min-w-0 max-w-[58%] shrink truncate text-center text-[12px] font-semibold leading-none tracking-tight text-foreground">
+              {invoice.counterpartyName}
+            </span>
+            <span
+              className="shrink-0 text-[10px] font-semibold leading-none text-muted-foreground"
+              aria-hidden
+            >
+              ·
+            </span>
+            <span className="min-w-0 flex-1 truncate text-center text-[10px] font-semibold leading-none tracking-wide text-muted-foreground">
+              {invoice.invoiceSummary}
+            </span>
           </div>
 
           <div className="flex min-w-0 items-center justify-center px-0.5">
             <p
-              className="line-clamp-2 w-full text-center font-mono text-[11px] leading-snug tracking-tight text-foreground/90"
+              className="w-full min-w-0 truncate text-center font-mono text-[11px] font-semibold leading-none tracking-tight text-foreground/90"
               title={invoice.glAccount}
             >
               {invoice.glAccount}
@@ -239,7 +261,9 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
           </div>
 
           <div className="flex min-w-0 items-center justify-center pr-1">
-            <p className={cashflowAmountClass(bankOutflow)}>{bookSigned}</p>
+            <p className={cn(cashflowAmountClass(bankOutflow), "truncate")}>
+              {bookSigned}
+            </p>
           </div>
 
           <div className="flex min-w-0 items-center justify-center pl-1">
@@ -295,7 +319,7 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
                   />
                   <span
                     className={cn(
-                      "min-w-0 truncate text-[10px] font-bold leading-none tracking-tight",
+                      "min-w-0 truncate text-[10px] font-semibold leading-none tracking-tight",
                       aiTier === "high" &&
                         "text-violet-950 dark:text-violet-100",
                       aiTier === "medium" &&
