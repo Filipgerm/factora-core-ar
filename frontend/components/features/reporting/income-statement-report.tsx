@@ -1,6 +1,9 @@
 "use client";
 
+import { useCallback, useState } from "react";
+
 import { ReportPageShell } from "@/components/features/reporting/report-page-shell";
+import { TransactionDetailSheet } from "@/components/features/reporting/transaction-detail-sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   formatStatementEUR,
@@ -13,6 +16,30 @@ import { cn } from "@/lib/utils";
 
 const CELL = "px-3 py-2.5 text-sm tabular-nums tracking-tight";
 const TH = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+
+const AMOUNT_INTERACTIVE =
+  "cursor-pointer transition-colors duration-200 hover:bg-slate-50 dark:hover:bg-slate-900/50";
+
+function InteractiveAmountTd({
+  display,
+  isSection,
+  onOpen,
+}: {
+  display: string;
+  isSection: boolean;
+  onOpen: () => void;
+}) {
+  if (isSection) {
+    return (
+      <td className={cn(CELL, "text-right text-transparent")}>—</td>
+    );
+  }
+  return (
+    <td className={cn(CELL, "text-right", AMOUNT_INTERACTIVE)} role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}>
+      {display}
+    </td>
+  );
+}
 
 function rowClass(row: IncomeStatementRow): string {
   if (row.kind === "section") {
@@ -27,7 +54,7 @@ function rowClass(row: IncomeStatementRow): string {
   return "bg-white dark:bg-background";
 }
 
-function IncomeSummaryTable() {
+function IncomeSummaryTable({ onOpenDetail }: { onOpenDetail: (rowLabel: string) => void }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200/90 dark:border-slate-800">
       <table className="w-full min-w-[520px] border-collapse text-left">
@@ -56,24 +83,16 @@ function IncomeSummaryTable() {
               >
                 {row.label}
               </td>
-              <td
-                className={cn(
-                  CELL,
-                  "text-right",
-                  row.kind === "section" && "text-transparent"
-                )}
-              >
-                {row.kind === "section" ? "—" : formatStatementEUR(row.currentMonth)}
-              </td>
-              <td
-                className={cn(
-                  CELL,
-                  "text-right",
-                  row.kind === "section" && "text-transparent"
-                )}
-              >
-                {row.kind === "section" ? "—" : formatStatementEUR(row.ytd)}
-              </td>
+              <InteractiveAmountTd
+                isSection={row.kind === "section"}
+                display={formatStatementEUR(row.currentMonth)}
+                onOpen={() => onOpenDetail(row.label)}
+              />
+              <InteractiveAmountTd
+                isSection={row.kind === "section"}
+                display={formatStatementEUR(row.ytd)}
+                onOpen={() => onOpenDetail(row.label)}
+              />
             </tr>
           ))}
         </tbody>
@@ -82,7 +101,7 @@ function IncomeSummaryTable() {
   );
 }
 
-function IncomeMomTable() {
+function IncomeMomTable({ onOpenDetail }: { onOpenDetail: (rowLabel: string) => void }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200/90 dark:border-slate-800">
       <table className="w-full min-w-[720px] border-collapse text-left">
@@ -115,28 +134,18 @@ function IncomeMomTable() {
                 {row.label}
               </td>
               {INCOME_MOM_PERIOD_KEYS.map((k) => (
-                <td
+                <InteractiveAmountTd
                   key={k}
-                  className={cn(
-                    CELL,
-                    "text-right",
-                    row.kind === "section" && "text-transparent"
-                  )}
-                >
-                  {row.kind === "section"
-                    ? "—"
-                    : formatStatementEUR(row.valuesByPeriod?.[k] ?? 0)}
-                </td>
+                  isSection={row.kind === "section"}
+                  display={formatStatementEUR(row.valuesByPeriod?.[k] ?? 0)}
+                  onOpen={() => onOpenDetail(row.label)}
+                />
               ))}
-              <td
-                className={cn(
-                  CELL,
-                  "text-right",
-                  row.kind === "section" && "text-transparent"
-                )}
-              >
-                {row.kind === "section" ? "—" : formatStatementEUR(row.ytd)}
-              </td>
+              <InteractiveAmountTd
+                isSection={row.kind === "section"}
+                display={formatStatementEUR(row.ytd)}
+                onOpen={() => onOpenDetail(row.label)}
+              />
             </tr>
           ))}
         </tbody>
@@ -146,6 +155,14 @@ function IncomeMomTable() {
 }
 
 export function IncomeStatementReport() {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetRowLabel, setSheetRowLabel] = useState("");
+
+  const onOpenDetail = useCallback((rowLabel: string) => {
+    setSheetRowLabel(rowLabel);
+    setSheetOpen(true);
+  }, []);
+
   return (
     <ReportPageShell
       title="Income statement"
@@ -168,12 +185,17 @@ export function IncomeStatementReport() {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="summary" className="mt-0">
-          <IncomeSummaryTable />
+          <IncomeSummaryTable onOpenDetail={onOpenDetail} />
         </TabsContent>
         <TabsContent value="mom" className="mt-0">
-          <IncomeMomTable />
+          <IncomeMomTable onOpenDetail={onOpenDetail} />
         </TabsContent>
       </Tabs>
+      <TransactionDetailSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        contextLabel={sheetRowLabel ? `Account: ${sheetRowLabel}` : undefined}
+      />
       <p className="mt-4 rounded-lg border border-dashed border-slate-200/90 bg-slate-50/50 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground dark:border-slate-800 dark:bg-slate-900/25">
         Prepared for management review under IFRS principles. Amounts are illustrative mock
         data; tie-out to general ledger is required before external distribution.

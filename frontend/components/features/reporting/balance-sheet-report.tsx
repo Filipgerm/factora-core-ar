@@ -1,6 +1,9 @@
 "use client";
 
+import { useCallback, useState } from "react";
+
 import { ReportPageShell } from "@/components/features/reporting/report-page-shell";
+import { TransactionDetailSheet } from "@/components/features/reporting/transaction-detail-sheet";
 import {
   BALANCE_SHEET_INSIGHT,
   BALANCE_SHEET_ROWS,
@@ -11,6 +14,9 @@ import { cn } from "@/lib/utils";
 
 const CELL = "px-3 py-2.5 text-sm tabular-nums tracking-tight";
 const TH = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+
+const AMOUNT_INTERACTIVE =
+  "cursor-pointer transition-colors duration-200 hover:bg-slate-50 dark:hover:bg-slate-900/50";
 
 function rowClass(row: BalanceSheetRow): string {
   switch (row.kind) {
@@ -28,7 +34,51 @@ function rowClass(row: BalanceSheetRow): string {
   }
 }
 
+function isAmountHidden(row: BalanceSheetRow) {
+  return row.kind === "section" || row.kind === "subsection";
+}
+
+function InteractiveAmountTd({
+  display,
+  hidden,
+  onOpen,
+}: {
+  display: string;
+  hidden: boolean;
+  onOpen: () => void;
+}) {
+  if (hidden) {
+    return (
+      <td className={cn(CELL, "text-right text-transparent")}>—</td>
+    );
+  }
+  return (
+    <td
+      className={cn(CELL, "text-right", AMOUNT_INTERACTIVE)}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      {display}
+    </td>
+  );
+}
+
 export function BalanceSheetReport() {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetRowLabel, setSheetRowLabel] = useState("");
+
+  const onOpenDetail = useCallback((rowLabel: string) => {
+    setSheetRowLabel(rowLabel);
+    setSheetOpen(true);
+  }, []);
+
   return (
     <ReportPageShell
       title="Balance sheet"
@@ -62,39 +112,26 @@ export function BalanceSheetReport() {
                 >
                   {row.label}
                 </td>
-                <td
-                  className={cn(
-                    CELL,
-                    "text-right",
-                    row.kind === "section" ||
-                      row.kind === "subsection"
-                      ? "text-transparent"
-                      : ""
-                  )}
-                >
-                  {row.kind === "section" || row.kind === "subsection"
-                    ? "—"
-                    : formatStatementEUR(row.balance)}
-                </td>
-                <td
-                  className={cn(
-                    CELL,
-                    "text-right",
-                    row.kind === "section" ||
-                      row.kind === "subsection"
-                      ? "text-transparent"
-                      : ""
-                  )}
-                >
-                  {row.kind === "section" || row.kind === "subsection"
-                    ? "—"
-                    : formatStatementEUR(row.priorMonth)}
-                </td>
+                <InteractiveAmountTd
+                  hidden={isAmountHidden(row)}
+                  display={formatStatementEUR(row.balance)}
+                  onOpen={() => onOpenDetail(row.label)}
+                />
+                <InteractiveAmountTd
+                  hidden={isAmountHidden(row)}
+                  display={formatStatementEUR(row.priorMonth)}
+                  onOpen={() => onOpenDetail(row.label)}
+                />
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <TransactionDetailSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        contextLabel={sheetRowLabel ? `Account: ${sheetRowLabel}` : undefined}
+      />
       <div className="mt-4 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/30">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Key insight
