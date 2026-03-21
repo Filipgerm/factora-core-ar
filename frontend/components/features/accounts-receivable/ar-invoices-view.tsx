@@ -243,8 +243,7 @@ export function ArInvoicesView() {
 
       <ArCreateInvoiceSheet open={createOpen} onOpenChange={setCreateOpen} />
 
-      <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-background sm:p-6">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-xl border border-slate-200/90 bg-white px-4 py-4 shadow-sm dark:border-slate-800 dark:bg-background">
             <p className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
               {fmtEUR(kpis.totalOutstanding.amount)}
@@ -289,16 +288,13 @@ export function ArInvoicesView() {
               {kpis.paidThisMonth.count} invoices
             </p>
           </div>
-        </div>
-
-        <div className="mt-6">
-          <DataTable
-            columns={columns}
-            data={mockArInvoiceRows}
-            getRowId={(r) => r.id}
-          />
-        </div>
       </div>
+
+      <DataTable
+        columns={columns}
+        data={mockArInvoiceRows}
+        getRowId={(r) => r.id}
+      />
     </div>
   );
 }
