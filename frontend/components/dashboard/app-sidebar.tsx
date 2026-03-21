@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
   ChevronDown,
@@ -66,7 +67,6 @@ export function AppSidebar() {
 
   const railRef = useRef<HTMLDivElement>(null);
   const asideRef = useRef<HTMLElement>(null);
-  const navRef = useRef<HTMLElement>(null);
   const flyoutRef = useRef<HTMLElement>(null);
   const arTriggerRef = useRef<HTMLButtonElement>(null);
   const apTriggerRef = useRef<HTMLButtonElement>(null);
@@ -76,11 +76,15 @@ export function AppSidebar() {
   const flyoutVisible = expanded !== null;
   const flyoutMode = expanded ?? "ar";
 
+  /** Offset from top of sidebar rail to active trigger — does not update on nav scroll. */
   const updateFlyoutTop = useCallback(() => {
+    const rail = railRef.current;
     const trigger =
       flyoutMode === "ap" ? apTriggerRef.current : arTriggerRef.current;
-    if (!trigger) return;
-    setFlyoutTopPx(Math.round(trigger.getBoundingClientRect().top));
+    if (!rail || !trigger) return;
+    const railRect = rail.getBoundingClientRect();
+    const triggerRect = trigger.getBoundingClientRect();
+    setFlyoutTopPx(Math.round(triggerRect.top - railRect.top));
   }, [flyoutMode]);
 
   useLayoutEffect(() => {
@@ -97,14 +101,6 @@ export function AppSidebar() {
       ro.disconnect();
       window.removeEventListener("resize", updateFlyoutTop);
     };
-  }, [flyoutVisible, updateFlyoutTop]);
-
-  useEffect(() => {
-    if (!flyoutVisible) return;
-    const nav = navRef.current;
-    if (!nav) return;
-    nav.addEventListener("scroll", updateFlyoutTop, { passive: true });
-    return () => nav.removeEventListener("scroll", updateFlyoutTop);
   }, [flyoutVisible, updateFlyoutTop]);
 
   useEffect(() => {
@@ -149,7 +145,7 @@ export function AppSidebar() {
   return (
     <div
       ref={railRef}
-      className="relative flex h-svh min-h-0 shrink-0"
+      className="relative z-30 flex h-svh min-h-0 shrink-0"
     >
       <aside
         ref={asideRef}
@@ -166,10 +162,7 @@ export function AppSidebar() {
             Factora
           </Link>
         </div>
-        <nav
-          ref={navRef}
-          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2"
-        >
+        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
           {SIMPLE_NAV.slice(0, 2).map(({ href, label, icon: Icon }) => {
             const active =
               pathname === href || pathname.startsWith(`${href}/`);
@@ -274,44 +267,51 @@ export function AppSidebar() {
         </div>
       </aside>
 
-      {flyoutVisible ? (
-        <nav
-          ref={flyoutRef}
-          id="sidebar-ar-ap-flyout"
-          role="navigation"
-          aria-label={flyoutLabel}
-          className={cn(
-            "fixed z-40 overflow-hidden rounded-r-xl border border-l-0 border-teal-200/45 bg-[var(--brand-primary-subtle)] shadow-md transition-[opacity,transform] duration-200 ease-out dark:border-teal-800/45 dark:bg-teal-950/25"
-          )}
-          style={{
-            left: SIDEBAR_WIDTH_PX,
-            top: flyoutTopPx,
-            bottom: 0,
-            width: FLYOUT_WIDTH_PX,
-          }}
-        >
-          <div className="flex h-full max-h-full flex-col gap-0.5 overflow-y-auto p-2 pt-3 shadow-[inset_0_0_0_1px_rgba(47,154,138,0.06)]">
-            {links.map(({ href, label }) => {
-              const subActive =
-                pathname === href || pathname.startsWith(`${href}/`);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={closeFlyout}
-                  className={cn(
-                    flyoutLink,
-                    subActive &&
-                      "bg-white/85 font-semibold text-foreground shadow-sm dark:bg-teal-950/50"
-                  )}
-                >
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-      ) : null}
+      <AnimatePresence>
+        {flyoutVisible ? (
+          <motion.nav
+            key={flyoutMode}
+            ref={flyoutRef}
+            id="sidebar-ar-ap-flyout"
+            role="navigation"
+            aria-label={flyoutLabel}
+            initial={{ opacity: 0, x: -14 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className={cn(
+              "absolute z-40 overflow-hidden rounded-r-xl border border-l-0 border-teal-200/45 bg-[var(--brand-primary-subtle)] shadow-md will-change-transform dark:border-teal-800/45 dark:bg-teal-950/25"
+            )}
+            style={{
+              left: SIDEBAR_WIDTH_PX,
+              top: flyoutTopPx,
+              bottom: 0,
+              width: FLYOUT_WIDTH_PX,
+            }}
+          >
+            <div className="flex h-full max-h-full flex-col gap-0.5 overflow-y-auto p-2 pt-3 shadow-[inset_0_0_0_1px_rgba(47,154,138,0.06)]">
+              {links.map(({ href, label }) => {
+                const subActive =
+                  pathname === href || pathname.startsWith(`${href}/`);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={closeFlyout}
+                    className={cn(
+                      flyoutLink,
+                      subActive &&
+                        "bg-white/85 font-semibold text-foreground shadow-sm dark:bg-teal-950/50"
+                    )}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          </motion.nav>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
