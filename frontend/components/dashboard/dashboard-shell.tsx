@@ -1,11 +1,13 @@
 "use client";
 
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { CommandPalette } from "@/components/dashboard/command-palette";
 import { DashboardTopNav } from "@/components/dashboard/dashboard-top-nav";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="dashboard-theme flex min-h-screen bg-slate-50 text-foreground">
+      <CommandPalette />
       <AppSidebar />
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <DashboardTopNav />
