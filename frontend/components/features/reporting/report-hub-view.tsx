@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Pin, Star } from "lucide-react";
@@ -98,18 +99,40 @@ export function ReportHubView() {
                   }}
                   className="flex items-center gap-3 rounded-lg border border-slate-200/90 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-shadow duration-200 hover:shadow-md dark:border-slate-800 dark:bg-background"
                 >
-                  <div
-                    className={cn(
-                      "flex size-9 shrink-0 items-center justify-center rounded-lg",
-                      backdropForIndex(idx)
-                    )}
-                    aria-hidden
-                  >
-                    <Icon className="size-4 opacity-90" />
-                  </div>
-                  <span className="min-w-0 flex-1 text-sm font-medium leading-snug tracking-tight text-foreground">
-                    {r.title}
-                  </span>
+                  {r.href ? (
+                    <Link
+                      href={r.href}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-md outline-offset-2 transition-colors duration-200 hover:bg-slate-50/90 focus-visible:outline focus-visible:outline-ring dark:hover:bg-slate-900/40"
+                    >
+                      <div
+                        className={cn(
+                          "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                          backdropForIndex(idx)
+                        )}
+                        aria-hidden
+                      >
+                        <Icon className="size-4 opacity-90" />
+                      </div>
+                      <span className="min-w-0 flex-1 text-sm font-medium leading-snug tracking-tight text-foreground">
+                        {r.title}
+                      </span>
+                    </Link>
+                  ) : (
+                    <>
+                      <div
+                        className={cn(
+                          "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                          backdropForIndex(idx)
+                        )}
+                        aria-hidden
+                      >
+                        <Icon className="size-4 opacity-90" />
+                      </div>
+                      <span className="min-w-0 flex-1 text-sm font-medium leading-snug tracking-tight text-foreground">
+                        {r.title}
+                      </span>
+                    </>
+                  )}
                   <div className="flex shrink-0 items-center gap-0.5">
                     <button
                       type="button"

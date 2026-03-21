@@ -21,6 +21,8 @@ export interface ReportHubItem {
   id: string;
   title: string;
   icon: LucideIcon;
+  /** When set, the card navigates here (icon + title are the link target). */
+  href?: string;
   defaultStarred?: boolean;
   defaultPinned?: boolean;
 }
@@ -40,6 +42,7 @@ export const reportHubSections: ReportHubSection[] = [
         id: "fav-income",
         title: "Income Statement",
         icon: FileBarChart,
+        href: "/reporting/income-statement",
         defaultStarred: true,
         defaultPinned: true,
       },
@@ -74,6 +77,7 @@ export const reportHubSections: ReportHubSection[] = [
         id: "fs-income",
         title: "Income Statement",
         icon: FileBarChart,
+        href: "/reporting/income-statement",
         defaultStarred: false,
         defaultPinned: false,
       },
@@ -81,6 +85,7 @@ export const reportHubSections: ReportHubSection[] = [
         id: "fs-balance",
         title: "Balance Sheet",
         icon: Scale,
+        href: "/reporting/balance-sheet",
         defaultStarred: false,
         defaultPinned: false,
       },
@@ -88,6 +93,7 @@ export const reportHubSections: ReportHubSection[] = [
         id: "fs-cashflow",
         title: "Cashflow Statement",
         icon: Landmark,
+        href: "/reporting/cash-flow",
         defaultStarred: false,
         defaultPinned: false,
       },
@@ -95,6 +101,7 @@ export const reportHubSections: ReportHubSection[] = [
         id: "fs-exec-pnl",
         title: "Executive P&L",
         icon: TrendingUp,
+        href: "/reporting/executive-metrics",
         defaultStarred: false,
         defaultPinned: false,
       },
