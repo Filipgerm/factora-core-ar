@@ -380,6 +380,8 @@ export interface ReconciliationPendingPair {
   id: string;
   transaction: ReconciliationBankTransaction;
   invoice: ReconciliationBookInvoice;
+  /** Optional extra open invoices for split / 1-to-many matching (includes primary or alternatives). */
+  matchCandidates?: ReconciliationBookInvoice[];
   aiConfidencePercent: number;
   aiReasoning: string;
 }
@@ -423,6 +425,50 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
     aiConfidencePercent: 88,
     aiReasoning:
       "AI confidence: 88%. Exact amount match (€2,499.00) and vendor string aligns with posted Salesforce subscription.",
+    matchCandidates: [
+      {
+        id: "rap-01",
+        invoiceNumber: "AP-INV-8841",
+        dueDate: "2026-03-12",
+        counterpartyName: "Meridian Cloud Ltd",
+        totalAmount: 2499.0,
+        currency: "EUR",
+        role: "AP",
+        status: "Open",
+        glAccount: "62810 — Software & SaaS",
+        invoiceCategory: "subscription",
+        counterpartyKind: "vendor",
+        invoiceSummary: "FY26 CRM seat renewal",
+      },
+      {
+        id: "rap-01a",
+        invoiceNumber: "AP-INV-8841-A",
+        dueDate: "2026-03-12",
+        counterpartyName: "Meridian Cloud Ltd",
+        totalAmount: 1500.0,
+        currency: "EUR",
+        role: "AP",
+        status: "Open",
+        glAccount: "62810 — Software & SaaS",
+        invoiceCategory: "subscription",
+        counterpartyKind: "vendor",
+        invoiceSummary: "FY26 seats (installment 1)",
+      },
+      {
+        id: "rap-01b",
+        invoiceNumber: "AP-INV-8841-B",
+        dueDate: "2026-03-12",
+        counterpartyName: "Meridian Cloud Ltd",
+        totalAmount: 999.0,
+        currency: "EUR",
+        role: "AP",
+        status: "Open",
+        glAccount: "62810 — Software & SaaS",
+        invoiceCategory: "subscription",
+        counterpartyKind: "vendor",
+        invoiceSummary: "FY26 seats (installment 2)",
+      },
+    ],
   },
   {
     id: "rec-pend-02",
@@ -455,6 +501,22 @@ export const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [
     aiConfidencePercent: 72,
     aiReasoning:
       "AI confidence: 72%. Amount matches exactly; merchant name aligns with counterparty. Bank date is 7 days before invoice due date — possible early payment or different document.",
+    matchCandidates: [
+      {
+        id: "rar-02",
+        invoiceNumber: "AR-2026-0198",
+        dueDate: "2026-03-15",
+        counterpartyName: "Berlin Analytics GmbH",
+        totalAmount: 672.33,
+        currency: "EUR",
+        role: "AR",
+        status: "Open",
+        glAccount: "40110 — Subscription Revenue",
+        invoiceCategory: "subscription",
+        counterpartyKind: "customer",
+        invoiceSummary: "March analytics service fee",
+      },
+    ],
   },
   {
     id: "rec-pend-03",
@@ -957,17 +1019,17 @@ export const mockHomeUserFirstName = "Filip";
 export const mockHomeActionItems: HomeActionItem[] = [
   {
     id: "act-01",
-    label: "AI categorization pending · uncategorized transactions",
+    label: "Invoices pending approval",
     count: 3,
-    href: "/ledger",
+    href: "/ledger?filter=review",
     urgency: "attention",
     aiRelated: true,
   },
   {
     id: "act-02",
-    label: "Invoices pending reconciliation",
+    label: "Unmatched bank lines",
     count: 5,
-    href: "/reconciliation",
+    href: "/reconciliation?filter=unmatched",
     urgency: "default",
     aiRelated: true,
   },

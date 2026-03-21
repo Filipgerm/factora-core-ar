@@ -48,9 +48,9 @@ export const RECON_BANK_TINT_CLASS =
 export const RECON_ROW_OUTER =
   "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]";
 
-/** Bank pane: consistent start positions per column; wider gaps for readability. */
+/** Bank pane: date column left-aligned with header; extra gap before payer. */
 export const RECON_BANK_INNER =
-  "md:grid md:grid-cols-[3.35rem_minmax(0,1fr)_minmax(6.25rem,8.5rem)_minmax(5.25rem,6rem)] md:items-center md:gap-x-3 md:px-3 md:py-3";
+  "md:grid md:grid-cols-[4.65rem_minmax(0,1fr)_minmax(6.25rem,8.5rem)_minmax(5.25rem,6rem)] md:items-center md:gap-x-5 md:px-3 md:py-3";
 
 /** Factora pane: extra space before AI; aligned with headers. */
 export const RECON_BOOK_INNER =
@@ -182,8 +182,8 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
         )}
       >
         <div className={cn("min-w-0", RECON_BANK_INNER)}>
-          <div className="flex min-w-0 items-center justify-end">
-            <p className="w-full min-w-0 truncate text-right font-mono text-[11px] font-semibold tabular-nums leading-none text-muted-foreground">
+          <div className="flex min-w-0 items-center justify-start">
+            <p className="w-full min-w-0 whitespace-nowrap text-left font-mono text-[11px] font-semibold tabular-nums leading-none text-muted-foreground">
               {formatReconciliationDate(transaction.date)}
             </p>
           </div>

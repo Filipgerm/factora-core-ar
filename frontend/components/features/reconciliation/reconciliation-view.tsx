@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { CircleDot, Sparkles } from "lucide-react";
 
 import { MatchDetailSheet } from "@/components/features/reconciliation/match-detail-sheet";
@@ -69,6 +70,7 @@ function matchesAccount<T extends { transaction: { bankId: ReconciliationBankId 
 }
 
 export function ReconciliationView() {
+  const searchParams = useSearchParams();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activePair, setActivePair] = useState<ReconciliationPendingPair | null>(
@@ -80,6 +82,13 @@ export function ReconciliationView() {
   );
   const [confidenceFilter, setConfidenceFilter] =
     useState<ConfidenceFilter>("all");
+
+  useEffect(() => {
+    const f = searchParams.get("filter");
+    if (f === "unmatched") {
+      setMainTab("action");
+    }
+  }, [searchParams]);
 
   const pendingVisible = useMemo(
     () =>
@@ -321,14 +330,13 @@ export function ReconciliationView() {
           <div
             className={cn(
               RECON_BANK_INNER,
-              RECON_BANK_TINT_CLASS,
-              "dark:bg-slate-800/90"
+              "bg-white dark:bg-slate-950"
             )}
           >
             <span
               className={cn(
                 LEDGER_TH,
-                "flex min-h-9 items-center justify-end tabular-nums"
+                "flex min-h-9 items-center justify-start text-left tabular-nums"
               )}
             >
               Date
