@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { Building2 } from "lucide-react";
@@ -25,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type {
+  AiConfidence,
   LedgerCategory,
   MockCounterparty,
   MockInvoice,
@@ -51,10 +53,25 @@ type LedgerRow = {
   counterparty: MockCounterparty;
 };
 
+function needsCategoryReview(
+  inv: Pick<MockInvoice, "id" | "aiConfidence">,
+  categories: Partial<Record<string, LedgerCategory>>
+): boolean {
+  const level = inv.aiConfidence as AiConfidence;
+  if (level !== "medium" && level !== "low") {
+    return false;
+  }
+  return categories[inv.id] === undefined;
+}
+
 export function SmartLedgerView() {
+  const searchParams = useSearchParams();
+  const reviewOnly = searchParams.get("filter") === "review";
+
   const [categoryByInvoiceId, setCategoryByInvoiceId] = useState<
     Partial<Record<string, LedgerCategory>>
   >({});
+  const [flashInvoiceId, setFlashInvoiceId] = useState<string | null>(null);
 
   const counterparties = SHOW_EMPTY_DEMO ? [] : mockCounterparties;
   const invoices = SHOW_EMPTY_DEMO ? [] : mockInvoices;
@@ -75,12 +92,65 @@ export function SmartLedgerView() {
       .filter((r): r is LedgerRow => r !== null);
   }, [invoices, cpMap]);
 
+  const displayedRows = useMemo(() => {
+    if (!reviewOnly) return rows;
+    return rows.filter((r) =>
+      needsCategoryReview(r.invoice, categoryByInvoiceId)
+    );
+  }, [rows, reviewOnly, categoryByInvoiceId]);
+
+  const firstReviewInvoiceId = useMemo(() => {
+    for (const { invoice } of rows) {
+      if (needsCategoryReview(invoice, categoryByInvoiceId)) {
+        return invoice.id;
+      }
+    }
+    return null;
+  }, [rows, categoryByInvoiceId]);
+
   const onCategoryVerified = useCallback(
     (invoiceId: string, category: LedgerCategory) => {
-      setCategoryByInvoiceId((prev) => ({ ...prev, [invoiceId]: category }));
+      setCategoryByInvoiceId((prev) => {
+        const next = { ...prev, [invoiceId]: category };
+        queueMicrotask(() => {
+          setFlashInvoiceId(invoiceId);
+          window.setTimeout(() => setFlashInvoiceId(null), 700);
+          const nextPending = rows.find((r) =>
+            needsCategoryReview(r.invoice, next)
+          )?.invoice.id;
+          if (nextPending) {
+            window.requestAnimationFrame(() => {
+              document.getElementById(`ledger-cat-${nextPending}`)?.focus();
+            });
+          }
+        });
+        return next;
+      });
     },
-    []
+    [rows]
   );
+
+  if (rows.length > 0 && reviewOnly && displayedRows.length === 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={SNAP_SPRING}
+      >
+        <Card className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.08)]">
+          <CardContent className="flex flex-col items-center justify-center gap-3 px-8 py-14 text-center">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Review queue clear
+            </h2>
+            <p className="max-w-md text-sm tracking-tight text-muted-foreground">
+              Every medium- and low-confidence category in this view has been
+              approved. Remove the filter to see the full ledger.
+            </p>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  }
 
   if (rows.length === 0) {
     return (
@@ -166,7 +236,7 @@ export function SmartLedgerView() {
               </TableHeader>
               <TableBody>
                 <AnimatePresence initial={false}>
-                  {rows.map(({ invoice, counterparty }, i) => (
+                  {displayedRows.map(({ invoice, counterparty }, i) => (
                     <motion.tr
                       key={invoice.id}
                       layout
@@ -186,7 +256,9 @@ export function SmartLedgerView() {
                         "border-b border-slate-100 transition-colors duration-200 hover:bg-slate-50/80",
                         (invoice.aiConfidence === "high" ||
                           invoice.aiConfidence === "medium") &&
-                          "bg-gradient-to-r from-indigo-50/35 via-white to-white dark:from-indigo-950/20"
+                          "bg-gradient-to-r from-indigo-50/35 via-white to-white dark:from-indigo-950/20",
+                        flashInvoiceId === invoice.id &&
+                          "bg-emerald-50/90 dark:bg-emerald-950/25"
                       )}
                     >
                       <TableCell className="max-w-[260px] whitespace-normal px-3 py-2 align-top">
@@ -223,6 +295,10 @@ export function SmartLedgerView() {
                           aiConfidence={invoice.aiConfidence}
                           verifiedCategory={categoryByInvoiceId[invoice.id]}
                           onCategoryVerified={onCategoryVerified}
+                          categoryTabStop={
+                            invoice.id === firstReviewInvoiceId &&
+                            needsCategoryReview(invoice, categoryByInvoiceId)
+                          }
                         />
                       </TableCell>
                       <TableCell className="px-3 py-2 align-top">

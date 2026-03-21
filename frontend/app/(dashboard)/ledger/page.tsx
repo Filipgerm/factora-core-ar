@@ -1,5 +1,5 @@
-import { SmartLedgerView } from "@/components/ledger/smart-ledger-view";
+import { LedgerPageClient } from "@/components/ledger/ledger-page-client";
 
 export default function LedgerPage() {
-  return <SmartLedgerView />;
+  return <LedgerPageClient />;
 }
