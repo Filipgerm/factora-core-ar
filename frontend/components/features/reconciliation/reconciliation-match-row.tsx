@@ -15,12 +15,6 @@ import {
   Truck,
 } from "lucide-react";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
 import type {
   ReconciliationAutoMatchedPair,
   ReconciliationBankId,
@@ -138,14 +132,6 @@ function tierLabel(tier: "high" | "medium" | "none"): string {
   return "No sugg.";
 }
 
-function defaultMatchLogicSummary(
-  transaction: ReconciliationBankTransaction,
-  invoice: { invoiceNumber: string; totalAmount: number }
-): string {
-  const amt = formatReconciliationEUR(Math.abs(transaction.amount));
-  return `Matched by: Amount (${amt}) and invoice reference (#${invoice.invoiceNumber}).`;
-}
-
 type ReconciliationMatchRowProps =
   | {
       variant: "pending";
@@ -179,9 +165,6 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
 
   const bankPaneClass =
     "md:bg-[#EFF1F4] md:transition-colors md:duration-200 dark:md:bg-slate-800/90 md:group-hover/reconrow:bg-slate-50 dark:md:group-hover/reconrow:bg-slate-900/70";
-
-  const matchTooltipText =
-    pair.matchLogicSummary ?? defaultMatchLogicSummary(transaction, invoice);
 
   const aiChipBase =
     "relative z-0 flex h-7 min-w-[4.75rem] shrink-0 items-center gap-1 rounded-md border px-1.5 shadow-sm transition-shadow duration-200";
@@ -297,92 +280,85 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
             </p>
           </div>
 
-          <div className="flex min-w-0 items-center justify-end gap-1 pl-1">
+          <div className="flex min-w-0 flex-col items-end justify-center gap-1.5 pl-1 md:min-h-[2.25rem]">
             {variant === "auto" ? (
-              <>
-                <div
-                  className={cn(
-                    aiChipBase,
-                    "border-emerald-500/35 bg-emerald-500/12 dark:border-emerald-500/25"
-                  )}
-                >
-                  <Bot
-                    className="size-3 shrink-0 text-emerald-700 dark:text-emerald-300"
-                    aria-hidden
-                  />
-                  <span className="inline-flex min-w-0 items-center gap-0.5 truncate text-[9px] font-semibold tabular-nums text-emerald-900 dark:text-emerald-100">
-                    <CheckCircle2 className="size-2.5 shrink-0" aria-hidden />
-                    Matched
-                  </span>
-                </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-slate-100 hover:text-foreground dark:hover:bg-slate-800"
-                      aria-label="Match reasoning"
-                    >
-                      <HelpCircle className="size-3.5 opacity-70" aria-hidden />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="left"
-                    className="max-w-[280px] border border-slate-700/80 bg-slate-900 text-left text-slate-50 shadow-lg"
-                  >
-                    {matchTooltipText}
-                  </TooltipContent>
-                </Tooltip>
-              </>
+              <div
+                className={cn(
+                  aiChipBase,
+                  "border-emerald-500/35 bg-emerald-500/12 dark:border-emerald-500/25"
+                )}
+              >
+                <Bot
+                  className="size-3 shrink-0 text-emerald-700 dark:text-emerald-300"
+                  aria-hidden
+                />
+                <span className="inline-flex min-w-0 items-center gap-0.5 truncate text-[9px] font-semibold tabular-nums text-emerald-900 dark:text-emerald-100">
+                  <CheckCircle2 className="size-2.5 shrink-0" aria-hidden />
+                  Matched
+                </span>
+              </div>
             ) : (
-              <>
+              <div className="relative flex w-full min-w-0 flex-col items-end md:h-8 md:min-w-[5.75rem]">
                 <div
                   className={cn(
-                    aiChipBase,
-                    aiTier === "high" &&
-                      "border-violet-400/40 bg-violet-500/15 dark:border-violet-500/30 dark:bg-violet-950/45",
-                    aiTier === "medium" &&
-                      "border-amber-400/45 bg-amber-500/18 dark:border-amber-500/35 dark:bg-amber-950/40",
-                    aiTier === "none" &&
-                      "border-border/70 bg-muted/75 dark:bg-muted/35"
+                    "flex w-full justify-end transition-all duration-200 ease-out",
+                    "md:absolute md:right-0 md:top-1/2 md:w-auto md:-translate-y-1/2",
+                    "md:group-hover/reconrow:pointer-events-none md:group-hover/reconrow:scale-95 md:group-hover/reconrow:opacity-0",
+                    "md:group-focus-within/reconrow:pointer-events-none md:group-focus-within/reconrow:scale-95 md:group-focus-within/reconrow:opacity-0"
                   )}
-                  role="status"
-                  aria-label={`AI suggestion: ${tierLabel(aiTier!)}`}
                 >
-                  <Bot
+                  <div
                     className={cn(
-                      "size-3 shrink-0",
+                      aiChipBase,
                       aiTier === "high" &&
-                        "text-violet-700 dark:text-violet-300",
+                        "border-violet-400/40 bg-violet-500/15 dark:border-violet-500/30 dark:bg-violet-950/45",
                       aiTier === "medium" &&
-                        "text-amber-800 dark:text-amber-200",
-                      aiTier === "none" && "text-muted-foreground"
+                        "border-amber-400/45 bg-amber-500/18 dark:border-amber-500/35 dark:bg-amber-950/40",
+                      aiTier === "none" &&
+                        "border-border/70 bg-muted/75 dark:bg-muted/35"
                     )}
-                    aria-hidden
-                  />
-                  <span
-                    className={cn(
-                      "min-w-0 truncate text-[10px] font-semibold leading-none tracking-tight",
-                      aiTier === "high" &&
-                        "text-violet-950 dark:text-violet-100",
-                      aiTier === "medium" &&
-                        "text-amber-950 dark:text-amber-50",
-                      aiTier === "none" && "text-muted-foreground"
-                    )}
+                    role="status"
+                    aria-label={`AI suggestion: ${tierLabel(aiTier!)}`}
                   >
-                    {tierLabel(aiTier!)}
-                  </span>
+                    <Bot
+                      className={cn(
+                        "size-3 shrink-0",
+                        aiTier === "high" &&
+                          "text-violet-700 dark:text-violet-300",
+                        aiTier === "medium" &&
+                          "text-amber-800 dark:text-amber-200",
+                        aiTier === "none" && "text-muted-foreground"
+                      )}
+                      aria-hidden
+                    />
+                    <span
+                      className={cn(
+                        "min-w-0 truncate text-[10px] font-semibold leading-none tracking-tight",
+                        aiTier === "high" &&
+                          "text-violet-950 dark:text-violet-100",
+                        aiTier === "medium" &&
+                          "text-amber-950 dark:text-amber-50",
+                        aiTier === "none" && "text-muted-foreground"
+                      )}
+                    >
+                      {tierLabel(aiTier!)}
+                    </span>
+                  </div>
                 </div>
                 <div
                   className={cn(
-                    "flex items-center gap-0.5 opacity-0 pointer-events-none transition-all duration-200 ease-out",
-                    "md:group-hover/reconrow:pointer-events-auto md:group-hover/reconrow:opacity-100"
+                    "flex w-full justify-end gap-0.5",
+                    "md:absolute md:right-0 md:top-1/2 md:w-auto md:-translate-y-1/2",
+                    "md:scale-95 md:opacity-0 md:pointer-events-none md:transition-all md:duration-200 md:ease-out",
+                    "md:group-hover/reconrow:scale-100 md:group-hover/reconrow:opacity-100 md:group-hover/reconrow:pointer-events-auto",
+                    "md:group-focus-within/reconrow:scale-100 md:group-focus-within/reconrow:opacity-100 md:group-focus-within/reconrow:pointer-events-auto"
                   )}
                 >
                   <button
                     type="button"
                     title="Edit match"
                     className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded border border-border/70 bg-white text-muted-foreground transition-colors duration-200",
+                      "flex size-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-white text-muted-foreground shadow-sm transition-colors duration-200",
                       "hover:bg-muted/60 hover:text-foreground",
                       "focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
                       "dark:bg-background"
@@ -393,14 +369,14 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
                       props.onReview(pair);
                     }}
                   >
-                    <Pencil className="size-3" aria-hidden />
+                    <Pencil className="size-3.5" aria-hidden />
                     <span className="sr-only">Edit match</span>
                   </button>
                   <button
                     type="button"
                     title="Reconcile"
                     className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded border border-emerald-500/40 bg-emerald-500/15 text-emerald-900 transition-colors duration-200",
+                      "flex size-7 shrink-0 items-center justify-center rounded-md border border-emerald-500/40 bg-emerald-500/15 text-emerald-900 shadow-sm transition-colors duration-200",
                       "hover:bg-emerald-500/25",
                       "focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
                       "dark:text-emerald-100"
@@ -411,28 +387,11 @@ export function ReconciliationMatchRow(props: ReconciliationMatchRowProps) {
                       props.onConfirm(pair.id);
                     }}
                   >
-                    <Check className="size-3" aria-hidden />
+                    <Check className="size-3.5" aria-hidden />
                     <span className="sr-only">Reconcile</span>
                   </button>
                 </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-slate-100 hover:text-foreground dark:hover:bg-slate-800"
-                      aria-label="Match reasoning"
-                    >
-                      <HelpCircle className="size-3.5 opacity-70" aria-hidden />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="left"
-                    className="max-w-[280px] border border-slate-700/80 bg-slate-900 text-left text-slate-50 shadow-lg"
-                  >
-                    {matchTooltipText}
-                  </TooltipContent>
-                </Tooltip>
-              </>
+              </div>
             )}
           </div>
         </div>
