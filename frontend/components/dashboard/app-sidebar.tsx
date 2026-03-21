@@ -15,6 +15,7 @@ import {
   BarChart3,
 } from "lucide-react";
 
+import { OrganizationSwitcher } from "@/components/dashboard/organization-switcher";
 import { cn } from "@/lib/utils";
 
 const AR_PREFIX = "/accounts-receivable";
@@ -90,7 +91,10 @@ export function AppSidebar() {
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-slate-100 bg-sidebar text-sidebar-foreground">
-      <div className="flex h-14 items-center border-b border-slate-100 px-4">
+      <div className="border-b border-slate-100 px-2 py-2">
+        <OrganizationSwitcher />
+      </div>
+      <div className="flex h-11 items-center px-4">
         <Link
           href="/home"
           className="text-sm font-semibold tracking-tight text-sidebar-foreground transition-colors duration-200 hover:text-[var(--sidebar-primary)]"

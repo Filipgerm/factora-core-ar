@@ -11,7 +11,7 @@ const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
 const LINKS = [
   { href: "/reporting/income-statement", label: "Income Statement" },
   { href: "/reporting/cash-flow", label: "Cashflow Statement" },
-  { href: "/reporting/executive-metrics", label: "Executive P&L" },
+  { href: "/reporting/executive-metrics", label: "SaaS Metrics" },
 ] as const;
 
 export function HomeReportsSection({ className }: { className?: string }) {

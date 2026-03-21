@@ -2,10 +2,12 @@
 
 import { useCallback, useRef } from "react";
 import { motion } from "framer-motion";
-import { UploadCloud } from "lucide-react";
+import { Brain, CheckCircle2, Loader2, UploadCloud, Zap } from "lucide-react";
 
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+const STEP_MS = 1000;
 
 export function ImportDataButton() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -19,12 +21,75 @@ export function ImportDataButton() {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       const n = files?.length ?? 0;
-      if (n > 0) {
-        toast({
-          title: "Files selected",
-          description: `${n} file${n === 1 ? "" : "s"} ready for ingestion (demo).`,
-        });
+      if (n === 0) {
+        e.target.value = "";
+        return;
       }
+
+      const handle = toast({
+        title: "Scanning document…",
+        description: (
+          <span className="flex items-center gap-2 text-sm">
+            <Loader2
+              className="size-4 shrink-0 animate-spin text-[var(--brand-primary)]"
+              aria-hidden
+            />
+            Preparing your files for ingestion.
+          </span>
+        ),
+      });
+
+      window.setTimeout(() => {
+        handle.update({
+          id: handle.id,
+          open: true,
+          title: "Extracting data via OCR…",
+          description: (
+            <span className="flex items-center gap-2 text-sm">
+              <Brain
+                className="size-4 shrink-0 text-violet-600 dark:text-violet-400"
+                aria-hidden
+              />
+              Reading tables and line items from your upload.
+            </span>
+          ),
+        });
+      }, STEP_MS);
+
+      window.setTimeout(() => {
+        handle.update({
+          id: handle.id,
+          open: true,
+          title: "Categorizing…",
+          description: (
+            <span className="flex items-center gap-2 text-sm">
+              <Zap
+                className="size-4 shrink-0 text-amber-600 dark:text-amber-400"
+                aria-hidden
+              />
+              Mapping transactions to your chart of accounts.
+            </span>
+          ),
+        });
+      }, STEP_MS * 2);
+
+      window.setTimeout(() => {
+        handle.update({
+          id: handle.id,
+          open: true,
+          title: `Done! ${n} document${n === 1 ? "" : "s"} processed.`,
+          description: (
+            <span className="flex items-center gap-2 text-sm">
+              <CheckCircle2
+                className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                aria-hidden
+              />
+              You can close this notification or continue working.
+            </span>
+          ),
+        });
+      }, STEP_MS * 3);
+
       e.target.value = "";
     },
     [toast]
