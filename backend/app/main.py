@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from app.api.routes.ai_routes import router as ai_router
 from app.api.routes.auth_routes import router as auth_router
 from app.api.routes.dashboard_routes import router as dashboard_router
 from app.api.routes.file_routes import router as file_router
@@ -188,6 +189,7 @@ app.include_router(file_router, prefix=f"{_V1}/files", tags=["File Management"])
 app.include_router(saltedge_router, prefix=f"{_V1}/saltedge", tags=["SaltEdge"])
 app.include_router(aade_router, prefix=f"{_V1}/aade", tags=["AADE"])
 app.include_router(dashboard_router, prefix=f"{_V1}/dashboard", tags=["Dashboard"])
+app.include_router(ai_router, prefix=f"{_V1}/ai", tags=["AI"])
 
 
 # ---------------------------------------------------------------------------

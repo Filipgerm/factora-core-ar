@@ -37,6 +37,7 @@ from app.services.saltedge_service import SaltEdgeService
 from app.services.dashboard_service import DashboardService
 from app.services.gemi_service import GemiService
 from app.services.mydata_service import MyDataService
+from app.services.ai_service import AIService
 from app.services.file_service import FileService
 from app.controllers.membership_controller import MembershipController
 from app.controllers.organization_controller import OrganizationController
@@ -44,6 +45,7 @@ from app.controllers.saltedge_controller import SaltEdgeController
 from app.controllers.dashboard_controller import DashboardController
 from app.controllers.gemi_controller import GemiController
 from app.controllers.mydata_controller import MyDataController
+from app.controllers.ai_controller import AIController
 from app.controllers.file_controller import FileController
 
 _bearer_scheme = HTTPBearer(auto_error=True)
@@ -341,6 +343,10 @@ def get_file_service(
     return FileService(db, org_id)
 
 
+def get_ai_service(org_id: CurrentOrgId) -> AIService:
+    return AIService(org_id)
+
+
 def get_file_controller(
     service: Annotated[FileService, Depends(get_file_service)],
 ) -> FileController:
@@ -348,4 +354,11 @@ def get_file_controller(
     return FileController(service)
 
 
+def get_ai_controller(
+    service: Annotated[AIService, Depends(get_ai_service)],
+) -> AIController:
+    return AIController(service)
+
+
 FileCtrl = Annotated[FileController, Depends(get_file_controller)]
+AICtrl = Annotated[AIController, Depends(get_ai_controller)]
