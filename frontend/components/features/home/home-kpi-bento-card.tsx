@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 
 import { AnimatedMetricValue } from "@/components/features/home/animated-metric-value";
 import { KpiArrAreaChart } from "@/components/features/home/kpi-arr-area-chart";
-import type { HomeKpiMetric } from "@/lib/mock-data/dashboard-mocks";
+import type { HomeKpiMetric } from "@/lib/views/home";
 import { cn } from "@/lib/utils";
 
 const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };

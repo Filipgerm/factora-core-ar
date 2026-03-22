@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import type { ReconciliationBookInvoice } from "@/lib/mock-data/dashboard-mocks";
+import type { ReconciliationBookInvoice } from "@/lib/views/reconciliation";
 import { cn } from "@/lib/utils";
 
 import { formatReconciliationDate, formatReconciliationEUR } from "./reconciliation-money";

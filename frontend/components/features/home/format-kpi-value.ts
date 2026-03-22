@@ -1,4 +1,4 @@
-import type { HomeKpiFormatKey } from "@/lib/mock-data/dashboard-mocks";
+import type { HomeKpiFormatKey } from "@/lib/views/home";
 
 const eurFmt = new Intl.NumberFormat("el-GR", {
   style: "currency",

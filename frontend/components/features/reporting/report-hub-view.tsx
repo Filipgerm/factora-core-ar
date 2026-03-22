@@ -5,7 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Pin, Star } from "lucide-react";
 
-import { reportHubSections } from "@/lib/mock-data/report-hub-mocks";
+import { reportHubSections } from "@/lib/views/report-hub-config";
 import { cn } from "@/lib/utils";
 
 const SNAP_SPRING = { type: "spring" as const, stiffness: 560, damping: 42 };

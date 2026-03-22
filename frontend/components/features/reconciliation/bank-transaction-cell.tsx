@@ -3,7 +3,7 @@ import { Landmark } from "lucide-react";
 import type {
   ReconciliationBankId,
   ReconciliationBankTransaction,
-} from "@/lib/mock-data/dashboard-mocks";
+} from "@/lib/views/reconciliation";
 import { cn } from "@/lib/utils";
 
 import { formatReconciliationDate, formatReconciliationEUR } from "./reconciliation-money";

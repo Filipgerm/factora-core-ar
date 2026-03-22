@@ -21,7 +21,7 @@ import type {
   ReconciliationBankTransaction,
   ReconciliationInvoiceCategory,
   ReconciliationPendingPair,
-} from "@/lib/mock-data/dashboard-mocks";
+} from "@/lib/views/reconciliation";
 import { cn } from "@/lib/utils";
 
 import {

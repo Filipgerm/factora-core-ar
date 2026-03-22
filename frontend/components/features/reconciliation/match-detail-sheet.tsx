@@ -20,7 +20,7 @@ import {
 import type {
   ReconciliationBookInvoice,
   ReconciliationPendingPair,
-} from "@/lib/mock-data/dashboard-mocks";
+} from "@/lib/views/reconciliation";
 import { cn } from "@/lib/utils";
 
 interface MatchDetailSheetProps {

@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts";
 
-import type { HomeKpiSparkPoint } from "@/lib/mock-data/dashboard-mocks";
+import type { HomeKpiSparkPoint } from "@/lib/views/home";
 import { cn } from "@/lib/utils";
 
 export function ReportMiniAreaChart({

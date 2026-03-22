@@ -9,7 +9,7 @@ import {
 } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
-import type { HomeKpiFormatKey } from "@/lib/mock-data/dashboard-mocks";
+import type { HomeKpiFormatKey } from "@/lib/views/home";
 import { cn } from "@/lib/utils";
 
 import { formatKpiAnimatedValue } from "./format-kpi-value";
