@@ -31,6 +31,14 @@ _TEST_ENV = {
     "GOOGLE_CLIENT_SECRET": "test-google-client-secret",
     "CORS_ORIGINS": "",
     "ALLOWED_HOSTS": "*",
+    "OPENAI_API_KEY": "",
+    "ANTHROPIC_API_KEY": "",
+    "STRIPE_SECRET_KEY": "",
+    "STRIPE_WEBHOOK_SECRET": "",
+    "GMAIL_SMTP_HOST": "",
+    "GMAIL_SMTP_USER": "",
+    "GMAIL_SMTP_PASSWORD": "",
+    "GMAIL_FROM_EMAIL": "",
 }
 
 for _key, _val in _TEST_ENV.items():

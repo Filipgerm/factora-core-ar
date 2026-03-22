@@ -46,6 +46,41 @@ class Settings(BaseSettings):
     SALTEDGE_APP_ID: str = Field(..., description="SaltEdge application ID")
     SALTEDGE_SECRET: str = Field(..., description="SaltEdge API secret")
 
+    # --- AI / embeddings (optional in dev; required for live agent flows) ---
+    OPENAI_API_KEY: str = Field(default="", description="OpenAI API key for chat and embeddings")
+    OPENAI_CHAT_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="Default chat model for LLM client and agents",
+    )
+    OPENAI_EMBEDDING_MODEL: str = Field(
+        default="text-embedding-3-small",
+        description="Embedding model for pgvector RAG",
+    )
+    OPENAI_EMBEDDING_DIMENSIONS: int = Field(
+        default=1536,
+        ge=256,
+        le=3072,
+        description="Must match the vector column width in organization_embeddings",
+    )
+    ANTHROPIC_API_KEY: str = Field(
+        default="",
+        description="Optional Anthropic API key (alternative LLM provider)",
+    )
+
+    # --- Stripe (optional until billing is live) ---
+    STRIPE_SECRET_KEY: str = Field(default="", description="Stripe secret API key")
+    STRIPE_WEBHOOK_SECRET: str = Field(
+        default="",
+        description="Stripe signing secret for webhook verification",
+    )
+
+    # --- Gmail / SMTP (optional; collections agent outbound) ---
+    GMAIL_SMTP_HOST: str = Field(default="", description="SMTP host for Gmail or workspace relay")
+    GMAIL_SMTP_PORT: int = Field(default=587, description="SMTP port (587 TLS recommended)")
+    GMAIL_SMTP_USER: str = Field(default="", description="SMTP auth username (often full email)")
+    GMAIL_SMTP_PASSWORD: str = Field(default="", description="SMTP app password or relay secret")
+    GMAIL_FROM_EMAIL: str = Field(default="", description="From address for agent-sent mail")
+
     # --- Security ---
     CODE_PEPPER: str = Field(
         ..., description="Server-side pepper for Argon2 hashes (>= 16 random chars)"
