@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { format, parseISO } from "date-fns";
+import { Building2 } from "lucide-react";
 
+import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -13,8 +15,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { ApVendor } from "@/lib/mock-data/ap-mocks";
-import { mockApVendors } from "@/lib/mock-data/ap-mocks";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useCounterpartiesQuery } from "@/lib/hooks/api/use-organization";
+import {
+  counterpartyToApVendor,
+  isVendorType,
+} from "@/lib/organization/counterparty-mappers";
+import type { ApVendor } from "@/lib/views/ap";
 import { cn } from "@/lib/utils";
 
 function fmtEUR(n: number) {
@@ -26,8 +33,17 @@ function fmtEUR(n: number) {
 }
 
 export function ApVendorsView() {
+  const { data: counterparties, isLoading } = useCounterpartiesQuery();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<ApVendor | null>(null);
+
+  const vendors = useMemo(
+    () =>
+      (counterparties ?? [])
+        .filter((c) => isVendorType(c.type))
+        .map(counterpartyToApVendor),
+    [counterparties]
+  );
 
   const columns: ColumnDef<ApVendor>[] = useMemo(
     () => [
@@ -101,11 +117,36 @@ export function ApVendorsView() {
     []
   );
 
+  if (isLoading) {
+    return (
+      <div className="space-y-5">
+        <Skeleton className="h-[400px] w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  if (vendors.length === 0) {
+    return (
+      <FeatureEmptyState
+        icon={Building2}
+        title="No vendors yet"
+        description="Add counterparties with type Vendor (or Both) to manage payables. Balances stay at zero until AP posting is live."
+        ctaHref="/integrations"
+        ctaLabel="Integrations"
+      />
+    );
+  }
+
   return (
     <div className="space-y-5">
+      <p className="text-xs text-muted-foreground">
+        Vendors from{" "}
+        <span className="font-medium text-foreground">counterparties</span>. Spend
+        and bill lines are placeholders until AP APIs ship.
+      </p>
       <DataTable
         columns={columns}
-        data={mockApVendors}
+        data={vendors}
         getRowId={(r) => r.id}
         onRowClick={(row) => {
           setActive(row);
