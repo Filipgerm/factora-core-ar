@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronRight, Search } from "lucide-react";
 
 import { ImportDataButton } from "@/components/dashboard/import-data-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mockHomeUserFirstName } from "@/lib/mock-data/dashboard-mocks";
+import { useAuthSession, useLogoutMutation } from "@/lib/hooks/api/use-auth";
 import { cn } from "@/lib/utils";
 
 /** First path segment → section title */
@@ -69,9 +70,13 @@ function breadcrumbsForPath(pathname: string) {
 
 export function DashboardTopNav() {
   const pathname = usePathname() || "/home";
+  const router = useRouter();
   const crumbs = breadcrumbsForPath(pathname);
+  const { data: session } = useAuthSession();
+  const logout = useLogoutMutation();
+  const displayName = session?.profile?.username ?? "Guest";
   const initials =
-    mockHomeUserFirstName
+    displayName
       .split(/\s+/)
       .map((w) => w[0])
       .join("")
@@ -121,6 +126,28 @@ export function DashboardTopNav() {
 
         <div className="flex shrink-0 items-center gap-2">
           <ImportDataButton />
+          {session?.hasToken ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="hidden sm:inline-flex"
+              disabled={logout.isPending}
+              onClick={() =>
+                logout.mutate(undefined, {
+                  onSuccess: () => router.push("/login"),
+                })
+              }
+            >
+              Sign out
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" size="sm" asChild>
+              <Link href="/login" className="hidden sm:inline-flex">
+                Sign in
+              </Link>
+            </Button>
+          )}
           <Avatar className="size-8 border border-slate-100 shadow-sm">
             <AvatarFallback className="bg-[var(--brand-primary-subtle)] text-xs font-semibold text-[var(--brand-primary)]">
               {initials}

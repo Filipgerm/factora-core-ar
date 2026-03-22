@@ -17,10 +17,10 @@ const JWT_HEADER = {
  * Format: base64(header).base64(payload).signature
  */
 export function encodeToken(payload: UserSession): string {
+  const iat = payload.iat ?? Date.now();
   const header = btoa(JSON.stringify(JWT_HEADER));
-  const encodedPayload = btoa(JSON.stringify(payload));
-  // Mock signature - in production, this would be HMAC-SHA256
-  const signature = btoa(`mock-signature-${payload.userId}-${payload.iat}`);
+  const encodedPayload = btoa(JSON.stringify({ ...payload, iat }));
+  const signature = btoa(`mock-signature-${payload.userId}-${iat}`);
   
   return `${header}.${encodedPayload}.${signature}`;
 }
@@ -39,7 +39,7 @@ export function decodeToken(token: string): UserSession | null {
     const decodedPayload = JSON.parse(atob(parts[1])) as UserSession;
     
     // Basic validation
-    if (!decodedPayload.userId || !decodedPayload.userType || !decodedPayload.iat) {
+    if (!decodedPayload.userId || !decodedPayload.role) {
       return null;
     }
 
