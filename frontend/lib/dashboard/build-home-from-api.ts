@@ -4,7 +4,7 @@ import type {
   HomeActionItem,
   HomeKpiMetric,
   HomeKpiSparkPoint,
-} from "@/lib/mock-data/dashboard-mocks";
+} from "@/lib/views/home";
 
 function monthlyToSpark(rows: Record<string, unknown>[]): HomeKpiSparkPoint[] {
   return rows.map((row, i) => {
