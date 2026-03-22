@@ -15,6 +15,7 @@ import app.db.models.alerts         # noqa: F401
 import app.db.models.banking        # noqa: F401
 import app.db.models.aade           # noqa: F401
 import app.db.models.files          # noqa: F401
+import app.db.models.embeddings     # noqa: F401
 
 target_metadata = Base.metadata
 
