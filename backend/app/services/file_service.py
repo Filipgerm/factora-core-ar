@@ -13,8 +13,11 @@ import logging
 import mimetypes
 from typing import Optional
 
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import NotFoundError
+from app.db.models.files import Document
 from app.db.postgres import get_supabase, SUPABASE_BUCKET
 
 logger = logging.getLogger(__name__)
@@ -24,14 +27,29 @@ class FileService:
     """Service for managing files and documents via Supabase Storage."""
 
     def __init__(self, db: AsyncSession, organization_id: str) -> None:
-        """Initialize the FileService.
-
-        TODO: When storage has org-scoped metadata, validate file belongs to organization_id.
-        """
+        """Initialize the FileService scoped to one organization."""
         self.db = db
         self.organization_id = organization_id
         self.supabase = get_supabase()
         self.bucket = SUPABASE_BUCKET
+
+    async def _assert_file_access_allowed(self, filename: str) -> None:
+        """Deny download when a ``documents`` row exists with a different ``organization_id``."""
+        result = await self.db.execute(
+            select(Document).where(
+                or_(
+                    Document.path == filename,
+                    Document.original_name == filename,
+                )
+            )
+        )
+        doc = result.scalar_one_or_none()
+        if doc is None:
+            return
+        meta = doc._metadata or {}
+        owner = meta.get("organization_id")
+        if owner is not None and str(owner) != str(self.organization_id):
+            raise NotFoundError("File not found.", code="resource.not_found")
 
     async def fetch_file(self, filename: str) -> Optional[dict]:
         """Fetch a file asynchronously from Supabase storage.
@@ -44,6 +62,7 @@ class FileService:
             or ``None`` if the file is missing or unreadable.
         """
         try:
+            await self._assert_file_access_allowed(filename)
             loop = asyncio.get_running_loop()
 
             # CRITICAL FIX: run_in_executor pushes the slow, synchronous

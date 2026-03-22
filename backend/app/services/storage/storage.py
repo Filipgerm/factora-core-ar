@@ -158,7 +158,7 @@ async def store_document_row(
         content_type=content_type,
         size=size,
         public_url=public_url,
-        metadata=metadata or {},
+        _metadata=metadata or {},
     )
     session.add(doc)
     await session.commit()
