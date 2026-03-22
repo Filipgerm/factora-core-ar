@@ -13,25 +13,48 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { isApiError } from "@/lib/api/types";
 import { useAuthSession } from "@/lib/hooks/api/use-auth";
+import {
+  useOrganizationsListQuery,
+  useSwitchOrganizationMutation,
+} from "@/lib/hooks/api/use-organizations";
 import { useOrganizationMeQuery } from "@/lib/hooks/api/use-organization";
 import { cn } from "@/lib/utils";
 
 export function OrganizationSwitcher({ className }: { className?: string }) {
+  const { toast } = useToast();
   const { data: session } = useAuthSession();
-  const org = useOrganizationMeQuery();
+  const list = useOrganizationsListQuery();
+  const orgMe = useOrganizationMeQuery();
+  const switchOrg = useSwitchOrganizationMutation();
 
   const hasToken = Boolean(session?.hasToken);
-  const hasOrgInJwt = Boolean(session?.profile?.organization_id);
+  const currentMembership = list.data?.find((m) => m.is_current);
 
   const label = (() => {
     if (!hasToken) return "Sign in to continue";
-    if (org.isLoading) return null;
-    if (org.data?.name) return org.data.name;
-    if (!hasOrgInJwt) return "Complete organization setup";
-    if (org.isError) return "Could not load organization";
+    if (list.isLoading) return null;
+    if (list.isError) return "Could not load organizations";
+    if (currentMembership?.name) return currentMembership.name;
+    if (orgMe.data?.name) return orgMe.data.name;
+    if ((list.data?.length ?? 0) === 0) return "Complete organization setup";
     return "Organization";
   })();
+
+  function onSelectOrg(organizationId: string, isCurrent: boolean) {
+    if (isCurrent || switchOrg.isPending) return;
+    switchOrg.mutate(organizationId, {
+      onError: (err) => {
+        toast({
+          title: "Could not switch organization",
+          description: isApiError(err) ? err.message : "Request failed",
+          variant: "destructive",
+        });
+      },
+    });
+  }
 
   return (
     <DropdownMenu>
@@ -54,7 +77,7 @@ export function OrganizationSwitcher({ className }: { className?: string }) {
             />
           </span>
           <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
-            {org.isLoading ? (
+            {list.isLoading ? (
               <Skeleton className="h-4 w-28" />
             ) : (
               (label ?? "…")
@@ -68,26 +91,35 @@ export function OrganizationSwitcher({ className }: { className?: string }) {
           Organization
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {org.data ? (
-          <DropdownMenuItem
-            className="gap-2 text-sm transition-all duration-200"
-            onSelect={(e) => e.preventDefault()}
-          >
-            <Building2 className="size-3.5 opacity-70" aria-hidden />
-            {org.data.name}
-          </DropdownMenuItem>
-        ) : (
+        {hasToken && list.isSuccess && (list.data?.length ?? 0) > 0 ? (
+          (list.data ?? []).map((m) => (
+            <DropdownMenuItem
+              key={m.organization_id}
+              className="gap-2 text-sm transition-all duration-200"
+              disabled={m.is_current || switchOrg.isPending}
+              onSelect={(e) => {
+                e.preventDefault();
+                onSelectOrg(m.organization_id, m.is_current);
+              }}
+            >
+              <Building2 className="size-3.5 opacity-70" aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{m.name}</span>
+              {m.is_current ? (
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Current
+                </span>
+              ) : null}
+            </DropdownMenuItem>
+          ))
+        ) : hasToken && list.isSuccess ? (
           <DropdownMenuItem
             disabled
             className="text-xs text-muted-foreground"
             onSelect={(e) => e.preventDefault()}
           >
-            {hasToken && !hasOrgInJwt
-              ? "Create your org via API POST /v1/organization/"
-              : "No organization loaded"}
+            Create your org via POST /v1/organization/
           </DropdownMenuItem>
-        )}
-        {/* TODO: Phase 2 Backend — multi-tenant org list + switch-active-org (new JWT); until then only one org from JWT. */}
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="gap-2 text-sm transition-all duration-200"

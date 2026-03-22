@@ -76,6 +76,7 @@ export function useLoginMutation() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
       void qc.invalidateQueries({ queryKey: queryKeys.organization.all });
+      void qc.invalidateQueries({ queryKey: queryKeys.organizations.all });
     },
   });
 }
@@ -116,6 +117,7 @@ export function useGoogleAuthMutation() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
       void qc.invalidateQueries({ queryKey: queryKeys.organization.all });
+      void qc.invalidateQueries({ queryKey: queryKeys.organizations.all });
     },
   });
 }
@@ -140,6 +142,7 @@ export function useLogoutMutation() {
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
       void qc.removeQueries({ queryKey: queryKeys.organization.all });
+      void qc.removeQueries({ queryKey: queryKeys.organizations.all });
       void qc.removeQueries({ queryKey: queryKeys.saltedge.all });
       void qc.removeQueries({ queryKey: queryKeys.dashboard.all });
       void qc.removeQueries({ queryKey: queryKeys.mydata.all });

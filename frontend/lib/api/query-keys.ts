@@ -8,6 +8,10 @@ export const queryKeys = {
     me: () => [...queryKeys.organization.all, "me"] as const,
     counterparties: () => [...queryKeys.organization.all, "counterparties"] as const,
   },
+  organizations: {
+    all: ["organizations"] as const,
+    list: () => [...queryKeys.organizations.all, "list"] as const,
+  },
   saltedge: {
     all: ["saltedge"] as const,
     customers: (params?: Record<string, string | number | undefined>) =>
