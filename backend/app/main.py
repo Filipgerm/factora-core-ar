@@ -119,12 +119,14 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         {
             "detail": "<human-readable message>",
             "code":   "<machine-readable slug>",
-            "fields": {"field_name": "reason"}   # only present on ValidationError
+            "fields": {"field_name": "reason"}   # empty {} unless ValidationError
         }
     """
-    body: dict = {"detail": exc.detail, "code": exc.code}
-    if isinstance(exc, ValidationError) and exc.fields:
-        body["fields"] = exc.fields
+    body: dict = {
+        "detail": exc.detail,
+        "code": exc.code,
+        "fields": exc.fields if isinstance(exc, ValidationError) else {},
+    }
     logger.debug("AppError [%s] %s: %s", exc.status_code, exc.code, exc.detail)
     return JSONResponse(status_code=exc.status_code, content=body)
 
