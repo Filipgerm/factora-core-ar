@@ -81,7 +81,8 @@ export function useLoginMutation() {
   });
 }
 
-export function useSignUpMutation() {
+/** Registers via `POST /v1/auth/signup`; returns profile only (no tokens). User must log in next. */
+export function useSignupMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: SignUpRequest) => {
@@ -98,6 +99,9 @@ export function useSignUpMutation() {
     },
   });
 }
+
+/** Alias for `useSignupMutation` (same hook). */
+export const useSignup = useSignupMutation;
 
 export function useGoogleAuthMutation() {
   const qc = useQueryClient();

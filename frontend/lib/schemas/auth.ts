@@ -2,14 +2,15 @@ import { z } from "zod";
 
 const uuidLike = z.string().uuid();
 
+/** Mirrors backend `SignUpRequest`: username 2–80 chars, email, password min 8. */
 export const signUpRequestSchema = z.object({
-  username: z.string().min(2).max(80),
-  email: z.string().email(),
+  username: z.string().trim().min(2).max(80),
+  email: z.string().trim().email(),
   password: z.string().min(8),
 });
 
 export const loginRequestSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().email(),
   password: z.string(),
 });
 
