@@ -7,15 +7,19 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Query
 
 from app.dependencies import GemiCtrl
+from app.models.gemi import GemiDocumentsFetchResponse, GemiSearchResponse
 
 router = APIRouter()
 
 
-@router.post("/gemi/{afm}/documents:fetch")
+@router.post(
+    "/gemi/{afm}/documents:fetch",
+    response_model=GemiDocumentsFetchResponse,
+)
 async def fetch_docs(
     afm: str,
     ctl: GemiCtrl,
-):
+) -> GemiDocumentsFetchResponse:
     """
     Trigger a fetch of official GEMI documents for a company and store them server-side.
 
@@ -32,7 +36,7 @@ async def fetch_docs(
     return await ctl.fetch_and_store_company_documents(afm)
 
 
-@router.get("/gemi/search")
+@router.get("/gemi/search", response_model=GemiSearchResponse)
 async def search_companies(
     ctl: GemiCtrl,
     q: Annotated[
@@ -46,7 +50,7 @@ async def search_companies(
         Literal["afm", "gemi_number"], Query(description="Search Mode")
     ] = "afm",
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
-):
+) -> GemiSearchResponse:
     """
     Search for a company by AFM or by GEMI number for live onboarding lookups.
 
