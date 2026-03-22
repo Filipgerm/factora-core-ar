@@ -12,15 +12,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuthSession } from "@/lib/hooks/api/use-auth";
+import { useOrganizationMeQuery } from "@/lib/hooks/api/use-organization";
 import { cn } from "@/lib/utils";
 
-const MOCK_ORGS = [
-  { id: "acme", name: "Acme Corp" },
-  { id: "globex", name: "Globex Holdings" },
-  { id: "initech", name: "Initech EU" },
-] as const;
-
 export function OrganizationSwitcher({ className }: { className?: string }) {
+  const { data: session } = useAuthSession();
+  const org = useOrganizationMeQuery();
+
+  const hasToken = Boolean(session?.hasToken);
+  const hasOrgInJwt = Boolean(session?.profile?.organization_id);
+
+  const label = (() => {
+    if (!hasToken) return "Sign in to continue";
+    if (org.isLoading) return null;
+    if (org.data?.name) return org.data.name;
+    if (!hasOrgInJwt) return "Complete organization setup";
+    if (org.isError) return "Could not load organization";
+    return "Organization";
+  })();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -42,7 +54,11 @@ export function OrganizationSwitcher({ className }: { className?: string }) {
             />
           </span>
           <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
-            Acme Corp
+            {org.isLoading ? (
+              <Skeleton className="h-4 w-28" />
+            ) : (
+              (label ?? "…")
+            )}
           </span>
           <ChevronsUpDown className="size-4 shrink-0 opacity-50" aria-hidden />
         </Button>
@@ -52,16 +68,26 @@ export function OrganizationSwitcher({ className }: { className?: string }) {
           Organization
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {MOCK_ORGS.map((o) => (
+        {org.data ? (
           <DropdownMenuItem
-            key={o.id}
             className="gap-2 text-sm transition-all duration-200"
             onSelect={(e) => e.preventDefault()}
           >
             <Building2 className="size-3.5 opacity-70" aria-hidden />
-            {o.name}
+            {org.data.name}
           </DropdownMenuItem>
-        ))}
+        ) : (
+          <DropdownMenuItem
+            disabled
+            className="text-xs text-muted-foreground"
+            onSelect={(e) => e.preventDefault()}
+          >
+            {hasToken && !hasOrgInJwt
+              ? "Create your org via API POST /v1/organization/"
+              : "No organization loaded"}
+          </DropdownMenuItem>
+        )}
+        {/* TODO: Phase 2 Backend — multi-tenant org list + switch-active-org (new JWT); until then only one org from JWT. */}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="gap-2 text-sm transition-all duration-200"
