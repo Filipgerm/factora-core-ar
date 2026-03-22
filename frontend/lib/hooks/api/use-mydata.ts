@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/query-keys";
-import { apiErrorFromResponse } from "@/lib/api/types";
+import { apiErrorFromResponse } from "@/lib/api/error";
 import { requestedDocsResponseSchema } from "@/lib/schemas/aade/mydata";
 import { useAuthSession } from "@/lib/hooks/api/use-auth";
 

@@ -13,7 +13,7 @@ import {
   setTokens,
   type StoredAuthProfile,
 } from "@/lib/api/session";
-import { apiErrorFromResponse } from "@/lib/api/types";
+import { apiErrorFromResponse } from "@/lib/api/error";
 import { authResponseSchema } from "@/lib/schemas/auth";
 import type { SignInCredentials, UserSession, UserType } from "@/lib/types/auth";
 

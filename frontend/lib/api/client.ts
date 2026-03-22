@@ -2,7 +2,8 @@
  * Base URL: NEXT_PUBLIC_API_URL (e.g. http://127.0.0.1:8000). Paths must include /v1/...
  */
 
-import { ApiError, apiErrorFromResponse } from "@/lib/api/types";
+import { apiErrorFromResponse } from "@/lib/api/error";
+import { ApiError } from "@/lib/api/types";
 import {
   clearSession,
   getAccessToken,
