@@ -25,13 +25,20 @@ class OrganizationSetupRequest(BaseModel):
 
 
 class BusinessResponse(BaseModel):
-    """Organization profile returned after setup or on GET /organization/me."""
+    """Organization profile returned after setup or on GET /organization/me.
+
+    ``saltedge_customer_id`` is the oldest SaltEdge ``customers`` row for this
+    tenant (by ``created_at``). When multiple customers exist, the API still
+    returns this single canonical id so dashboards can call P&amp;L endpoints
+    without guessing; use ``GET /v1/saltedge/customers`` when the user must pick another customer.
+    """
 
     organization_id: UUID
     name: str
     vat_number: str
     country: str
     registry_data: dict | None = None
+    saltedge_customer_id: str | None = None
 
     model_config = {"from_attributes": True}
 

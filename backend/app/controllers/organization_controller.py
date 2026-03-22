@@ -33,7 +33,12 @@ class OrganizationController:
         """
         self.service = org_service
 
-    def _map_org_to_response(self, org: Organization) -> BusinessResponse:
+    def _map_org_to_response(
+        self,
+        org: Organization,
+        *,
+        saltedge_customer_id: str | None = None,
+    ) -> BusinessResponse:
         """Helper to map Organization ORM to BusinessResponse DTO."""
         return BusinessResponse(
             organization_id=UUID(org.id),
@@ -41,6 +46,7 @@ class OrganizationController:
             vat_number=org.vat_number,
             country=org.country,
             registry_data=org.registry_data,
+            saltedge_customer_id=saltedge_customer_id,
         )
 
     def _map_counterparty_to_response(self, cp: Counterparty) -> CounterpartyResponse:
@@ -84,7 +90,10 @@ class OrganizationController:
             ExternalServiceError: If the database operation fails
         """
         org_model = await self.service.setup_organization(user_id, request)
-        return self._map_org_to_response(org_model)
+        cid = await self.service.get_primary_saltedge_customer_id(
+            organization_id=org_model.id
+        )
+        return self._map_org_to_response(org_model, saltedge_customer_id=cid)
 
     async def get_organization(self) -> BusinessResponse:
         """
@@ -97,7 +106,8 @@ class OrganizationController:
             NotFoundError: If the organization does not exist
         """
         org_model = await self.service.get_organization()
-        return self._map_org_to_response(org_model)
+        cid = await self.service.get_primary_saltedge_customer_id()
+        return self._map_org_to_response(org_model, saltedge_customer_id=cid)
 
     async def list_counterparties(self) -> list[CounterpartyResponse]:
         """

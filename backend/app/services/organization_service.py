@@ -23,6 +23,7 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.db.models.banking import CustomerModel
 from app.db.models.identity import Organization, User
 from app.db.models.counterparty import Counterparty, CounterpartyType
 from app.models.organization import (
@@ -126,6 +127,21 @@ class OrganizationService:
             raise NotFoundError("Organization not found.", code="resource.not_found")
 
         return org
+
+    async def get_primary_saltedge_customer_id(
+        self, organization_id: str | None = None
+    ) -> str | None:
+        """Return the oldest SaltEdge customer id for the org, or ``None`` if none exist."""
+        oid = organization_id or self.organization_id
+        if not oid:
+            return None
+        result = await self.db.execute(
+            select(CustomerModel.id)
+            .where(CustomerModel.organization_id == oid)
+            .order_by(CustomerModel.created_at.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     # ------------------------------------------------------------------
     # Counterparties
