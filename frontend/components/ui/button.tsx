@@ -52,6 +52,8 @@ function Button({
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
+      // Radix + Slot (asChild) can produce different auto `id` on server vs client; avoid noisy hydration warnings.
+      {...(asChild ? { suppressHydrationWarning: true } : {})}
     />
   )
 }

@@ -49,10 +49,13 @@ services:
     # For direct access during development, uncomment the line below:
     # ports:
     #   - "127.0.0.1:8000:8000"
+    user: "${UID}:${GID}" # run the container as filip:filip instead of root:root
     volumes:
       # Direct mapping between host directory and container directory
       # Changes on host appear instantly in container
       - ./backend:/app
+      - /app/.venv
+      - /app/__pycache__
     env_file:
       - ./backend/.env
     networks:
@@ -81,7 +84,7 @@ services:
   #     -d factora.eu -d www.factora.eu
   #   networks:
   #     - factora-network
-  #   restart: "no"   
+  #   restart: "no"
 
 networks:
   factora-network:

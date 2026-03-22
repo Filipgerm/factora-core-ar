@@ -1,205 +1,115 @@
-import type {
-  UserType,
-  UserSession,
-  AuthToken,
-  SignInCredentials,
-} from "./types/auth";
-import { encodeToken, decodeToken } from "./auth-utils";
-
 /**
- * Authentication service abstraction layer
- * 
- * Currently uses localStorage to mimic server-side JWT sessions.
- * When connecting to backend, replace localStorage operations with API calls:
- * - signIn() -> POST /api/auth/signin
- * - getSession() -> GET /api/auth/session or decode JWT from httpOnly cookie
- * - updateUserType() -> PATCH /api/auth/user-type
- * - signOut() -> POST /api/auth/signout
+ * Client auth helpers backed by localStorage session (access token + profile).
+ * Prefer `useLoginMutation` / `useLogoutMutation` from `@/lib/hooks/api/use-auth` in React.
  */
 
-const STORAGE_KEYS = {
-  AUTH_TOKEN: "auth_token",
-  AUTH_SESSION: "auth_session",
-  // Legacy key for migration
-  LEGACY_USER_TYPE: "userType",
-} as const;
+import { apiFetch } from "@/lib/api/client";
+import {
+  clearSession,
+  getAccessToken,
+  getRefreshToken,
+  getStoredProfile,
+  setStoredProfile,
+  setTokens,
+  type StoredAuthProfile,
+} from "@/lib/api/session";
+import { apiErrorFromResponse } from "@/lib/api/types";
+import { authResponseSchema } from "@/lib/schemas/auth";
+import type { SignInCredentials, UserSession, UserType } from "@/lib/types/auth";
+
+function profileToSession(p: StoredAuthProfile): UserSession {
+  return {
+    userId: p.user_id,
+    username: p.username,
+    email: p.email,
+    role: p.role,
+    organizationId: p.organization_id,
+    emailVerified: p.email_verified,
+    phoneVerified: p.phone_verified,
+  };
+}
 
 /**
- * Signs in a user and creates a session
- * 
- * TODO: Replace with API call: POST /api/auth/signin
- * Expected response: { token: string, user: UserSession }
+ * Password login (imperative). Validates response with Zod and persists tokens.
  */
 export async function signIn(
   credentials: SignInCredentials,
-  userType: UserType
-): Promise<AuthToken> {
-  // Simulate API delay
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  const session: UserSession = {
-    userId: generateUserId(),
-    userType,
-    email: credentials.email || credentials.username || undefined,
-    iat: Date.now(),
-  };
-
-  const token = encodeToken(session);
-
-  // Store in localStorage (mimics storing JWT in httpOnly cookie)
-  if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
-    localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(session));
+  _userType?: UserType
+): Promise<{ access_token: string; profile: UserSession }> {
+  const email = credentials.email ?? credentials.username;
+  if (!email || !credentials.password) {
+    throw new Error("Email and password are required");
   }
+
+  const res = await apiFetch("/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password: credentials.password }),
+    skipAuth: true,
+  });
+
+  if (!res.ok) {
+    throw await apiErrorFromResponse(res);
+  }
+
+  const data = authResponseSchema.parse(await res.json());
+  setTokens(data.access_token, data.refresh_token);
+  const stored = {
+    user_id: data.user_id,
+    username: data.username,
+    email: data.email,
+    role: data.role,
+    organization_id: data.organization_id ?? null,
+    email_verified: data.email_verified ?? false,
+    phone_verified: data.phone_verified ?? false,
+  };
+  setStoredProfile(stored);
 
   return {
-    token,
-    payload: session,
+    access_token: data.access_token,
+    profile: profileToSession(stored),
   };
 }
 
-/**
- * Migrates legacy userType from localStorage to new auth system
- * This ensures backward compatibility with existing users
- */
-function migrateLegacyUserType(): UserSession | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const legacyUserType = localStorage.getItem(STORAGE_KEYS.LEGACY_USER_TYPE);
-  if (
-    legacyUserType &&
-    (legacyUserType === "buyer" ||
-      legacyUserType === "supplier" ||
-      legacyUserType === "financial_institution")
-  ) {
-    // Create a session from legacy userType
-    const session: UserSession = {
-      userId: generateUserId(),
-      userType: legacyUserType as UserType,
-      iat: Date.now(),
-    };
-
-    const token = encodeToken(session);
-
-    // Store in new format
-    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
-    localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(session));
-
-    // Remove legacy key
-    localStorage.removeItem(STORAGE_KEYS.LEGACY_USER_TYPE);
-
-    return session;
-  }
-
-  return null;
-}
-
-/**
- * Retrieves the current user session
- * 
- * TODO: Replace with API call: GET /api/auth/session
- * Or decode JWT from httpOnly cookie on server-side
- */
 export function getSession(): UserSession | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
+  const profile = getStoredProfile();
+  if (!profile) return null;
+  return profileToSession(profile);
+}
 
-  // Try to get from stored session first (faster)
-  const storedSession = localStorage.getItem(STORAGE_KEYS.AUTH_SESSION);
-  if (storedSession) {
-    try {
-      const session = JSON.parse(storedSession) as UserSession;
-      // Validate session structure
-      if (session.userId && session.userType && session.iat) {
-        return session;
-      }
-    } catch (error) {
-      // Invalid JSON, fall through to token decoding
-    }
-  }
-
-  // Fallback: decode from token
-  const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
-  if (token) {
-    const decoded = decodeToken(token);
-    if (decoded) {
-      // Update stored session for faster access next time
-      localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(decoded));
-      return decoded;
-    }
-  }
-
-  // Migration: try to migrate from legacy userType
-  const migratedSession = migrateLegacyUserType();
-  if (migratedSession) {
-    return migratedSession;
-  }
-
-  return null;
+export function isAuthenticated(): boolean {
+  return Boolean(getAccessToken());
 }
 
 /**
- * Updates the user type in the current session
- * 
- * TODO: Replace with API call: PATCH /api/auth/user-type
- * Expected request: { userType: UserType }
+ * Revokes refresh token on the server when present, then clears local session.
  */
-export async function updateUserType(
-  newUserType: UserType
-): Promise<void> {
-  // Simulate API delay
-  await new Promise((resolve) => setTimeout(resolve, 50));
+export async function signOut(): Promise<void> {
+  const refresh = getRefreshToken();
+  if (refresh) {
+    try {
+      const res = await apiFetch("/v1/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refresh_token: refresh }),
+        skipAuth: true,
+      });
+      if (!res.ok && res.status !== 401) {
+        await apiErrorFromResponse(res);
+      }
+    } catch {
+      /* still clear locally */
+    }
+  }
+  clearSession();
+}
 
-  const currentSession = getSession();
-  if (!currentSession) {
+/**
+ * @deprecated No backend endpoint — updates local profile only for legacy callers.
+ * TODO: Phase 2 Backend — user preferences / persona endpoint if still needed.
+ */
+export async function updateUserType(_newUserType: UserType): Promise<void> {
+  const current = getStoredProfile();
+  if (!current) {
     throw new Error("No active session found");
   }
-
-  const updatedSession: UserSession = {
-    ...currentSession,
-    userType: newUserType,
-    iat: Date.now(), // Update issued at time
-  };
-
-  const token = encodeToken(updatedSession);
-
-  // Update localStorage
-  if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
-    localStorage.setItem(
-      STORAGE_KEYS.AUTH_SESSION,
-      JSON.stringify(updatedSession)
-    );
-  }
+  setStoredProfile({ ...current });
 }
-
-/**
- * Signs out the current user
- * 
- * TODO: Replace with API call: POST /api/auth/signout
- */
-export function signOut(): void {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-    localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
-  }
-}
-
-/**
- * Checks if a user is currently authenticated
- */
-export function isAuthenticated(): boolean {
-  return getSession() !== null;
-}
-
-/**
- * Generates a mock user ID
- * TODO: Remove when backend provides real user IDs
- */
-function generateUserId(): string {
-  return `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
-
