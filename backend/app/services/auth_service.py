@@ -320,6 +320,29 @@ class AuthService:
     # Token management
     # ------------------------------------------------------------------
 
+    def build_switch_organization_response(self, user: User) -> "SwitchOrganizationResponse":
+        """Mint a new access JWT after ``users.organization_id`` / role were updated."""
+        from app.models.organization import SwitchOrganizationResponse
+
+        access_token, _ = encode_access_token(
+            user.id,
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
+            organization_id=user.organization_id,
+        )
+        expires_at = get_token_expires_at(access_token)
+        return SwitchOrganizationResponse(
+            access_token=access_token,
+            token_type="bearer",
+            expires_at=expires_at,
+            user_id=uuid.UUID(user.id),
+            username=user.username,
+            email=user.email,
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
+            organization_id=uuid.UUID(user.organization_id) if user.organization_id else None,
+            email_verified=user.email_verified,
+            phone_verified=user.phone_verified,
+        )
+
     async def logout(self, refresh_token: str) -> None:
         """Revoke the user's refresh token session."""
         try:

@@ -31,12 +31,14 @@ from app.db.models.identity import UserRole
 from app.db.postgres import get_db_session
 from app.services.auth_service import AuthService
 from app.services.notification_service import NotificationService
+from app.services.membership_service import MembershipService
 from app.services.organization_service import OrganizationService
 from app.services.saltedge_service import SaltEdgeService
 from app.services.dashboard_service import DashboardService
 from app.services.gemi_service import GemiService
 from app.services.mydata_service import MyDataService
 from app.services.file_service import FileService
+from app.controllers.membership_controller import MembershipController
 from app.controllers.organization_controller import OrganizationController
 from app.controllers.saltedge_controller import SaltEdgeController
 from app.controllers.dashboard_controller import DashboardController
@@ -82,6 +84,13 @@ def get_auth_service(
     return AuthService(db, code_pepper=settings.CODE_PEPPER)
 
 
+def get_membership_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MembershipService:
+    """Create a request-scoped ``MembershipService`` (no org filter)."""
+    return MembershipService(db)
+
+
 def get_org_service(
     db: Annotated[AsyncSession, Depends(get_db)],
     org_id: CurrentOrgIdOptional,
@@ -109,6 +118,13 @@ def get_org_controller(
     return OrganizationController(service)
 
 
+def get_membership_controller(
+    membership_service: Annotated[MembershipService, Depends(get_membership_service)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> MembershipController:
+    return MembershipController(membership_service, auth_service)
+
+
 # def get_auth_controller(
 #     service: Annotated[AuthService, Depends(get_auth_service)],
 # ) -> AuthController:
@@ -127,6 +143,7 @@ OrgSvc = Annotated[OrganizationService, Depends(get_org_service)]
 
 # Controllers
 OrgCtrl = Annotated[OrganizationController, Depends(get_org_controller)]
+MembCtrl = Annotated[MembershipController, Depends(get_membership_controller)]
 # AuthCtrl = Annotated[AuthController, Depends(get_auth_controller)]
 
 # ---------------------------------------------------------------------------

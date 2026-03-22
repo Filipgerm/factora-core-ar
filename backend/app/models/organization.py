@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +29,7 @@ class BusinessResponse(BaseModel):
 
     ``saltedge_customer_id`` is the oldest SaltEdge ``customers`` row for this
     tenant (by ``created_at``). When multiple customers exist, the API still
-    returns this single canonical id so dashboards can call P&amp;L endpoints
+    returns this single canonical id so dashboards can call P&L endpoints
     without guessing; use ``GET /v1/saltedge/customers`` when the user must pick another customer.
     """
 
@@ -41,6 +41,34 @@ class BusinessResponse(BaseModel):
     saltedge_customer_id: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class SwitchOrganizationRequest(BaseModel):
+    organization_id: UUID
+
+
+class SwitchOrganizationResponse(BaseModel):
+    """New access JWT after switching active organization (refresh token unchanged)."""
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: datetime
+    user_id: UUID
+    username: str
+    email: EmailStr
+    role: str
+    organization_id: UUID | None = None
+    email_verified: bool = False
+    phone_verified: bool = False
+
+
+class UserOrganizationMembershipItem(BaseModel):
+    organization_id: UUID
+    name: str
+    vat_number: str
+    country: str
+    role: str
+    is_current: bool
 
 
 # ---------------------------------------------------------------------------
