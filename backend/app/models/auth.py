@@ -38,7 +38,13 @@ class UserProfileResponse(BaseModel):
 
 
 class AuthResponse(TokenResponse, UserProfileResponse):
-    """Combined token + profile returned on login or Google OAuth."""
+    """Combined token + profile returned on login, refresh, or Google OAuth.
+
+    ``refresh_token`` is the opaque string for ``POST /v1/auth/refresh`` and logout.
+    The server persists only its SHA-256 hash in ``user_sessions`` — never the raw value.
+    """
+
+    refresh_token: str
 
     model_config = {"from_attributes": True}
 

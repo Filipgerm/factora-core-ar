@@ -82,6 +82,7 @@ def _build_auth_response(user: User, access_token: str, raw_refresh: str) -> Aut
         access_token=access_token,
         token_type="bearer",
         expires_at=expires_at,
+        refresh_token=raw_refresh,
         user_id=uuid.UUID(user.id),
         username=user.username,
         email=user.email,
