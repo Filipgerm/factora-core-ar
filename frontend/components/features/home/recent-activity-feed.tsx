@@ -13,8 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import type { HomeActivityIcon, HomeActivityItem } from "@/lib/mock-data/dashboard-mocks";
-import { mockHomeActivityFeed } from "@/lib/mock-data/dashboard-mocks";
+import type { HomeActivityIcon, HomeActivityItem } from "@/lib/views/home";
 import { cn } from "@/lib/utils";
 
 const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
@@ -38,7 +37,7 @@ interface RecentActivityFeedProps {
 }
 
 export function RecentActivityFeed({
-  items = mockHomeActivityFeed,
+  items = [],
   className,
 }: RecentActivityFeedProps) {
   if (items.length === 0) {

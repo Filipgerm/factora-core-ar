@@ -2,8 +2,7 @@
 
 import { useMemo } from "react";
 
-import type { HomeKpiMetric } from "@/lib/mock-data/dashboard-mocks";
-import { mockHomeKpiMetrics } from "@/lib/mock-data/dashboard-mocks";
+import type { HomeKpiMetric } from "@/lib/views/home";
 
 import { HomeKpiBentoCard } from "./home-kpi-bento-card";
 
@@ -11,10 +10,10 @@ const ARR_METRIC_ID = "kpi-arr";
 const OAR_METRIC_ID = "kpi-oar";
 
 interface HomeKpiBentoProps {
-  metrics?: HomeKpiMetric[];
+  metrics: HomeKpiMetric[];
 }
 
-export function HomeKpiBento({ metrics = mockHomeKpiMetrics }: HomeKpiBentoProps) {
+export function HomeKpiBento({ metrics }: HomeKpiBentoProps) {
   const { arrMetric, oarMetric, compactMetrics } = useMemo(() => {
     const arr = metrics.find((m) => m.id === ARR_METRIC_ID);
     const oar = metrics.find((m) => m.id === OAR_METRIC_ID);

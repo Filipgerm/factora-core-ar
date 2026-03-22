@@ -4,8 +4,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 
-import type { HomeActionItem } from "@/lib/mock-data/dashboard-mocks";
-import { mockHomeActionItems } from "@/lib/mock-data/dashboard-mocks";
+import type { HomeActionItem } from "@/lib/views/home";
 import { cn } from "@/lib/utils";
 
 const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
@@ -45,10 +44,10 @@ function AiGlowShell({ children }: { children: React.ReactNode }) {
 }
 
 interface ActionItemsListProps {
-  items?: HomeActionItem[];
+  items: HomeActionItem[];
 }
 
-export function ActionItemsList({ items = mockHomeActionItems }: ActionItemsListProps) {
+export function ActionItemsList({ items }: ActionItemsListProps) {
   if (items.length === 0) {
     return (
       <motion.div
