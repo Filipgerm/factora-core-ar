@@ -1,5 +1,6 @@
 /**
- * Base URL: NEXT_PUBLIC_API_URL (e.g. http://127.0.0.1:8000). Paths must include /v1/...
+ * API origin: `NEXT_PUBLIC_API_URL` (required at runtime, e.g. http://127.0.0.1:8000).
+ * Paths must include the `/v1/...` prefix.
  */
 
 import { apiErrorFromResponse } from "@/lib/api/error";
@@ -10,24 +11,70 @@ import {
   getRefreshToken,
   setTokens,
 } from "@/lib/api/session";
+import { authResponseSchema } from "@/lib/schemas/auth";
 
-function getApiOrigin(): string {
+export function getApiOrigin(): string {
   const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
-  const base = raw && raw.length > 0 ? raw : "http://127.0.0.1:8000";
-  return base.replace(/\/$/, "");
+  if (!raw) {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL is not set. Define it in your environment (e.g. http://127.0.0.1:8000)."
+    );
+  }
+  return raw.replace(/\/$/, "");
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
+
+function buildRequestHeaders(
+  initHeaders: HeadersInit | undefined,
+  body: BodyInit | null | undefined,
+  accessToken: string | null
+): Headers {
+  const h = new Headers();
+  if (initHeaders) {
+    new Headers(initHeaders).forEach((value, key) => {
+      h.set(key, value);
+    });
+  }
+  if (!h.has("Accept")) {
+    h.set("Accept", "application/json");
+  }
+  if (body && typeof body === "string" && !h.has("Content-Type")) {
+    h.set("Content-Type", "application/json");
+  }
+  if (accessToken) {
+    h.set("Authorization", `Bearer ${accessToken}`);
+  }
+  return h;
+}
+
+/** Headers for 401 retry: fresh Bearer only, no reuse of prior Header instances. */
+function buildRetryHeaders(
+  body: BodyInit | null | undefined,
+  accessToken: string | null
+): Headers {
+  const h = new Headers();
+  h.set("Accept", "application/json");
+  if (body && typeof body === "string") {
+    h.set("Content-Type", "application/json");
+  }
+  if (accessToken) {
+    h.set("Authorization", `Bearer ${accessToken}`);
+  }
+  return h;
+}
 
 async function postRefresh(): Promise<boolean> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
 
-  // TODO: Phase 2 Backend — include refresh_token on AuthResponse (and return it from login/refresh/google).
-  // Until then, silent refresh usually cannot run because login responses omit refresh_token.
   const res = await fetch(`${getApiOrigin()}/v1/auth/refresh`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
     body: JSON.stringify({ refresh_token: refreshToken }),
   });
 
@@ -42,16 +89,13 @@ async function postRefresh(): Promise<boolean> {
     return false;
   }
 
-  const obj = body as Record<string, unknown>;
-  const access = obj.access_token;
-  if (typeof access !== "string") {
+  try {
+    const data = authResponseSchema.parse(body);
+    setTokens(data.access_token, data.refresh_token);
+    return true;
+  } catch {
     return false;
   }
-
-  const nextRefresh =
-    typeof obj.refresh_token === "string" ? obj.refresh_token : refreshToken;
-  setTokens(access, nextRefresh);
-  return true;
 }
 
 async function tryRefreshSession(): Promise<boolean> {
@@ -72,6 +116,8 @@ export type ApiFetchOptions = RequestInit & {
   skipAuth?: boolean;
 };
 
+const defaultCredentials: RequestCredentials = "include";
+
 export async function apiFetch(
   path: string,
   init: ApiFetchOptions = {}
@@ -79,38 +125,30 @@ export async function apiFetch(
   const { skipAuth, headers: initHeaders, ...rest } = init;
   const url = `${getApiOrigin()}${path.startsWith("/") ? path : `/${path}`}`;
 
-  const headers = new Headers(initHeaders);
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
+  const body = rest.body ?? null;
+  const headers = buildRequestHeaders(
+    initHeaders,
+    body,
+    skipAuth ? null : getAccessToken()
+  );
 
-  const body = rest.body;
-  if (body && typeof body === "string" && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
+  const credentials = rest.credentials ?? defaultCredentials;
 
-  if (!skipAuth) {
-    const token = getAccessToken();
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-
-  let res = await fetch(url, { ...rest, headers });
+  let res = await fetch(url, {
+    ...rest,
+    credentials,
+    headers,
+  });
 
   if (res.status === 401 && !skipAuth && getRefreshToken()) {
     const ok = await tryRefreshSession();
     if (ok) {
-      const retryHeaders = new Headers(initHeaders);
-      if (!retryHeaders.has("Accept")) {
-        retryHeaders.set("Accept", "application/json");
-      }
-      if (body && typeof body === "string" && !retryHeaders.has("Content-Type")) {
-        retryHeaders.set("Content-Type", "application/json");
-      }
-      const t = getAccessToken();
-      if (t) retryHeaders.set("Authorization", `Bearer ${t}`);
-      res = await fetch(url, { ...rest, headers: retryHeaders });
+      const retryHeaders = buildRetryHeaders(body, getAccessToken());
+      res = await fetch(url, {
+        ...rest,
+        credentials,
+        headers: retryHeaders,
+      });
     }
   }
 
@@ -139,11 +177,9 @@ export async function apiFetchBlob(
   path: string,
   init: ApiFetchOptions = {}
 ): Promise<Blob> {
-  const res = await apiFetch(path, { ...init, headers: init.headers });
+  const res = await apiFetch(path, init);
   if (!res.ok) {
     throw await parseErrorResponse(res);
   }
   return res.blob();
 }
-
-export { getApiOrigin };
