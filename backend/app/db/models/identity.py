@@ -82,6 +82,11 @@ class Organization(Base):
         back_populates="organization",
         cascade="all, delete-orphan",
     )
+    user_memberships: Mapped[list["UserOrganizationMembership"]] = relationship(
+        "UserOrganizationMembership",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index("ix_organizations_vat_country", "vat_number", "country"),
@@ -150,6 +155,11 @@ class User(Base):
         "Organization",
         back_populates="users",
     )
+    organization_memberships: Mapped[list["UserOrganizationMembership"]] = relationship(
+        "UserOrganizationMembership",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     sessions: Mapped[list[UserSession]] = relationship(
         "UserSession",
         back_populates="user",
@@ -159,6 +169,54 @@ class User(Base):
     __table_args__ = (
         Index("ix_users_email", "email"),
         Index("ix_users_google_id", "google_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# User–organization membership (multi-tenant; active org remains on User)
+# ---------------------------------------------------------------------------
+
+
+class UserOrganizationMembership(Base):
+    """Links a user to an organization with a role (supports multiple orgs per user)."""
+
+    __tablename__ = "user_organization_memberships"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, name="userrole", create_type=False),
+        nullable=False,
+    )
+    created_at: Mapped[str] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="organization_memberships")
+    organization: Mapped[Organization] = relationship(
+        "Organization",
+        back_populates="user_memberships",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "organization_id", name="uq_user_organization_membership"),
     )
 
 

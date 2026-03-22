@@ -24,7 +24,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.db.models.banking import CustomerModel
-from app.db.models.identity import Organization, User
+from app.db.models.identity import Organization, User, UserOrganizationMembership
 from app.db.models.counterparty import Counterparty, CounterpartyType
 from app.models.organization import (
     CounterpartyCreate,
@@ -95,6 +95,14 @@ class OrganizationService:
             self.db.add(new_org)
 
             user.organization_id = org_id
+            self.db.add(
+                UserOrganizationMembership(
+                    id=str(uuid.uuid4()),
+                    user_id=user.id,
+                    organization_id=org_id,
+                    role=user.role,
+                )
+            )
 
             await self.db.commit()
             await self.db.refresh(new_org)
