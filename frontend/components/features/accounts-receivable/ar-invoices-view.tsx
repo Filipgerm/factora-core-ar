@@ -105,9 +105,8 @@ function dueCell(row: ArInvoiceRow) {
       </span>
     );
   }
-  const showOverdue =
-    row.pipeline === "overdue" ||
-    (row.pipeline !== "paid" && daysPast > 0);
+  // Past-due styling for any non-paid row (paid already returned above).
+  const showOverdue = row.pipeline === "overdue" || daysPast > 0;
 
   if (showOverdue && daysPast > 0) {
     return (
