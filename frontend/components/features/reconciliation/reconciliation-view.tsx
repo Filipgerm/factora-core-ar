@@ -22,17 +22,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type {
+  ReconciliationAutoMatchedPair,
   ReconciliationBankId,
   ReconciliationPendingPair,
-} from "@/lib/mock-data/dashboard-mocks";
-import {
-  MOCK_RECON_AUTO_MATCHED_COUNT,
-  mockReconciliationAutoMatchedPairs,
-  mockReconciliationPendingPairs,
-} from "@/lib/mock-data/dashboard-mocks";
+} from "@/lib/views/reconciliation";
 import { cn } from "@/lib/utils";
 
 const HIGH_CONFIDENCE_THRESHOLD = 80;
+
+const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [];
+const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[] = [];
 
 const LEDGER_TH =
   "text-[10px] font-bold uppercase tracking-wider text-muted-foreground";
@@ -267,7 +266,7 @@ export function ReconciliationView() {
               title="Agent-confirmed auto matches (demo aggregate)"
             >
               <span className="text-[11px] font-semibold tabular-nums tracking-tight text-foreground">
-                {MOCK_RECON_AUTO_MATCHED_COUNT} Auto-Matched
+                {mockReconciliationAutoMatchedPairs.length} Auto-Matched
               </span>
               <Bot
                 className="size-4 shrink-0 text-violet-600 dark:text-violet-400"
@@ -439,8 +438,8 @@ export function ReconciliationView() {
       {mainTab === "action" ? (
         pendingFiltered.length === 0 ? (
           <ReconciliationEmptyState
-            title="Nothing in this view"
-            description="Adjust bank account or AI filters, or wait for new suggested matches from the reconciliation agent."
+            title="No suggested matches"
+            description="Bank lines and ledger matches will appear here when the reconciliation service is available. Connect banking under Integrations to sync transactions."
           />
         ) : (
           <ul className="flex min-w-0 flex-col" role="list">
@@ -462,8 +461,8 @@ export function ReconciliationView() {
         )
       ) : matchedFiltered.length === 0 ? (
         <ReconciliationEmptyState
-          title="No rows for this filter"
-          description="Try widening the AI confidence filter or choosing all bank accounts."
+          title="No auto-matched history"
+          description="Confirmed matches will list here when the reconciliation service persists match history."
         />
       ) : (
         <ul className="flex min-w-0 flex-col" role="list">
