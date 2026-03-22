@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 
-import { mockHomeUserFirstName } from "@/lib/mock-data/dashboard-mocks";
 
 const SNAP_SPRING = { type: "spring" as const, stiffness: 520, damping: 40 };
 
@@ -12,7 +11,14 @@ function formatNow(d: Date) {
   return format(d, "MMM d, yyyy, h:mm a");
 }
 
-export function HomeDashboardGreeting() {
+interface HomeDashboardGreetingProps {
+  /** Given name for the headline; falls back to demo label when omitted */
+  firstName?: string;
+}
+
+export function HomeDashboardGreeting({
+  firstName = "Filip",
+}: HomeDashboardGreetingProps) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -28,7 +34,7 @@ export function HomeDashboardGreeting() {
       className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between"
     >
       <h1 className="text-3xl font-bold tracking-tight text-foreground">
-        Hi, {mockHomeUserFirstName}
+        Hi, {firstName}
       </h1>
       <p
         className="font-mono text-base font-medium tabular-nums tracking-tight text-muted-foreground sm:mt-1 sm:text-right sm:text-lg sm:font-normal"
