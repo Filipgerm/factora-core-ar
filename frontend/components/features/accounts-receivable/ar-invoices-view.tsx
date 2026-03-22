@@ -3,17 +3,20 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
-import { Check, Hourglass, Plus } from "lucide-react";
+import { Check, FileText, Hourglass, Plus } from "lucide-react";
 
 import { ArCreateInvoiceSheet } from "@/components/features/accounts-receivable/ar-create-invoice-sheet";
+import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { ArInvoicePipeline, ArInvoiceRow } from "@/lib/mock-data/ar-mocks";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  arInvoicesSummaryKpis,
-  mockArInvoiceRows,
-} from "@/lib/mock-data/ar-mocks";
+  aadeDocumentsToArInvoiceRows,
+  arInvoiceKpisFromRows,
+} from "@/lib/dashboard/map-aade-invoices";
+import { useDashboardAadeDocumentsQuery } from "@/lib/hooks/api/use-dashboard";
+import type { ArInvoicePipeline, ArInvoiceRow } from "@/lib/views/ar";
 import { cn } from "@/lib/utils";
 
 function fmtEUR(n: number) {
@@ -93,10 +96,11 @@ function statusCell(pipeline: ArInvoicePipeline) {
 }
 
 function dueCell(row: ArInvoiceRow) {
-  if (!row.dueDate) {
+  const dateStr = row.dueDate ?? row.issueDate ?? null;
+  if (!dateStr) {
     return <span className="text-muted-foreground">—</span>;
   }
-  const d = parseISO(row.dueDate);
+  const d = parseISO(dateStr);
   const daysPast = differenceInCalendarDays(new Date(), d);
   if (row.pipeline === "paid") {
     return (
@@ -146,8 +150,13 @@ function mydataCell(row: ArInvoiceRow) {
 
 export function ArInvoicesView() {
   const [createOpen, setCreateOpen] = useState(false);
+  const aade = useDashboardAadeDocumentsQuery({ limit: 200, offset: 0 });
 
-  const kpis = arInvoicesSummaryKpis;
+  const rows = useMemo(
+    () => (aade.data ? aadeDocumentsToArInvoiceRows(aade.data) : []),
+    [aade.data]
+  );
+  const kpis = useMemo(() => arInvoiceKpisFromRows(rows), [rows]);
 
   const columns: ColumnDef<ArInvoiceRow>[] = useMemo(
     () => [
@@ -226,8 +235,30 @@ export function ArInvoicesView() {
     []
   );
 
+  if (aade.isLoading) {
+    return (
+      <div className="space-y-6 pb-24">
+        <div className="flex justify-end">
+          <Skeleton className="h-11 w-44 rounded-xl" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-[420px] w-full rounded-xl" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-24">
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        List source:{" "}
+        <span className="font-medium text-foreground">AADE myDATA documents</span>{" "}
+        from your organization. Native AR invoices will replace this view when the
+        invoice API ships.
+      </p>
       <div className="flex justify-end">
         <Button
           type="button"
@@ -281,7 +312,7 @@ export function ArInvoicesView() {
               {fmtEUR(kpis.paidThisMonth.amount)}
             </p>
             <p className="mt-1 text-xs font-medium text-emerald-900/90 dark:text-emerald-200/90">
-              Paid this month
+              Transmitted (this month)
             </p>
             <p className="mt-0.5 text-[11px] text-emerald-800/70 dark:text-emerald-200/60">
               {kpis.paidThisMonth.count} invoices
@@ -289,11 +320,17 @@ export function ArInvoicesView() {
           </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={mockArInvoiceRows}
-        getRowId={(r) => r.id}
-      />
+      {rows.length === 0 ? (
+        <FeatureEmptyState
+          icon={FileText}
+          title="No AADE documents yet"
+          description="When myDATA invoices are synced for your organization, they will appear here. Use Create invoice for manual issuance when that flow is connected."
+          ctaHref="/integrations"
+          ctaLabel="Check integrations"
+        />
+      ) : (
+        <DataTable columns={columns} data={rows} getRowId={(r) => r.id} />
+      )}
     </div>
   );
 }

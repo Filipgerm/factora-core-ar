@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { format, parseISO } from "date-fns";
+import { Users } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -28,8 +29,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { ArCountry, ArCustomer } from "@/lib/mock-data/ar-mocks";
-import { mockArCustomers } from "@/lib/mock-data/ar-mocks";
+import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useCounterpartiesQuery } from "@/lib/hooks/api/use-organization";
+import {
+  counterpartyToArCustomer,
+  isCustomerType,
+} from "@/lib/organization/counterparty-mappers";
+import type { ArCountry, ArCustomer } from "@/lib/views/ar";
 import { cn } from "@/lib/utils";
 
 function fmtEUR(n: number) {
@@ -43,20 +50,29 @@ function fmtEUR(n: number) {
 const PAYMENT_TERMS = ["all", "Net 14", "Net 30", "Net 45"] as const;
 
 export function ArCustomersView() {
+  const { data: counterparties, isLoading } = useCounterpartiesQuery();
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [country, setCountry] = useState<ArCountry | "all">("all");
   const [terms, setTerms] = useState<(typeof PAYMENT_TERMS)[number]>("all");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [active, setActive] = useState<ArCustomer | null>(null);
 
+  const customers = useMemo(
+    () =>
+      (counterparties ?? [])
+        .filter((c) => isCustomerType(c.type))
+        .map(counterpartyToArCustomer),
+    [counterparties]
+  );
+
   const filtered = useMemo(() => {
-    return mockArCustomers.filter((c) => {
+    return customers.filter((c) => {
       if (overdueOnly && c.overdueAmount <= 0) return false;
       if (country !== "all" && c.country !== country) return false;
       if (terms !== "all" && c.paymentTerms !== terms) return false;
       return true;
     });
-  }, [overdueOnly, country, terms]);
+  }, [customers, overdueOnly, country, terms]);
 
   const columns: ColumnDef<ArCustomer>[] = useMemo(
     () => [
@@ -141,8 +157,34 @@ export function ArCustomersView() {
       ]
     : [];
 
+  if (isLoading) {
+    return (
+      <div className="space-y-5">
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-[400px] w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  if (customers.length === 0) {
+    return (
+      <FeatureEmptyState
+        icon={Users}
+        title="No customers yet"
+        description="Create counterparties with type Customer (or Both) under your organization to see them in AR."
+        ctaHref="/integrations"
+        ctaLabel="Integrations"
+      />
+    );
+  }
+
   return (
     <div className="space-y-5">
+      <p className="text-xs text-muted-foreground">
+        Data from{" "}
+        <span className="font-medium text-foreground">counterparties</span> (customer
+        / both). Balances and aging are placeholders until the AR API ships.
+      </p>
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/90 bg-white p-4 dark:border-slate-800 dark:bg-background">
         <div className="flex items-center gap-2">
           <input
