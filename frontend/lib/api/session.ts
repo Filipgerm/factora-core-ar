@@ -1,6 +1,6 @@
 /**
  * Token + profile persistence for SPA auth. Access token is sent as Bearer;
- * refresh token is stored only if the API returns it (see Phase 2 backend note in apiFetch).
+ * refresh token is persisted when returned from login / refresh / Google auth.
  */
 
 const ACCESS = "factora_access_token";

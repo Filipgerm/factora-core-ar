@@ -65,8 +65,7 @@ export const authResponseSchema = userProfileResponseSchema.extend({
   access_token: z.string(),
   token_type: z.string().default("bearer"),
   expires_at: z.coerce.date(),
-  /** Present only after backend Phase 2 fix; optional for forward compatibility */
-  refresh_token: z.string().optional(),
+  refresh_token: z.string().min(1),
 });
 
 export const messageResponseSchema = z.object({
