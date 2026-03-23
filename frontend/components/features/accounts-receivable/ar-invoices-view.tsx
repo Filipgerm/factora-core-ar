@@ -14,8 +14,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   aadeDocumentsToArInvoiceRows,
   arInvoiceKpisFromRows,
+  manualInvoicesToArInvoiceRows,
 } from "@/lib/dashboard/map-aade-invoices";
 import { useDashboardAadeDocumentsQuery } from "@/lib/hooks/api/use-dashboard";
+import { useManualInvoicesQuery } from "@/lib/hooks/api/use-invoices";
 import type { ArInvoicePipeline, ArInvoiceRow } from "@/lib/views/ar";
 import { cn } from "@/lib/utils";
 
@@ -151,11 +153,17 @@ function mydataCell(row: ArInvoiceRow) {
 export function ArInvoicesView() {
   const [createOpen, setCreateOpen] = useState(false);
   const aade = useDashboardAadeDocumentsQuery({ limit: 200, offset: 0 });
+  const manual = useManualInvoicesQuery();
 
-  const rows = useMemo(
-    () => (aade.data ? aadeDocumentsToArInvoiceRows(aade.data) : []),
-    [aade.data]
-  );
+  const rows = useMemo(() => {
+    const manualRows = manualInvoicesToArInvoiceRows(manual.data ?? []);
+    const aadeRows = aade.data ? aadeDocumentsToArInvoiceRows(aade.data) : [];
+    return [...manualRows, ...aadeRows].sort((x, y) => {
+      const dx = x.issueDate ? parseISO(x.issueDate).getTime() : 0;
+      const dy = y.issueDate ? parseISO(y.issueDate).getTime() : 0;
+      return dy - dx;
+    });
+  }, [aade.data, manual.data]);
   const kpis = useMemo(() => arInvoiceKpisFromRows(rows), [rows]);
 
   const columns: ColumnDef<ArInvoiceRow>[] = useMemo(
@@ -235,7 +243,7 @@ export function ArInvoicesView() {
     []
   );
 
-  if (aade.isLoading) {
+  if (aade.isLoading || manual.isLoading) {
     return (
       <div className="space-y-6 pb-24">
         <div className="flex justify-end">
@@ -323,8 +331,12 @@ export function ArInvoicesView() {
       {rows.length === 0 ? (
         <FeatureEmptyState
           icon={FileText}
-          title="No AADE documents yet"
-          description="When myDATA invoices are synced for your organization, they will appear here. Use Create invoice for manual issuance when that flow is connected."
+          title="No invoices yet"
+          description="Sync myDATA to pull AADE documents, or create a manual invoice to record revenue before native issuance ships."
+          action={{
+            label: "Create invoice",
+            onClick: () => setCreateOpen(true),
+          }}
           ctaHref="/integrations"
           ctaLabel="Check integrations"
         />

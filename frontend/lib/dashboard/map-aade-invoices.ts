@@ -2,6 +2,7 @@ import { differenceInCalendarDays, parseISO } from "date-fns";
 
 import type { ArInvoicePipeline, ArInvoiceRow } from "@/lib/views/ar";
 import type { AadeDocumentsResponse } from "@/lib/schemas/dashboard";
+import type { ManualInvoiceResponse } from "@/lib/schemas/invoices";
 
 function num(
   v: number | string | null | undefined
@@ -55,9 +56,31 @@ export function aadeDocumentsToArInvoiceRows(
   });
 }
 
+/** Map persisted manual invoices to AR table rows (not AADE). */
+export function manualInvoicesToArInvoiceRows(
+  items: ManualInvoiceResponse[]
+): ArInvoiceRow[] {
+  return items.map((inv) => ({
+    id: `manual-${inv.id}`,
+    invoiceNumber: "Manual",
+    customerName: inv.customer_name,
+    customerTaxLabel: "Manual entry · not synced to myDATA",
+    amount: Number(inv.amount),
+    dueDate: null,
+    issueDate: inv.issue_date,
+    pipeline: "draft",
+    mydataStatus: "pending",
+    mydataMark: null,
+    paidAt: null,
+  }));
+}
+
 export function arInvoiceKpisFromRows(rows: ArInvoiceRow[]) {
   const open = rows.filter(
-    (r) => r.pipeline === "sent" || r.pipeline === "overdue"
+    (r) =>
+      r.pipeline === "sent" ||
+      r.pipeline === "overdue" ||
+      r.pipeline === "draft"
   );
   const overdue = rows.filter((r) => r.pipeline === "overdue");
   const sum = (xs: ArInvoiceRow[]) =>
