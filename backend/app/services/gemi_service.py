@@ -10,7 +10,7 @@ from app.config import settings
 from app.core.demo import demo_fixture
 from app.core.exceptions import GemiError, NotFoundError, ValidationError
 from app.core.filename_content_disposition import extract_filename
-from app.services.storage.storage import upload_file_to_storage
+from app.services.storage_upload_service import upload_file_to_storage
 
 DEFAULT_DOWNLOAD_CONCURRENCY = 5
 
