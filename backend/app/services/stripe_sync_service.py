@@ -25,7 +25,6 @@ import stripe
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.stripe_client import stripe_object_to_dict
 from app.config import Settings, settings
 from app.core.exceptions import StripeError, ValidationError
 from app.db.models._utils import utcnow
@@ -45,7 +44,8 @@ from app.db.models.stripe_billing import (
     StripeSubscription,
     StripeTaxRate,
 )
-from app.models.stripe_billing import (
+from packages.stripe.api.serialize import stripe_object_to_dict
+from packages.stripe.models import (
     StripeBalanceSnapshotResponse,
     StripeBalanceTransactionResponse,
     StripeCustomerResponse,

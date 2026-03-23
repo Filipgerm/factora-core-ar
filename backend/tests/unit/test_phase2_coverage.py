@@ -216,20 +216,20 @@ async def test_llm_openai_stream_mocked() -> None:
 
 @pytest.mark.asyncio
 async def test_stripe_with_key_uses_sdk_mock() -> None:
-    from app.clients.stripe_client import StripeClient
+    from packages.stripe.api.client import StripeClient
 
-    with patch("app.clients.stripe_client.settings") as s:
-        s.STRIPE_SECRET_KEY = "sk_test_x"
-        with patch("app.clients.stripe_client.stripe.Customer.create") as cc:
-            cc.return_value = MagicMock(id="cus_real", email="a@b.com")
-            c = StripeClient()
-            out = c.create_customer(email="a@b.com", name="A")
-            assert out["id"] == "cus_real"
-        with patch("app.clients.stripe_client.stripe.PaymentIntent.create") as pc:
-            pc.return_value = MagicMock(id="pi_real", client_secret="sec")
-            c2 = StripeClient()
-            pi = c2.create_payment_intent_stub(amount_cents=50, currency="eur", customer_id="cus_real")
-            assert pi["id"] == "pi_real"
+    with patch("packages.stripe.api.client.stripe.Customer.create") as cc:
+        cc.return_value = MagicMock(id="cus_real", email="a@b.com")
+        c = StripeClient(secret_key="sk_test_x")
+        out = c.create_customer(email="a@b.com", name="A")
+        assert out["id"] == "cus_real"
+    with patch("packages.stripe.api.client.stripe.PaymentIntent.create") as pc:
+        pc.return_value = MagicMock(id="pi_real", client_secret="sec")
+        c2 = StripeClient(secret_key="sk_test_x")
+        pi = c2.create_payment_intent_stub(
+            amount_cents=50, currency="eur", customer_id="cus_real"
+        )
+        assert pi["id"] == "pi_real"
 
 
 @pytest.mark.asyncio
@@ -562,8 +562,8 @@ async def test_ingestion_agent_demo_full_path() -> None:
 
 @pytest.mark.asyncio
 async def test_stripe_payment_intent_stub() -> None:
-    from app.clients.stripe_client import StripeClient
+    from packages.stripe.api.client import StripeClient
 
-    c = StripeClient()
+    c = StripeClient(secret_key="")
     pi = c.create_payment_intent_stub(amount_cents=500, currency="eur")
     assert pi["id"].startswith("stub_")

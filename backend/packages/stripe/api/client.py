@@ -1,78 +1,56 @@
-"""StripeClient — singleton SDK configuration and webhook signature verification.
+"""Stripe SDK wrapper — API key configuration, customers, payment intents, webhooks.
 
-**Scope:** Apply API version and secret key from ``settings``; verify webhook payloads.
-
-**Contract:** No business logic or database access. Callers use ``get_stripe_client()``
-for a process-wide configured client. Webhook verification returns a plain ``dict`` event.
-
-**Architectural notes:** Stripe's Python SDK mutates module-level ``stripe.api_key`` and
-``stripe.api_version``; the singleton avoids conflicting reconfiguration per request.
+No application imports; callers supply keys and secrets explicitly.
 """
 from __future__ import annotations
 
 from typing import Any
 
 import stripe
-from stripe import Webhook
 
-from app.config import settings
-
-_client_singleton: StripeClient | None = None
-
-
-def get_stripe_client() -> StripeClient:
-    """Return the process-wide Stripe client (lazy-initialized)."""
-    global _client_singleton
-    if _client_singleton is None:
-        _client_singleton = StripeClient()
-    return _client_singleton
-
-
-def stripe_object_to_dict(obj: Any) -> dict[str, Any]:
-    """Normalize a StripeObject (or dict) to a plain dict."""
-    if obj is None:
-        return {}
-    if isinstance(obj, dict):
-        return obj
-    if hasattr(obj, "to_dict_recursive"):
-        return obj.to_dict_recursive()
-    if hasattr(obj, "to_dict"):
-        return obj.to_dict()
-    return dict(obj)
+from packages.stripe.api.serialize import stripe_object_to_dict
+from packages.stripe.api.webhooks import construct_verified_event
 
 
 class StripeClient:
-    """Thin Stripe SDK wrapper: configuration + webhook construct_event."""
+    """Thin Stripe SDK wrapper: module-level config + webhook verification."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        secret_key: str = "",
+        api_version: str = "",
+        webhook_secret: str = "",
+    ) -> None:
+        self._secret_key = secret_key
+        self._api_version = api_version
+        self._webhook_secret = webhook_secret
         self._apply_settings()
 
     def _apply_settings(self) -> None:
-        if settings.STRIPE_SECRET_KEY:
-            stripe.api_key = settings.STRIPE_SECRET_KEY
-        if settings.STRIPE_API_VERSION:
-            stripe.api_version = settings.STRIPE_API_VERSION
+        if self._secret_key:
+            stripe.api_key = self._secret_key
+        if self._api_version:
+            stripe.api_version = self._api_version
 
     def is_configured(self) -> bool:
-        return bool(settings.STRIPE_SECRET_KEY)
+        return bool(self._secret_key)
 
     def is_webhook_configured(self) -> bool:
-        return bool(settings.STRIPE_WEBHOOK_SECRET)
+        return bool(self._webhook_secret)
 
     def verify_webhook_event(self, payload: bytes, stripe_signature: str) -> dict[str, Any]:
         """Verify ``Stripe-Signature`` and return the event as a dict.
 
         Raises:
             stripe.error.SignatureVerificationError: Invalid signature or payload.
+            ValueError: Webhook secret not configured.
         """
         if not self.is_webhook_configured():
             raise ValueError("STRIPE_WEBHOOK_SECRET is not configured")
-        event = Webhook.construct_event(
-            payload,
-            stripe_signature,
-            settings.STRIPE_WEBHOOK_SECRET,
+        return construct_verified_event(
+            payload, stripe_signature, self._webhook_secret
         )
-        return stripe_object_to_dict(event)
 
     def create_customer(self, *, email: str, name: str | None = None) -> dict[str, Any]:
         """Create a Stripe customer; returns a dict with at least ``id``."""

@@ -11,15 +11,13 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from stripe import SignatureVerificationError
 
-from app.clients.stripe_client import (
-    StripeClient,
-    get_stripe_client,
-    stripe_object_to_dict,
-)
 from app.controllers.stripe_controller import StripeController
+from app.dependencies import get_stripe_client
 from app.main import app
 from app.core.exceptions import StripeError
-from app.models.stripe_billing import (
+from packages.stripe.api.client import StripeClient
+from packages.stripe.api.serialize import stripe_object_to_dict
+from packages.stripe.models import (
     StripeBalanceSnapshotResponse,
     StripeBalanceTransactionResponse,
     StripeCustomerResponse,
@@ -214,20 +212,18 @@ async def test_webhook_dispatch_unknown_event() -> None:
 async def test_controller_webhook_invalid_signature() -> None:
     sync = MagicMock()
     wh = MagicMock()
-    ctrl = StripeController(sync, wh)
-    with patch("app.controllers.stripe_controller.get_stripe_client") as g:
-        g.return_value.is_webhook_configured.return_value = True
-        g.return_value.verify_webhook_event.side_effect = SignatureVerificationError(
-            "bad", "hdr"
-        )
-        with pytest.raises(HTTPException) as ei:
-            await ctrl.ingest_webhook(b"{}", "v1 sig")
-        assert ei.value.status_code == 400
+    sc = MagicMock()
+    sc.is_webhook_configured.return_value = True
+    sc.verify_webhook_event.side_effect = SignatureVerificationError("bad", "hdr")
+    ctrl = StripeController(sync, wh, sc)
+    with pytest.raises(HTTPException) as ei:
+        await ctrl.ingest_webhook(b"{}", "v1 sig")
+    assert ei.value.status_code == 400
 
 
 @pytest.mark.asyncio
 async def test_controller_webhook_missing_sig() -> None:
-    ctrl = StripeController(MagicMock(), MagicMock())
+    ctrl = StripeController(MagicMock(), MagicMock(), MagicMock())
     with pytest.raises(HTTPException) as ei:
         await ctrl.ingest_webhook(b"{}", None)
     assert ei.value.status_code == 400
@@ -241,11 +237,11 @@ async def test_controller_webhook_ok() -> None:
             handled=True, event_type="customer.updated"
         )
     )
-    ctrl = StripeController(MagicMock(), wh)
-    with patch("app.controllers.stripe_controller.get_stripe_client") as g:
-        g.return_value.is_webhook_configured.return_value = True
-        g.return_value.verify_webhook_event.return_value = {"type": "x", "data": {}}
-        out = await ctrl.ingest_webhook(b"{}", "v1 abc")
+    sc = MagicMock()
+    sc.is_webhook_configured.return_value = True
+    sc.verify_webhook_event.return_value = {"type": "x", "data": {}}
+    ctrl = StripeController(MagicMock(), wh, sc)
+    out = await ctrl.ingest_webhook(b"{}", "v1 abc")
     assert out.handled is True
     wh.dispatch.assert_awaited_once()
 
@@ -337,48 +333,51 @@ def test_get_stripe_client_singleton() -> None:
 
 @pytest.mark.asyncio
 async def test_stripe_webhook_route_bad_signature() -> None:
+    mock_client = MagicMock()
+    mock_client.is_webhook_configured.return_value = True
+    mock_client.verify_webhook_event.side_effect = SignatureVerificationError("x", "sig")
+    app.dependency_overrides[get_stripe_client] = lambda: mock_client
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://localhost") as client:
-        with patch("app.controllers.stripe_controller.get_stripe_client") as g:
-            g.return_value.is_webhook_configured.return_value = True
-            g.return_value.verify_webhook_event.side_effect = SignatureVerificationError(
-                "x", "sig"
-            )
+    try:
+        async with AsyncClient(transport=transport, base_url="http://localhost") as client:
             r = await client.post(
                 "/v1/stripe/webhook",
                 content=b'{"x":1}',
                 headers={"stripe-signature": "t=1,v1=abc"},
             )
             assert r.status_code == 400
+    finally:
+        app.dependency_overrides.pop(get_stripe_client, None)
 
 
 @pytest.mark.asyncio
 async def test_stripe_webhook_route_success() -> None:
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://localhost") as client:
-        mock_client = MagicMock()
-        mock_client.is_webhook_configured.return_value = True
-        mock_client.verify_webhook_event.return_value = {
-            "type": "customer.created",
-            "data": {"object": {"id": "cus_a", "metadata": {}}},
-        }
-        async_dispatch = AsyncMock(
-            return_value=StripeWebhookAckResponse(
-                received=True, event_type="customer.created", handled=False
-            )
+    mock_client = MagicMock()
+    mock_client.is_webhook_configured.return_value = True
+    mock_client.verify_webhook_event.return_value = {
+        "type": "customer.created",
+        "data": {"object": {"id": "cus_a", "metadata": {}}},
+    }
+    async_dispatch = AsyncMock(
+        return_value=StripeWebhookAckResponse(
+            received=True, event_type="customer.created", handled=False
         )
-        with (
-            patch("app.controllers.stripe_controller.get_stripe_client", return_value=mock_client),
-            patch.object(StripeWebhookService, "dispatch", async_dispatch),
-        ):
-            r = await client.post(
-                "/v1/stripe/webhook",
-                content=b"{}",
-                headers={"stripe-signature": "v1 x"},
-            )
-            assert r.status_code == 200, r.text
-            body = r.json()
-            assert body.get("received") is True
+    )
+    app.dependency_overrides[get_stripe_client] = lambda: mock_client
+    transport = ASGITransport(app=app)
+    try:
+        with patch.object(StripeWebhookService, "dispatch", async_dispatch):
+            async with AsyncClient(transport=transport, base_url="http://localhost") as client:
+                r = await client.post(
+                    "/v1/stripe/webhook",
+                    content=b"{}",
+                    headers={"stripe-signature": "v1 x"},
+                )
+                assert r.status_code == 200, r.text
+                body = r.json()
+                assert body.get("received") is True
+    finally:
+        app.dependency_overrides.pop(get_stripe_client, None)
 
 
 @pytest.mark.asyncio
@@ -811,7 +810,7 @@ async def test_stripe_controller_delegates_to_sync() -> None:
     sync.list_balance_transactions_mirror = AsyncMock(return_value=[])
     sync.list_invoices_mirror = AsyncMock(return_value=[])
     sync.list_customers_mirror = AsyncMock(return_value=[])
-    ctrl = StripeController(sync, MagicMock())
+    ctrl = StripeController(sync, MagicMock(), MagicMock())
     assert await ctrl.sync_balance_transactions() is stats
     assert await ctrl.sync_payouts() is stats
     assert await ctrl.sync_customers() is stats
@@ -834,7 +833,7 @@ async def test_stripe_controller_delegates_to_sync() -> None:
 async def test_stripe_controller_wraps_generic_exception() -> None:
     sync = MagicMock()
     sync.sync_customers = AsyncMock(side_effect=RuntimeError("boom"))
-    ctrl = StripeController(sync, MagicMock())
+    ctrl = StripeController(sync, MagicMock(), MagicMock())
     with pytest.raises(StripeError):
         await ctrl.sync_customers()
 
@@ -843,7 +842,7 @@ async def test_stripe_controller_wraps_generic_exception() -> None:
 async def test_stripe_controller_snapshot_wraps_exception() -> None:
     sync = MagicMock()
     sync.snapshot_balance = AsyncMock(side_effect=RuntimeError("snap fail"))
-    ctrl = StripeController(sync, MagicMock())
+    ctrl = StripeController(sync, MagicMock(), MagicMock())
     with pytest.raises(StripeError, match="balance snapshot"):
         await ctrl.snapshot_balance()
 
@@ -852,22 +851,21 @@ async def test_stripe_controller_snapshot_wraps_exception() -> None:
 async def test_stripe_controller_reraises_stripe_error() -> None:
     sync = MagicMock()
     sync.sync_customers = AsyncMock(side_effect=StripeError("stripe down"))
-    ctrl = StripeController(sync, MagicMock())
+    ctrl = StripeController(sync, MagicMock(), MagicMock())
     with pytest.raises(StripeError, match="stripe down"):
         await ctrl.sync_customers()
 
 
 @pytest.mark.asyncio
 async def test_stripe_controller_webhook_value_error() -> None:
-    ctrl = StripeController(MagicMock(), MagicMock())
     mock_client = MagicMock()
     mock_client.is_webhook_configured.return_value = True
     mock_client.verify_webhook_event.side_effect = ValueError("misconfigured")
-    with patch("app.controllers.stripe_controller.get_stripe_client", return_value=mock_client):
-        from app.core.exceptions import ValidationError
+    ctrl = StripeController(MagicMock(), MagicMock(), mock_client)
+    from app.core.exceptions import ValidationError
 
-        with pytest.raises(ValidationError, match="misconfigured"):
-            await ctrl.ingest_webhook(b"{}", "sig")
+    with pytest.raises(ValidationError, match="misconfigured"):
+        await ctrl.ingest_webhook(b"{}", "sig")
 
 
 @pytest.mark.asyncio
@@ -921,23 +919,19 @@ async def test_stripe_route_functions_delegate() -> None:
 
 
 def test_stripe_client_verify_webhook_success() -> None:
-    with patch("app.clients.stripe_client.settings") as s:
-        s.STRIPE_WEBHOOK_SECRET = "whsec_test"
-        with patch(
-            "app.clients.stripe_client.Webhook.construct_event",
-            return_value={"id": "evt_1", "type": "ping"},
-        ):
-            c = StripeClient()
-            out = c.verify_webhook_event(b"{}", "sig_header")
+    with patch(
+        "stripe.Webhook.construct_event",
+        return_value={"id": "evt_1", "type": "ping"},
+    ):
+        c = StripeClient(webhook_secret="whsec_test")
+        out = c.verify_webhook_event(b"{}", "sig_header")
     assert out["id"] == "evt_1"
 
 
 def test_stripe_client_verify_webhook_missing_secret() -> None:
-    with patch("app.clients.stripe_client.settings") as s:
-        s.STRIPE_WEBHOOK_SECRET = ""
-        c = StripeClient()
-        with pytest.raises(ValueError, match="STRIPE_WEBHOOK_SECRET"):
-            c.verify_webhook_event(b"{}", "sig")
+    c = StripeClient(webhook_secret="")
+    with pytest.raises(ValueError, match="STRIPE_WEBHOOK_SECRET"):
+        c.verify_webhook_event(b"{}", "sig")
 
 
 def test_stripe_object_to_dict_to_dict_method() -> None:
@@ -949,36 +943,30 @@ def test_stripe_object_to_dict_to_dict_method() -> None:
 
 
 def test_stripe_create_customer_when_not_configured() -> None:
-    with patch("app.clients.stripe_client.settings") as s:
-        s.STRIPE_SECRET_KEY = ""
-        c = StripeClient()
-        out = c.create_customer(email="z@z.com", name="Z")
+    c = StripeClient(secret_key="")
+    out = c.create_customer(email="z@z.com", name="Z")
     assert out["id"] == "stub_cus"
 
 
 def test_stripe_payment_intent_stub_skips_stub_customer_id() -> None:
-    with patch("app.clients.stripe_client.settings") as s:
-        s.STRIPE_SECRET_KEY = "sk_x"
-        with patch("app.clients.stripe_client.stripe.PaymentIntent.create") as pc:
-            pc.return_value = SimpleNamespace(id="pi_s", client_secret="cs_s")
-            c = StripeClient()
-            c.create_payment_intent_stub(
-                amount_cents=10, currency="eur", customer_id="stub_cus"
-            )
+    with patch("packages.stripe.api.client.stripe.PaymentIntent.create") as pc:
+        pc.return_value = SimpleNamespace(id="pi_s", client_secret="cs_s")
+        c = StripeClient(secret_key="sk_x")
+        c.create_payment_intent_stub(
+            amount_cents=10, currency="eur", customer_id="stub_cus"
+        )
     pc.assert_called_once()
     kw = pc.call_args.kwargs
     assert "customer" not in kw
 
 
 def test_stripe_payment_intent_stub_live_path() -> None:
-    with patch("app.clients.stripe_client.settings") as s:
-        s.STRIPE_SECRET_KEY = "sk_live_test"
-        with patch("app.clients.stripe_client.stripe.PaymentIntent.create") as pc:
-            pc.return_value = SimpleNamespace(id="pi_9", client_secret="sec_9")
-            c = StripeClient()
-            out = c.create_payment_intent_stub(
-                amount_cents=99, currency="eur", customer_id="cus_9"
-            )
+    with patch("packages.stripe.api.client.stripe.PaymentIntent.create") as pc:
+        pc.return_value = SimpleNamespace(id="pi_9", client_secret="sec_9")
+        c = StripeClient(secret_key="sk_live_test")
+        out = c.create_payment_intent_stub(
+            amount_cents=99, currency="eur", customer_id="cus_9"
+        )
     assert out["id"] == "pi_9"
     assert out["client_secret"] == "sec_9"
 

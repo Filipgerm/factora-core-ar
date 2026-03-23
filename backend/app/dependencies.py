@@ -24,6 +24,8 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from packages.stripe.api.client import StripeClient
+
 from app.config import settings
 from app.core.exceptions import AuthError, ForbiddenError
 from app.core.security.jwt import decode_access_token
@@ -371,6 +373,20 @@ AICtrl = Annotated[AIController, Depends(get_ai_controller)]
 # Stripe mirror + webhook
 # ---------------------------------------------------------------------------
 
+_stripe_client_singleton: StripeClient | None = None
+
+
+def get_stripe_client() -> StripeClient:
+    """Process-wide Stripe SDK wrapper (keys from ``settings``)."""
+    global _stripe_client_singleton
+    if _stripe_client_singleton is None:
+        _stripe_client_singleton = StripeClient(
+            secret_key=settings.STRIPE_SECRET_KEY or "",
+            api_version=settings.STRIPE_API_VERSION or "",
+            webhook_secret=settings.STRIPE_WEBHOOK_SECRET or "",
+        )
+    return _stripe_client_singleton
+
 
 def get_stripe_webhook_service(db: DB) -> StripeWebhookService:
     return StripeWebhookService(db)
@@ -387,15 +403,21 @@ def get_stripe_controller(
     db: DB,
     org_id: CurrentOrgId,
     webhook_service: Annotated[StripeWebhookService, Depends(get_stripe_webhook_service)],
+    stripe_client: Annotated[StripeClient, Depends(get_stripe_client)],
 ) -> StripeController:
-    return StripeController(StripeSyncService(db, org_id), webhook_service)
+    return StripeController(
+        StripeSyncService(db, org_id), webhook_service, stripe_client
+    )
 
 
 def get_stripe_controller_for_webhook(
     db: DB,
     webhook_service: Annotated[StripeWebhookService, Depends(get_stripe_webhook_service)],
+    stripe_client: Annotated[StripeClient, Depends(get_stripe_client)],
 ) -> StripeController:
-    return StripeController(StripeSyncService(db, organization_id=None), webhook_service)
+    return StripeController(
+        StripeSyncService(db, organization_id=None), webhook_service, stripe_client
+    )
 
 
 StripeCtrl = Annotated[StripeController, Depends(get_stripe_controller)]

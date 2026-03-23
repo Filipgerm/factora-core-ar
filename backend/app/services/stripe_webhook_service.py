@@ -14,9 +14,9 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.stripe_client import stripe_object_to_dict
+from packages.stripe.api.serialize import stripe_object_to_dict
 from app.config import Settings, settings
-from app.models.stripe_billing import StripeWebhookAckResponse
+from packages.stripe.models import StripeWebhookAckResponse
 from app.services.stripe_sync_service import StripeSyncService
 
 

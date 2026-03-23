@@ -7,9 +7,8 @@ from typing import Any
 import stripe
 from fastapi import HTTPException
 
-from app.clients.stripe_client import get_stripe_client
-from app.core.exceptions import StripeError, ValidationError
-from app.models.stripe_billing import (
+from packages.stripe.api.client import StripeClient
+from packages.stripe.models import (
     StripeBalanceSnapshotResponse,
     StripeBalanceTransactionResponse,
     StripeCustomerResponse,
@@ -17,6 +16,8 @@ from app.models.stripe_billing import (
     StripeSyncStatsResponse,
     StripeWebhookAckResponse,
 )
+
+from app.core.exceptions import StripeError, ValidationError
 from app.services.stripe_sync_service import StripeSyncService
 from app.services.stripe_webhook_service import StripeWebhookService
 
@@ -26,9 +27,11 @@ class StripeController:
         self,
         sync_service: StripeSyncService,
         webhook_service: StripeWebhookService,
+        stripe_client: StripeClient,
     ) -> None:
         self._sync = sync_service
         self._webhook = webhook_service
+        self._stripe = stripe_client
 
     async def _wrap_sync(self, coro: Any, *, err_detail: str) -> Any:
         try:
@@ -41,14 +44,13 @@ class StripeController:
     async def ingest_webhook(self, payload: bytes, stripe_signature: str | None) -> StripeWebhookAckResponse:
         if not stripe_signature:
             raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
-        client = get_stripe_client()
-        if not client.is_webhook_configured():
+        if not self._stripe.is_webhook_configured():
             raise ValidationError(
                 "Stripe webhook secret is not configured",
                 code="stripe.webhook_unconfigured",
             )
         try:
-            event = client.verify_webhook_event(payload, stripe_signature)
+            event = self._stripe.verify_webhook_event(payload, stripe_signature)
         except stripe.SignatureVerificationError:
             raise HTTPException(status_code=400, detail="Invalid Stripe webhook signature")
         except ValueError as exc:

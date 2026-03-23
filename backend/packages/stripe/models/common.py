@@ -751,7 +751,7 @@ class StripeTaxRateResponse(_StripeMirrorCore, _StripeMirrorTimestamps):
 
 
 # ---------------------------------------------------------------------------
-# Sync / webhook envelopes (API responses)
+# Sync stats (API responses)
 # ---------------------------------------------------------------------------
 
 
@@ -762,8 +762,3 @@ class StripeSyncStatsResponse(BaseModel):
     upserted: int = 0
     skipped_no_org_metadata: int = 0
 
-
-class StripeWebhookAckResponse(BaseModel):
-    received: bool = True
-    event_type: str | None = None
-    handled: bool = False

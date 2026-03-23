@@ -109,8 +109,8 @@ async def test_vector_store_requires_openai_key() -> None:
 
 @pytest.mark.asyncio
 async def test_stripe_client_stub_without_key() -> None:
-    from app.clients.stripe_client import StripeClient
+    from packages.stripe.api.client import StripeClient
 
-    c = StripeClient()
+    c = StripeClient(secret_key="")
     cust = c.create_customer(email="a@b.com", name="A")
     assert cust["id"].startswith("stub_")
