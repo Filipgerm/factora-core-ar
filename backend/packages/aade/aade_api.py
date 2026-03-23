@@ -1,12 +1,12 @@
 from __future__ import annotations
 from typing import Dict, Any
 from .http import AadeClient
-from packages.aade.endpoints.docs import DocsAPI, DocsXMLSerializer
-from packages.aade.endpoints.income_expenses import (
+from packages.aade.api.docs import DocsAPI, DocsXMLSerializer
+from packages.aade.api.income_expenses import (
     IncomeExpensesAPI,
     BookInfoXMLSerializer,
 )
-from packages.aade.endpoints.vat_e3 import VatE3API, VatE3XMLSerializer
+from packages.aade.api.vat_e3 import VatE3API, VatE3XMLSerializer
 from packages.aade.xml.serializer import (
     parse_requested_docs,
     parse_book_info,

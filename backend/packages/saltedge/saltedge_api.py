@@ -1,13 +1,13 @@
 from __future__ import annotations
 from .http import SaltEdgeClient
-from packages.saltedge.endpoints.connections import ConnectionsAPI
-from packages.saltedge.endpoints.accounts import AccountsAPI
-from packages.saltedge.endpoints.consents import ConsentsAPI
-from packages.saltedge.endpoints.rates import RatesAPI
-from packages.saltedge.endpoints.customers import CustomersAPI
-from packages.saltedge.endpoints.transactions import TransactionsAPI
-from packages.saltedge.endpoints.providers import ProvidersAPI
-from packages.saltedge.endpoints.payments import PaymentsAPI
+from packages.saltedge.api.connections import ConnectionsAPI
+from packages.saltedge.api.accounts import AccountsAPI
+from packages.saltedge.api.consents import ConsentsAPI
+from packages.saltedge.api.rates import RatesAPI
+from packages.saltedge.api.customers import CustomersAPI
+from packages.saltedge.api.transactions import TransactionsAPI
+from packages.saltedge.api.providers import ProvidersAPI
+from packages.saltedge.api.payments import PaymentsAPI
 
 
 class API:
