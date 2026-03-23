@@ -1,3 +1,5 @@
-from app.agents.reconciliation.graph import ReconciliationAgent
+"""Reconciliation agent — public surface is the compiled graph only."""
 
-__all__ = ["ReconciliationAgent"]
+from app.agents.reconciliation.graph import reconciliation_graph
+
+__all__ = ["reconciliation_graph"]

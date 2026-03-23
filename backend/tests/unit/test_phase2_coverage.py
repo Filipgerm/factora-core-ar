@@ -404,9 +404,8 @@ async def test_vector_store_search_db_error() -> None:
 
 @pytest.mark.asyncio
 async def test_reconciliation_exact_match() -> None:
-    from app.agents.reconciliation import ReconciliationAgent
+    from app.agents.reconciliation import reconciliation_graph
 
-    agent = ReconciliationAgent()
     tx = MagicMock()
     tx.id = "t1"
     tx.amount = Decimal("10.00")
@@ -422,15 +421,16 @@ async def test_reconciliation_exact_match() -> None:
         "app.agents.reconciliation.nodes.stub_open_invoices",
         return_value=[{"id": "inv1", "amount": "10.00", "counterparty": "X"}],
     ):
-        out = await agent.run(db, str(uuid.uuid4()))
+        out = await reconciliation_graph.ainvoke(
+            {"organization_id": str(uuid.uuid4()), "db": db},
+        )
     assert len(out["matches"]) == 1
 
 
 @pytest.mark.asyncio
 async def test_reconciliation_ambiguous_amount() -> None:
-    from app.agents.reconciliation import ReconciliationAgent
+    from app.agents.reconciliation import reconciliation_graph
 
-    agent = ReconciliationAgent()
     tx = MagicMock()
     tx.id = "t1"
     tx.amount = Decimal("10.00")
@@ -447,16 +447,17 @@ async def test_reconciliation_ambiguous_amount() -> None:
             {"id": "b", "amount": "10.00"},
         ],
     ):
-        out = await agent.run(db, str(uuid.uuid4()))
+        out = await reconciliation_graph.ainvoke(
+            {"organization_id": str(uuid.uuid4()), "db": db},
+        )
     assert not out["matches"]
     assert out["review_queue"]
 
 
 @pytest.mark.asyncio
 async def test_reconciliation_invalid_amount_line() -> None:
-    from app.agents.reconciliation import ReconciliationAgent
+    from app.agents.reconciliation import reconciliation_graph
 
-    agent = ReconciliationAgent()
     tx = MagicMock()
     tx.id = "t1"
     tx.amount = "not-a-decimal"
@@ -467,14 +468,16 @@ async def test_reconciliation_invalid_amount_line() -> None:
     db = AsyncMock()
     db.execute = AsyncMock(return_value=result)
     with patch("app.agents.reconciliation.nodes.stub_open_invoices", return_value=[]):
-        out = await agent.run(db, str(uuid.uuid4()))
+        out = await reconciliation_graph.ainvoke(
+            {"organization_id": str(uuid.uuid4()), "db": db},
+        )
     assert any(r.get("reason") == "invalid_amount" for r in out["review_queue"])
 
 
 @pytest.mark.asyncio
 async def test_ar_collections_with_alerts_demo_draft_send() -> None:
     from app.db.models.alerts import Alert, AlertSeverity
-    from app.agents.collections import ARCollectionsAgent
+    from app.agents.collections import collections_graph
 
     alert = Alert(
         id="al1",
@@ -492,70 +495,80 @@ async def test_ar_collections_with_alerts_demo_draft_send() -> None:
 
     with patch("app.agents.collections.nodes.settings") as s:
         s.demo_mode = True
-        agent = ARCollectionsAgent()
-        out = await agent.run(db, alert.organization_id)
+        out = await collections_graph.ainvoke(
+            {"organization_id": alert.organization_id, "db": db},
+        )
     assert len(out["drafts"]) == 1
     assert out["sent"]
 
 
 @pytest.mark.asyncio
 async def test_ingestion_non_demo_mock_llm() -> None:
-    from app.agents.ingestion import IngestionAgent
+    from app.agents.ingestion import ingestion_graph
 
     mock_vs = MagicMock()
     mock_vs.similarity_search = AsyncMock(return_value=[])
 
+    mock_llm = MagicMock()
+    mock_llm.chat_completion_json = AsyncMock(
+        return_value={
+            "vendor": "V",
+            "total": "1",
+            "vat_rate": "0",
+            "currency": "EUR",
+        }
+    )
+
     with patch("app.agents.ingestion.nodes.settings") as s:
         s.demo_mode = False
         s.OPENAI_API_KEY = "sk"
-        agent = IngestionAgent(
-            vector_store_factory=lambda _db, _oid: mock_vs,
-        )
-    with patch.object(
-        agent._llm,
-        "chat_completion_json",
-        AsyncMock(
-            return_value={
-                "vendor": "V",
-                "total": "1",
-                "vat_rate": "0",
-                "currency": "EUR",
-            }
-        ),
-    ):
         db = AsyncMock()
-        out = await agent.run(db, str(uuid.uuid4()), "invoice body")
-    assert out["extracted"]["vendor"] == "V"
+        out = await ingestion_graph.ainvoke(
+            {
+                "organization_id": str(uuid.uuid4()),
+                "raw_text": "invoice body",
+                "db": db,
+                "vector_store_factory": lambda _db, _oid: mock_vs,
+                "llm": mock_llm,
+            },
+        )
+    assert out["result"]["extracted"]["vendor"] == "V"
 
 
 @pytest.mark.asyncio
 async def test_ar_collections_agent_demo_empty_alerts() -> None:
-    from app.agents.collections import ARCollectionsAgent
+    from app.agents.collections import collections_graph
 
     with patch("app.agents.collections.nodes.settings") as s:
         s.demo_mode = True
-        agent = ARCollectionsAgent()
         db = AsyncMock()
         db.execute = AsyncMock(
             return_value=MagicMock(
                 scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
             )
         )
-        out = await agent.run(db, str(uuid.uuid4()))
+        out = await collections_graph.ainvoke(
+            {"organization_id": str(uuid.uuid4()), "db": db},
+        )
     assert out["alerts"] == []
     assert out["drafts"] == []
 
 
 @pytest.mark.asyncio
 async def test_ingestion_agent_demo_full_path() -> None:
-    from app.agents.ingestion import IngestionAgent
+    from app.agents.ingestion import ingestion_graph
 
     with patch("app.agents.ingestion.nodes.settings") as s:
         s.demo_mode = True
-        agent = IngestionAgent()
         db = AsyncMock()
-        out = await agent.run(db, str(uuid.uuid4()), "Supplier invoice total 200 EUR")
-    assert out["extracted"].get("vendor")
+        out = await ingestion_graph.ainvoke(
+            {
+                "organization_id": str(uuid.uuid4()),
+                "raw_text": "Supplier invoice total 200 EUR",
+                "db": db,
+            },
+        )
+    assert out["result"]["extracted"].get("vendor")
 
 
 @pytest.mark.asyncio

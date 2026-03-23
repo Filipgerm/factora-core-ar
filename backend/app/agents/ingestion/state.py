@@ -21,6 +21,9 @@ class IngestionState(TypedDict, total=False):
     organization_id: str
     raw_text: str
     db: NotRequired[Any]
+    # Runtime injection (optional). Not constants — see ``constants.py`` for limits.
+    vector_store_factory: NotRequired[VectorStoreFactory]
+    llm: NotRequired[Any]
     extracted: dict[str, Any]
     neighbors: list[dict[str, Any]]
     result: dict[str, Any]

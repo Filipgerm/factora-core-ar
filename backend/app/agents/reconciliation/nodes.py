@@ -16,23 +16,25 @@ from app.db.models.banking import (
     Transaction,
 )
 
+from app.agents.reconciliation.constants import (
+    BANK_TRANSACTION_FETCH_LIMIT,
+    DEMO_OPEN_INVOICES,
+)
 from app.agents.reconciliation.state import ReconciliationState
 
 
 def stub_open_invoices() -> list[dict[str, Any]]:
     if settings.demo_mode:
-        return [
-            {"id": "inv_demo_1", "amount": "1200.00", "counterparty": "Acme Ltd"},
-            {"id": "inv_demo_2", "amount": "118.40", "counterparty": "Cloud Co"},
-        ]
+        return [dict(row) for row in DEMO_OPEN_INVOICES]
     return []
 
 
 async def fetch_transactions(
     db: AsyncSession,
     organization_id: str,
-    limit: int = 80,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
+    cap = limit if limit is not None else BANK_TRANSACTION_FETCH_LIMIT
     stmt = (
         select(Transaction)
         .join(BankAccountModel, BankAccountModel.id == Transaction.account_id)
@@ -40,7 +42,7 @@ async def fetch_transactions(
         .join(CustomerModel, CustomerModel.id == ConnectionModel.customer_id)
         .where(CustomerModel.organization_id == organization_id)
         .order_by(Transaction.made_on.desc())
-        .limit(limit)
+        .limit(cap)
     )
     result = await db.execute(stmt)
     txs = result.scalars().all()

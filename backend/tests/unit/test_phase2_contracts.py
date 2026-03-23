@@ -14,8 +14,8 @@ from app.db.models.identity import UserRole
 from app.main import app_error_handler
 from app.models.auth import AuthResponse
 from app.models.gemi import GemiDocumentsFetchResponse, GemiSearchResponse
-from app.agents.ingestion import IngestionAgent
-from app.agents.reconciliation import ReconciliationAgent
+from app.agents.ingestion import ingestion_graph
+from app.agents.reconciliation import reconciliation_graph
 from app.services.auth_service import _build_auth_response
 from app.services.embeddings.vector_store import _vector_literal
 from app.core.security.jwt import encode_access_token
@@ -77,25 +77,27 @@ def test_vector_literal_format() -> None:
 
 @pytest.mark.asyncio
 async def test_ingestion_agent_demo_mode_short_circuit() -> None:
-    agent = IngestionAgent()
     db = AsyncMock()
-    out = await agent.run(db, str(uuid.uuid4()), "  ")
-    assert out.get("error") == "empty_text"
+    out = await ingestion_graph.ainvoke(
+        {"organization_id": str(uuid.uuid4()), "raw_text": "  ", "db": db}
+    )
+    assert out.get("result", {}).get("error") == "empty_text"
 
 
 @pytest.mark.asyncio
 async def test_reconciliation_agent_run_empty_ledger() -> None:
-    agent = ReconciliationAgent()
     db = AsyncMock()
     db.execute = AsyncMock(
         return_value=MagicMock(
             scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
         )
     )
-    out = await agent.run(db, str(uuid.uuid4()))
+    out = await reconciliation_graph.ainvoke(
+        {"organization_id": str(uuid.uuid4()), "db": db},
+    )
     assert out["matches"] == []
     assert out["review_queue"] == []
-    assert out["bank_lines_loaded"] == 0
+    assert len(out.get("bank_lines", [])) == 0
 
 
 @pytest.mark.asyncio

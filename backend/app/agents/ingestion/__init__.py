@@ -1,3 +1,5 @@
-from app.agents.ingestion.graph import IngestionAgent
+"""Ingestion agent — public surface is the compiled graph only."""
 
-__all__ = ["IngestionAgent"]
+from app.agents.ingestion.graph import ingestion_graph
+
+__all__ = ["ingestion_graph"]

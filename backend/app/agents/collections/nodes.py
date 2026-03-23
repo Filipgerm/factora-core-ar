@@ -13,6 +13,10 @@ from app.clients.llm_client import LLMClient
 from app.config import settings
 from app.db.models.alerts import Alert
 
+from app.agents.collections.constants import (
+    PLACEHOLDER_COLLECTIONS_EMAIL,
+    UNRESOLVED_ALERTS_FETCH_LIMIT,
+)
 from app.agents.collections.prompts import DRAFT_SYSTEM_MESSAGE, draft_user_message
 from app.agents.collections.state import CollectionsState
 
@@ -28,7 +32,7 @@ class CollectionsNodes:
         self,
         db: AsyncSession,
         organization_id: str,
-        limit: int = 20,
+        limit: int = UNRESOLVED_ALERTS_FETCH_LIMIT,
     ) -> list[dict[str, Any]]:
         stmt = (
             select(Alert)
@@ -80,7 +84,7 @@ class CollectionsNodes:
                     "alert_id": a["id"],
                     "subject": f"Re: {a['name']}",
                     "body": body,
-                    "to_email": "collections@example.com",
+                    "to_email": PLACEHOLDER_COLLECTIONS_EMAIL,
                 }
             )
         return {**state, "drafts": drafts}

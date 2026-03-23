@@ -1,3 +1,5 @@
-from app.agents.collections.graph import ARCollectionsAgent
+"""AR collections agent — public surface is the compiled graph only."""
 
-__all__ = ["ARCollectionsAgent"]
+from app.agents.collections.graph import collections_graph
+
+__all__ = ["collections_graph"]
