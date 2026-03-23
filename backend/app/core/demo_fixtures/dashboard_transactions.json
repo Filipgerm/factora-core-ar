@@ -1,0 +1,89 @@
+{
+  "_comment": "Bank transaction rows for dashboard — matches TransactionsResponse list",
+  "transactions": [
+    {
+      "id": "demo-tx-001",
+      "account_id": "demo-account-001",
+      "status": "posted",
+      "made_on": "2025-02-14",
+      "posted_date": "2025-02-15",
+      "amount": -2840.5,
+      "currency_code": "EUR",
+      "category": "Software & SaaS",
+      "merchant_id": "merch_atlassian",
+      "mcc": "5734",
+      "description": "ATLASSIAN PTY LTD — Jira Cloud annual seat renewal",
+      "iban": null
+    },
+    {
+      "id": "demo-tx-002",
+      "account_id": "demo-account-001",
+      "status": "posted",
+      "made_on": "2025-02-12",
+      "posted_date": "2025-02-13",
+      "amount": 12500.0,
+      "currency_code": "EUR",
+      "category": "Incoming transfer",
+      "merchant_id": null,
+      "mcc": null,
+      "description": "SEPA Credit — ACME Logistics S.A. — INV-2025-0142",
+      "iban": "GR1601101250000000012345678"
+    },
+    {
+      "id": "demo-tx-003",
+      "account_id": "demo-account-001",
+      "status": "posted",
+      "made_on": "2025-02-10",
+      "posted_date": "2025-02-11",
+      "amount": -156.2,
+      "currency_code": "EUR",
+      "category": "Travel",
+      "merchant_id": "merch_aegean",
+      "mcc": "4511",
+      "description": "AEGEAN AIRLINES — ATH-MUC business fare",
+      "iban": null
+    },
+    {
+      "id": "demo-tx-004",
+      "account_id": "demo-account-002",
+      "status": "posted",
+      "made_on": "2025-02-08",
+      "posted_date": "2025-02-09",
+      "amount": -4200.0,
+      "currency_code": "EUR",
+      "category": "Payroll",
+      "merchant_id": null,
+      "mcc": null,
+      "description": "Salary transfer — Engineering batch Feb 2025",
+      "iban": null
+    },
+    {
+      "id": "demo-tx-005",
+      "account_id": "demo-account-001",
+      "status": "posted",
+      "made_on": "2025-02-05",
+      "posted_date": "2025-02-06",
+      "amount": -892.45,
+      "currency_code": "EUR",
+      "category": "Utilities",
+      "merchant_id": null,
+      "mcc": "4900",
+      "description": "DEI — Electricity Athens HQ Feb 2025",
+      "iban": null
+    },
+    {
+      "id": "demo-tx-006",
+      "account_id": "demo-account-001",
+      "status": "pending",
+      "made_on": "2025-02-16",
+      "posted_date": null,
+      "amount": -199.0,
+      "currency_code": "EUR",
+      "category": "Software & SaaS",
+      "merchant_id": "merch_openai",
+      "mcc": "5817",
+      "description": "OPENAI *CHATGPT SUBSCR — API usage top-up",
+      "iban": null
+    }
+  ]
+}

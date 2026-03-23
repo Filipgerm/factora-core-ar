@@ -1,0 +1,31 @@
+{
+  "_comment": "Dashboard P&L metrics for ENVIRONMENT=demo — matches DashboardMetricsResponse",
+  "net_cash_flow": 42850.75,
+  "total_revenue": 312400.5,
+  "total_expenses": 198220.3,
+  "net_income": 114180.2,
+  "average_margin": 36.5,
+  "balance": 182340.9,
+  "currency": "EUR",
+  "period_days": 30,
+  "monthly_revenue": [
+    {"month": "2024-10", "amount": 98500.0, "label": "Oct 2024"},
+    {"month": "2024-11", "amount": 102300.5, "label": "Nov 2024"},
+    {"month": "2024-12", "amount": 111600.0, "label": "Dec 2024"}
+  ],
+  "monthly_expenses": [
+    {"month": "2024-10", "amount": 62300.0, "label": "Oct 2024"},
+    {"month": "2024-11", "amount": 65800.25, "label": "Nov 2024"},
+    {"month": "2024-12", "amount": 70120.05, "label": "Dec 2024"}
+  ],
+  "monthly_net_income": [
+    {"month": "2024-10", "amount": 36200.0},
+    {"month": "2024-11", "amount": 36500.25},
+    {"month": "2024-12", "amount": 41479.95}
+  ],
+  "monthly_margin": [
+    {"month": "2024-10", "pct": 36.75},
+    {"month": "2024-11", "pct": 35.68},
+    {"month": "2024-12", "pct": 37.2}
+  ]
+}

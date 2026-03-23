@@ -1,0 +1,40 @@
+{
+  "_comment": "Aggregated AADE stats for dashboard — matches AadeSummaryResponse",
+  "total_net_value_sum": "57970.50",
+  "total_vat_amount_sum": "9712.92",
+  "total_gross_value_sum": "68083.42",
+  "supplier_count": 1,
+  "customer_count": 3,
+  "customer_breakdown": [
+    {
+      "vat": "801234567",
+      "invoice_count": 2,
+      "total_net_value_sum": "28520.00",
+      "total_vat_amount_sum": "6844.80",
+      "total_gross_value_sum": "35364.80"
+    },
+    {
+      "vat": "EL094012345",
+      "invoice_count": 1,
+      "total_net_value_sum": "8750.50",
+      "total_vat_amount_sum": "2100.12",
+      "total_gross_value_sum": "10850.62"
+    },
+    {
+      "vat": "DE123456789",
+      "invoice_count": 1,
+      "total_net_value_sum": "18500.00",
+      "total_vat_amount_sum": "0.00",
+      "total_gross_value_sum": "18500.00"
+    }
+  ],
+  "supplier_breakdown": [
+    {
+      "vat": "EL087654321",
+      "invoice_count": 1,
+      "total_net_value_sum": "3200.00",
+      "total_vat_amount_sum": "768.00",
+      "total_gross_value_sum": "3968.00"
+    }
+  ]
+}
