@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { Building2 } from "lucide-react";
 
 import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
+import { CounterpartyVatDialog } from "@/components/features/organization/counterparty-vat-dialog";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,6 +37,7 @@ export function ApVendorsView() {
   const { data: counterparties, isLoading } = useCounterpartiesQuery();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<ApVendor | null>(null);
+  const [newVendorOpen, setNewVendorOpen] = useState(false);
 
   const vendors = useMemo(
     () =>
@@ -127,13 +129,25 @@ export function ApVendorsView() {
 
   if (vendors.length === 0) {
     return (
-      <FeatureEmptyState
-        icon={Building2}
-        title="No vendors yet"
-        description="Add counterparties with type Vendor (or Both) to manage payables. Balances stay at zero until AP posting is live."
-        ctaHref="/integrations"
-        ctaLabel="Integrations"
-      />
+      <>
+        <FeatureEmptyState
+          icon={Building2}
+          title="No vendors yet"
+          description="Add a vendor with VAT lookup from GEMI, or use integrations for bulk setup. Balances stay at zero until AP posting is live."
+          action={{
+            label: "New vendor",
+            onClick: () => setNewVendorOpen(true),
+          }}
+          ctaHref="/integrations"
+          ctaLabel="Integrations"
+        />
+        <CounterpartyVatDialog
+          open={newVendorOpen}
+          onOpenChange={setNewVendorOpen}
+          counterpartyType="vendor"
+          title="New vendor"
+        />
+      </>
     );
   }
 

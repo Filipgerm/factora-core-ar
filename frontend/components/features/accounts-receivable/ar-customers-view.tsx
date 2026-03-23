@@ -30,6 +30,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
+import { CounterpartyVatDialog } from "@/components/features/organization/counterparty-vat-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCounterpartiesQuery } from "@/lib/hooks/api/use-organization";
 import {
@@ -56,6 +57,7 @@ export function ArCustomersView() {
   const [terms, setTerms] = useState<(typeof PAYMENT_TERMS)[number]>("all");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [active, setActive] = useState<ArCustomer | null>(null);
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false);
 
   const customers = useMemo(
     () =>
@@ -168,13 +170,25 @@ export function ArCustomersView() {
 
   if (customers.length === 0) {
     return (
-      <FeatureEmptyState
-        icon={Users}
-        title="No customers yet"
-        description="Create counterparties with type Customer (or Both) under your organization to see them in AR."
-        ctaHref="/integrations"
-        ctaLabel="Integrations"
-      />
+      <>
+        <FeatureEmptyState
+          icon={Users}
+          title="No customers yet"
+          description="Add a customer with VAT lookup from GEMI, or manage counterparties from integrations later."
+          action={{
+            label: "New customer",
+            onClick: () => setNewCustomerOpen(true),
+          }}
+          ctaHref="/integrations"
+          ctaLabel="Integrations"
+        />
+        <CounterpartyVatDialog
+          open={newCustomerOpen}
+          onOpenChange={setNewCustomerOpen}
+          counterpartyType="customer"
+          title="New customer"
+        />
+      </>
     );
   }
 
