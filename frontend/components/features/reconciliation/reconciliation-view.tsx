@@ -27,6 +27,13 @@ import type {
   ReconciliationPendingPair,
 } from "@/lib/views/reconciliation";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { isApiError } from "@/lib/api/types";
+import { useDashboardTransactionsQuery } from "@/lib/hooks/api/use-dashboard";
+import {
+  useResolvedSaltEdgeCustomerId,
+  useSaltEdgeConnectMutation,
+} from "@/lib/hooks/api/use-saltedge";
 
 const HIGH_CONFIDENCE_THRESHOLD = 80;
 
@@ -70,6 +77,13 @@ function matchesAccount<T extends { transaction: { bankId: ReconciliationBankId 
 }
 
 export function ReconciliationView() {
+  const { toast } = useToast();
+  const { customerId, isLoading: customerIdLoading } = useResolvedSaltEdgeCustomerId();
+  const txQuery = useDashboardTransactionsQuery(
+    customerId ? { customerId, limit: 100 } : null
+  );
+  const connectMut = useSaltEdgeConnectMutation();
+
   const searchParams = useSearchParams();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -95,6 +109,10 @@ export function ReconciliationView() {
       mockReconciliationPendingPairs.filter((p) => !dismissedIds.has(p.id)),
     [dismissedIds]
   );
+
+  const bankFeedReady = !customerIdLoading && !txQuery.isLoading;
+  const noBankTransactions =
+    Boolean(customerId) && bankFeedReady && (txQuery.data?.length ?? 0) === 0;
 
   const pendingFiltered = useMemo(
     () =>
@@ -439,7 +457,70 @@ export function ReconciliationView() {
         pendingFiltered.length === 0 ? (
           <ReconciliationEmptyState
             title="No suggested matches"
-            description="Bank lines and ledger matches will appear here when the reconciliation service is available. Connect banking under Integrations to sync transactions."
+            description={
+              customerId
+                ? noBankTransactions
+                  ? "No bank transactions are synced yet. Connect an account to pull your feed, then matches will appear here as the reconciliation service rolls out."
+                  : "Bank lines and ledger matches will appear here when the reconciliation service is available."
+                : "Configure a SaltEdge customer for your organization (see Integrations), then connect a bank account to sync transactions."
+            }
+            showConnectBank={noBankTransactions || !customerId}
+            connectBankLoading={connectMut.isPending}
+            onConnectBank={() => {
+              if (!customerId) {
+                toast({
+                  title: "SaltEdge customer missing",
+                  description:
+                    "Complete banking setup under Integrations or set NEXT_PUBLIC_SALTEDGE_CUSTOMER_ID.",
+                });
+                return;
+              }
+              const returnTo =
+                typeof window !== "undefined"
+                  ? `${window.location.origin}/reconciliation`
+                  : "";
+              connectMut.mutate(
+                {
+                  data: {
+                    customer_id: customerId,
+                    consent: { scopes: ["accounts", "transactions"] },
+                    attempt: {
+                      return_to: returnTo,
+                      fetch_scopes: ["accounts", "balances", "transactions"],
+                    },
+                  },
+                },
+                {
+                  onSuccess: (res) => {
+                    const url = res.data.connect_url;
+                    if (url) {
+                      window.open(url, "_blank", "noopener,noreferrer");
+                    }
+                    toast({
+                      title: "Continue in Salt Edge",
+                      description:
+                        "Finish linking your bank in the new tab, then return here.",
+                    });
+                  },
+                  onError: (e) => {
+                    if (isApiError(e) && e.status === 403) {
+                      toast({
+                        variant: "destructive",
+                        title: "Owner role required",
+                        description:
+                          "Only an organization owner can initiate bank connections.",
+                      });
+                      return;
+                    }
+                    toast({
+                      variant: "destructive",
+                      title: "Could not start bank link",
+                      description: isApiError(e) ? e.message : "Unexpected error",
+                    });
+                  },
+                }
+              );
+            }}
           />
         ) : (
           <ul className="flex min-w-0 flex-col" role="list">

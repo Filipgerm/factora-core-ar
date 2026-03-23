@@ -1,3 +1,5 @@
+"use client";
+
 import { GitMerge } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -7,12 +9,19 @@ interface ReconciliationEmptyStateProps {
   title: string;
   description: string;
   className?: string;
+  /** When true, show primary CTA to start SaltEdge bank linking. */
+  showConnectBank?: boolean;
+  onConnectBank?: () => void;
+  connectBankLoading?: boolean;
 }
 
 export function ReconciliationEmptyState({
   title,
   description,
   className,
+  showConnectBank = false,
+  onConnectBank,
+  connectBankLoading = false,
 }: ReconciliationEmptyStateProps) {
   return (
     <div
@@ -33,13 +42,24 @@ export function ReconciliationEmptyState({
       <p className="mt-1 max-w-md text-sm tracking-tight text-muted-foreground">
         {description}
       </p>
-      <Button
-        type="button"
-        variant="outline"
-        className="mt-6 rounded-xl border-border/40 transition-all duration-300 ease-out hover:bg-muted/50"
-      >
-        Sync bank feed
-      </Button>
+      {showConnectBank && onConnectBank ? (
+        <Button
+          type="button"
+          className="mt-6 rounded-xl border-border/40 bg-[var(--brand-primary)] text-white transition-all duration-300 ease-out hover:bg-[var(--brand-primary)]/90"
+          disabled={connectBankLoading}
+          onClick={onConnectBank}
+        >
+          {connectBankLoading ? "Connecting…" : "Connect bank account"}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-6 rounded-xl border-border/40 transition-all duration-300 ease-out hover:bg-muted/50"
+        >
+          Sync bank feed
+        </Button>
+      )}
     </div>
   );
 }
