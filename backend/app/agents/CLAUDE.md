@@ -15,16 +15,17 @@ Agents are organized in two tiers based on complexity.
 ### Tier 1 — Flat (simple, single-phase agents)
 
 Use when the agent has ≤ 5 nodes, ≤ 150 lines in nodes.py, and a single
-logical phase. Categorization is permanently Tier 1.
+logical phase. **Ingestion** is Tier 1 today. A future **categorization** agent
+(transaction → COA) should use the same Tier-1 layout.
 
-    agents/categorization/
-      __init__.py      ← Exports only: the compiled graph
-      graph.py         ← StateGraph wiring only. No logic.
+    agents/ingestion/   ← Phase 2 (current)
+      __init__.py      ← Exports only: ``ingestion_graph``
+      graph.py         ← StateGraph compile; exports module-level compiled graph
       state.py         ← TypedDict state definition
       nodes.py         ← All node functions
-      tools.py         ← All tools
+      tools.py         ← Reserved / tools when wired
       prompts.py       ← All prompt templates
-      constants.py     ← Agent-specific constants (distinct from base.py)
+      constants.py     ← Agent-specific limits (token/window sizes, kNN k, etc.)
 
 ### Tier 2 — Phase-split (multi-phase agents)
 
@@ -33,7 +34,7 @@ distinct phases with different concerns. Reconciliation and Collections
 are built as Tier 2 from the start.
 
     agents/reconciliation/
-      __init__.py      ← Exports only: the compiled graph
+      __init__.py      ← Exports only: ``reconciliation_graph``
       graph.py         ← StateGraph wiring only. Imports from nodes/.
       state.py         ← TypedDict state definition
       constants.py     ← Agent-specific constants
@@ -50,7 +51,7 @@ are built as Tier 2 from the start.
         decision.py    ← Route to auto-reconcile or PENDING_REVIEW + Alert
 
     agents/collections/
-      __init__.py
+      __init__.py      ← Exports only: ``collections_graph``
       graph.py
       state.py
       constants.py
@@ -68,28 +69,39 @@ are built as Tier 2 from the start.
 ### The shared foundation
 
     agents/
-      base.py          ← LLM factory, pgvector retriever, shared
-                         CONFIDENCE_THRESHOLD constants used across agents
+      base.py          ← Shared **confidence-score** thresholds (auto-apply vs
+                         human review) used when multiple agents agree on the
+                         same scoring contract. LLM factory / shared retriever:
+                         planned. Do **not** put agent-specific limits here.
 
 ### Public API rule
 
-Every agent **init**.py exports exactly one thing: the compiled graph.
-Nothing inside the agent subdirectory should be imported directly by
-services/ or any other layer.
+Every agent package ``__init__.py`` exports **exactly one** symbol: the compiled
+graph (``ingestion_graph``, ``reconciliation_graph``, or ``collections_graph``).
+Nothing else inside the agent package should be imported by ``services/`` or
+routes.
 
     # ✅ CORRECT
+    from app.agents.ingestion import ingestion_graph
     from app.agents.reconciliation import reconciliation_graph
+    from app.agents.collections import collections_graph
 
     # ❌ WRONG — exposes internals, breaks encapsulation
-    from app.agents.reconciliation.nodes.matching import find_exact_match
+    from app.agents.reconciliation.nodes import ReconciliationNodes
+
+**Ingestion runtime hooks (not constants):** optional ``vector_store_factory`` and
+(test-only) ``llm`` may be set on the **initial** ``ainvoke`` state dict — they are
+runtime dependencies, not ``constants.py`` values. Production services pass
+``vector_store_factory`` when RAG context is required; omit both for text-only
+extraction.
 
 ## Implemented agents (Phase 2)
 
-- **IngestionAgent** (`ingestion/`) — document text → structured invoice hints plus
-  optional pgvector similarity context. This is **ingestion / extraction**, not
-  ledger **transaction categorization**.
-- **ReconciliationAgent** — bank lines vs stub invoices; exact-amount heuristic.
-- **ARCollectionsAgent** — alerts → LLM-drafted emails → SMTP (demo-safe).
+- **`ingestion_graph`** — document text → structured invoice hints plus optional
+  pgvector similarity context. **Ingestion / extraction**, not ledger **transaction
+  categorization**.
+- **`reconciliation_graph`** — bank lines vs stub invoices; exact-amount heuristic.
+- **`collections_graph`** — alerts → LLM-drafted emails → SMTP (demo-safe).
 
 A future **Smart Categorization** agent (transaction → COA category) is product
 vision and is **not** the same as ingestion.
@@ -98,8 +110,9 @@ vision and is **not** the same as ingestion.
 
 The template below is the **target** contract for agents that emit automated
 decisions. **Ingestion** and **reconciliation** Phase 2 states **do not** yet
-include `confidence` or `requires_human_review`. Thresholds live in `base.py` for
-when nodes are extended to populate them.
+include `confidence` or `requires_human_review`. Score thresholds live in
+`base.py`; per-agent tuning (limits, k, fixtures) lives in each
+``constants.py`` when nodes are extended.
 
 ## Invocation Pattern
 
@@ -158,12 +171,17 @@ When `requires_human_review is True`, the calling service MUST:
 
 Do not skip step 3. Without it, the loop does not close and the model does not learn.
 
-## Confidence Thresholds
+## Constants: `base.py` vs per-agent `constants.py`
 
-Define all thresholds as named constants in `app/agents/base.py`.
-Never hardcode a float inside a node or graph file.
+- **`base.py`** — shared **confidence-score** thresholds (0.0–1.0) that apply when
+  multiple agents follow the same human-review contract. Never hardcode those
+  floats in nodes.
+- **`<agent>/constants.py`** — everything else that is agent-specific: fetch
+  limits, RAG window sizes, top‑k for similarity, demo fixture rows, placeholder
+  email addresses, copy limits for prompts, etc. Do not put these in
+  ``state.py`` (state is runtime data, not configuration).
 
-| Agent          | Auto-apply (≥)                                       | Requires human review (<) |
+| Agent          | Auto-apply (≥) — lives in `base.py`                  | Requires human review (<) |
 | -------------- | ---------------------------------------------------- | ------------------------- |
 | Ingestion      | 0.85                                                 | 0.85                      |
 | Reconciliation | 0.90                                                 | 0.90                      |
@@ -250,8 +268,10 @@ decorator key (e.g., `ingestion_result.json`).
   `graph.ainvoke()`.
 - **NEVER** collapse an agent into a single flat module — always use the
   graph / state / nodes / tools / prompts subdirectory structure.
-- **NEVER** hardcode a confidence threshold float — define it as a named constant
-  in `base.py`.
+- **NEVER** hardcode a **shared confidence-score** threshold float — define it in
+  `base.py`.
+- **NEVER** hardcode agent-specific **limits, sizes, or placeholder strings** in
+  nodes — define them in that agent's `constants.py`.
 - **NEVER** add checkpointing to the Ingestion agent.
 - **NEVER** skip creating an `Alert` when `requires_human_review is True`.
 - **NEVER** skip writing user feedback back to pgvector after human correction —

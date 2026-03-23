@@ -30,7 +30,7 @@ Factora does not just use AI; it is built _around_ AI. We use a multi-agent arch
 
 **Core AI Workflows:**
 
-- **Data Ingestion & OCR:** Gmail SDK extracts invoices from email bodies/PDF attachments using Vision models. Google Sheets two-way sync. Manual CSV/XLSX uploads for legacy ERP records and bank statements. The backend **IngestionAgent** (LangGraph) turns document text into structured invoice hints and optional vector context; it is **not** the same as transaction ledger categorization.
+- **Data Ingestion & OCR:** Gmail SDK extracts invoices from email bodies/PDF attachments using Vision models. Google Sheets two-way sync. Manual CSV/XLSX uploads for legacy ERP records and bank statements. The backend **ingestion** LangGraph (`ingestion_graph`) turns document text into structured invoice hints and optional vector context; it is **not** the same as transaction ledger categorization.
 - **Smart Categorization Agent:** *(Product vision / future.)* Automatically categorizes transactions (COGS, utilities, software, loan origination, shareholder transfers, etc.) based on industry context, historical embeddings, and web scraping.
 - **Reconciliation Agent:** Auto-matches bank statement lines to AR/AP invoices, handling partial payments and exact matches autonomously, flagging low-confidence matches for human review.
 - **AR Collections Agent:** Monitors overdue invoices and connects to Gmail via SMTP to autonomously draft and (if toggled to "Act Mode") send follow-up nudges to customers.
