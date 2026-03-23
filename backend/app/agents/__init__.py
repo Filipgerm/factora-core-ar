@@ -1,7 +1,7 @@
 """LangGraph orchestration for Factora AI agents."""
 
-from app.agents.ar_collections_agent import ARCollectionsAgent
-from app.agents.ingestion_agent import IngestionAgent
-from app.agents.reconciliation_agent import ReconciliationAgent
+from app.agents.collections import ARCollectionsAgent
+from app.agents.ingestion import IngestionAgent
+from app.agents.reconciliation import ReconciliationAgent
 
 __all__ = ["ARCollectionsAgent", "IngestionAgent", "ReconciliationAgent"]

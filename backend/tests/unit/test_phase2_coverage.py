@@ -404,7 +404,7 @@ async def test_vector_store_search_db_error() -> None:
 
 @pytest.mark.asyncio
 async def test_reconciliation_exact_match() -> None:
-    from app.agents.reconciliation_agent import ReconciliationAgent
+    from app.agents.reconciliation import ReconciliationAgent
 
     agent = ReconciliationAgent()
     tx = MagicMock()
@@ -418,9 +418,8 @@ async def test_reconciliation_exact_match() -> None:
     db = AsyncMock()
     db.execute = AsyncMock(return_value=result)
 
-    with patch.object(
-        agent,
-        "_stub_open_invoices",
+    with patch(
+        "app.agents.reconciliation.nodes.stub_open_invoices",
         return_value=[{"id": "inv1", "amount": "10.00", "counterparty": "X"}],
     ):
         out = await agent.run(db, str(uuid.uuid4()))
@@ -429,7 +428,7 @@ async def test_reconciliation_exact_match() -> None:
 
 @pytest.mark.asyncio
 async def test_reconciliation_ambiguous_amount() -> None:
-    from app.agents.reconciliation_agent import ReconciliationAgent
+    from app.agents.reconciliation import ReconciliationAgent
 
     agent = ReconciliationAgent()
     tx = MagicMock()
@@ -441,9 +440,8 @@ async def test_reconciliation_ambiguous_amount() -> None:
     result.scalars.return_value.all.return_value = [tx]
     db = AsyncMock()
     db.execute = AsyncMock(return_value=result)
-    with patch.object(
-        agent,
-        "_stub_open_invoices",
+    with patch(
+        "app.agents.reconciliation.nodes.stub_open_invoices",
         return_value=[
             {"id": "a", "amount": "10.00"},
             {"id": "b", "amount": "10.00"},
@@ -456,7 +454,7 @@ async def test_reconciliation_ambiguous_amount() -> None:
 
 @pytest.mark.asyncio
 async def test_reconciliation_invalid_amount_line() -> None:
-    from app.agents.reconciliation_agent import ReconciliationAgent
+    from app.agents.reconciliation import ReconciliationAgent
 
     agent = ReconciliationAgent()
     tx = MagicMock()
@@ -468,7 +466,7 @@ async def test_reconciliation_invalid_amount_line() -> None:
     result.scalars.return_value.all.return_value = [tx]
     db = AsyncMock()
     db.execute = AsyncMock(return_value=result)
-    with patch.object(agent, "_stub_open_invoices", return_value=[]):
+    with patch("app.agents.reconciliation.nodes.stub_open_invoices", return_value=[]):
         out = await agent.run(db, str(uuid.uuid4()))
     assert any(r.get("reason") == "invalid_amount" for r in out["review_queue"])
 
@@ -476,7 +474,7 @@ async def test_reconciliation_invalid_amount_line() -> None:
 @pytest.mark.asyncio
 async def test_ar_collections_with_alerts_demo_draft_send() -> None:
     from app.db.models.alerts import Alert, AlertSeverity
-    from app.agents.ar_collections_agent import ARCollectionsAgent
+    from app.agents.collections import ARCollectionsAgent
 
     alert = Alert(
         id="al1",
@@ -492,7 +490,7 @@ async def test_ar_collections_with_alerts_demo_draft_send() -> None:
     db = AsyncMock()
     db.execute = AsyncMock(return_value=result)
 
-    with patch("app.agents.ar_collections_agent.settings") as s:
+    with patch("app.agents.collections.nodes.settings") as s:
         s.demo_mode = True
         agent = ARCollectionsAgent()
         out = await agent.run(db, alert.organization_id)
@@ -502,12 +500,12 @@ async def test_ar_collections_with_alerts_demo_draft_send() -> None:
 
 @pytest.mark.asyncio
 async def test_ingestion_non_demo_mock_llm() -> None:
-    from app.agents.ingestion_agent import IngestionAgent
+    from app.agents.ingestion import IngestionAgent
 
     mock_vs = MagicMock()
     mock_vs.similarity_search = AsyncMock(return_value=[])
 
-    with patch("app.agents.ingestion_agent.settings") as s:
+    with patch("app.agents.ingestion.nodes.settings") as s:
         s.demo_mode = False
         s.OPENAI_API_KEY = "sk"
         agent = IngestionAgent(
@@ -532,9 +530,9 @@ async def test_ingestion_non_demo_mock_llm() -> None:
 
 @pytest.mark.asyncio
 async def test_ar_collections_agent_demo_empty_alerts() -> None:
-    from app.agents.ar_collections_agent import ARCollectionsAgent
+    from app.agents.collections import ARCollectionsAgent
 
-    with patch("app.agents.ar_collections_agent.settings") as s:
+    with patch("app.agents.collections.nodes.settings") as s:
         s.demo_mode = True
         agent = ARCollectionsAgent()
         db = AsyncMock()
@@ -550,9 +548,9 @@ async def test_ar_collections_agent_demo_empty_alerts() -> None:
 
 @pytest.mark.asyncio
 async def test_ingestion_agent_demo_full_path() -> None:
-    from app.agents.ingestion_agent import IngestionAgent
+    from app.agents.ingestion import IngestionAgent
 
-    with patch("app.agents.ingestion_agent.settings") as s:
+    with patch("app.agents.ingestion.nodes.settings") as s:
         s.demo_mode = True
         agent = IngestionAgent()
         db = AsyncMock()
