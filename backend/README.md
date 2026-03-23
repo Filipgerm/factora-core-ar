@@ -219,7 +219,7 @@ uv add --dev <package>    # development-only dependency
 
 ## Database Migrations (Alembic)
 
-Alembic migrations live in `app/alembic/`.  The `ALEMBIC_DATABASE_URL` env
+Alembic migrations live in `alembic/` at the backend root (next to `alembic.ini`). The `ALEMBIC_DATABASE_URL` env
 var must use a **synchronous** driver (`+psycopg` or `+psycopg2`) on port 5432
 (direct connection, not the Supabase pooler).
 
