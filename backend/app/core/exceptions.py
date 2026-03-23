@@ -150,3 +150,10 @@ class GemiError(ExternalServiceError):
 
     def __init__(self, detail: str = "GEMI service error", *, code: str = "external.gemi", **extra: Any) -> None:
         super().__init__(detail, code=code, **extra)
+
+
+class StripeError(ExternalServiceError):
+    """Stripe API or webhook processing failure."""
+
+    def __init__(self, detail: str = "Stripe service error", *, code: str = "external.stripe", **extra: Any) -> None:
+        super().__init__(detail, code=code, **extra)
