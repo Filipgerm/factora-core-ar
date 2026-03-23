@@ -39,7 +39,10 @@ from app.services.gemi_service import GemiService
 from app.services.mydata_service import MyDataService
 from app.services.ai_service import AIService
 from app.services.file_service import FileService
+from app.services.stripe_sync_service import StripeSyncService
+from app.services.stripe_webhook_service import StripeWebhookService
 from app.controllers.membership_controller import MembershipController
+from app.controllers.stripe_controller import StripeController
 from app.controllers.organization_controller import OrganizationController
 from app.controllers.saltedge_controller import SaltEdgeController
 from app.controllers.dashboard_controller import DashboardController
@@ -362,3 +365,38 @@ def get_ai_controller(
 
 FileCtrl = Annotated[FileController, Depends(get_file_controller)]
 AICtrl = Annotated[AIController, Depends(get_ai_controller)]
+
+
+# ---------------------------------------------------------------------------
+# Stripe mirror + webhook
+# ---------------------------------------------------------------------------
+
+
+def get_stripe_webhook_service(db: DB) -> StripeWebhookService:
+    return StripeWebhookService(db)
+
+
+def get_stripe_sync_service(
+    db: DB,
+    org_id: CurrentOrgId,
+) -> StripeSyncService:
+    return StripeSyncService(db, org_id)
+
+
+def get_stripe_controller(
+    db: DB,
+    org_id: CurrentOrgId,
+    webhook_service: Annotated[StripeWebhookService, Depends(get_stripe_webhook_service)],
+) -> StripeController:
+    return StripeController(StripeSyncService(db, org_id), webhook_service)
+
+
+def get_stripe_controller_for_webhook(
+    db: DB,
+    webhook_service: Annotated[StripeWebhookService, Depends(get_stripe_webhook_service)],
+) -> StripeController:
+    return StripeController(StripeSyncService(db, organization_id=None), webhook_service)
+
+
+StripeCtrl = Annotated[StripeController, Depends(get_stripe_controller)]
+StripeWebhookCtrl = Annotated[StripeController, Depends(get_stripe_controller_for_webhook)]
