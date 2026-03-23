@@ -1,7 +1,9 @@
-"""FileService — manages document retrieval from Supabase storage.
+"""FileService — manages document retrieval and upload to Supabase storage.
 
-Scope: Handles fetching and identifying files from external object storage.
-Contract: Accepts filename strings, returns file metadata/data dicts or None.
+Scope: Handles fetching and identifying files from external object storage,
+and uploading new files with tenant-scoped metadata on the ``documents`` row.
+Contract: Accepts filename strings, returns file metadata/data dicts or None;
+upload raises ``ValidationError`` for empty inputs.
 Architectural Notes: Uses asyncio.run_in_executor to prevent the synchronous
 Supabase Python client from blocking the FastAPI async event loop.
 """
@@ -11,12 +13,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import mimetypes
-from typing import Optional
+from typing import Any, Optional
 
+from fastapi import UploadFile
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.clients.storage_client import build_storage_path, storage_public_url, upload_bytes
+from app.core.exceptions import NotFoundError, ValidationError
 from app.db.models.files import Document
 from app.db.postgres import get_supabase, SUPABASE_BUCKET
 
@@ -85,3 +89,56 @@ class FileService:
         except Exception as e:
             logger.warning("Failed to download file '%s' from storage: %s", filename, e)
             return None
+
+    async def upload_document(
+        self,
+        upload: UploadFile,
+        *,
+        purpose: str | None = None,
+    ) -> dict[str, Any]:
+        """Store multipart upload in the default bucket and persist a ``Document`` row.
+
+        Raises:
+            ValidationError: Empty file or missing filename.
+        """
+        data = await upload.read()
+        if not data:
+            raise ValidationError(
+                "File is empty.",
+                code="validation.empty_file",
+                fields={"file": "Upload a non-empty file"},
+            )
+        fname = (upload.filename or "").strip() or "upload"
+        ct = upload.content_type or mimetypes.guess_type(fname)[0] or "application/octet-stream"
+
+        storage_path = build_storage_path(fname)
+        await upload_bytes(storage_path, data, ct, bucket=self.bucket)
+
+        url = storage_public_url(storage_path, bucket=self.bucket)
+        meta: dict[str, Any] = {"organization_id": str(self.organization_id)}
+        if purpose:
+            meta["purpose"] = purpose
+
+        doc = Document(
+            bucket=self.bucket,
+            path=storage_path,
+            original_name=fname,
+            content_type=ct,
+            size=len(data),
+            public_url=url,
+            _metadata=meta,
+        )
+        self.db.add(doc)
+        await self.db.commit()
+        await self.db.refresh(doc)
+
+        return {
+            "document_id": doc.id,
+            "bucket": doc.bucket,
+            "path": doc.path,
+            "original_name": doc.original_name,
+            "content_type": doc.content_type,
+            "size": doc.size,
+            "public_url": doc.public_url,
+            "metadata": doc._metadata or {},
+        }

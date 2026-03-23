@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import io
+from typing import Any
 
+from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.core.exceptions import NotFoundError
@@ -13,6 +15,12 @@ from app.services.file_service import FileService
 class FileController:
     def __init__(self, service: FileService) -> None:
         self.service = service
+
+    async def upload_document(
+        self, *, file: UploadFile, purpose: str | None
+    ) -> dict[str, Any]:
+        """Accept a multipart file and persist it with org-scoped metadata."""
+        return await self.service.upload_document(file, purpose=purpose)
 
     async def get_file(self, filename: str) -> StreamingResponse:
         """Serve a stored file by filename."""
