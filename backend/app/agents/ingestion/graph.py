@@ -1,7 +1,16 @@
-"""Ingestion LangGraph — document text → structured invoice hints (+ optional vector context).
+"""Compile the ingestion LangGraph and expose ``ingestion_graph``.
 
-Services invoke ``ingestion_graph`` only (see ``app.agents.ingestion``). Pass optional
-``vector_store_factory`` and (tests only) ``llm`` on the initial state dict.
+**Scope:** Wire ``StateGraph`` nodes only — no extraction logic in this file.
+
+**Flow:**
+    1. ``validate`` — reject empty ``raw_text`` (early ``result`` with error).
+    2. ``extract`` — LLM JSON field extraction (or demo fixture).
+    3. ``context`` — optional pgvector similarity hints via ``vector_store_factory``.
+    4. ``finalize`` — merge ``extracted`` + ``neighbors`` into ``result``.
+
+**Contract:** Services import ``ingestion_graph`` from ``app.agents.ingestion`` and
+call ``ainvoke`` with ``organization_id``, ``raw_text``, ``db``, and optionally
+``vector_store_factory`` / ``llm`` (tests) on the initial state.
 """
 from __future__ import annotations
 

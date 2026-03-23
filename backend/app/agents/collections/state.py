@@ -1,4 +1,10 @@
-"""Typed state for the AR collections LangGraph."""
+"""Collections graph state — alerts through draft and send phases.
+
+**Inputs:** ``organization_id``, ``db``.
+
+**Outputs:** ``alerts`` (dict rows from ORM), ``drafts`` (subject/body/recipient per
+alert), ``sent`` (delivery or error status per draft).
+"""
 
 from __future__ import annotations
 

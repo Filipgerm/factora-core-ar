@@ -1,4 +1,13 @@
-"""Collections graph nodes."""
+"""Collections nodes: discover alerts, draft reminder emails, send via SMTP.
+
+**``discover``:** queries ``Alert`` where ``resolved_at`` is null, ordered by
+``created_at``, limited by ``constants.UNRESOLVED_ALERTS_FETCH_LIMIT``.
+
+**``draft``:** demo mode uses fixed copy; otherwise ``LLMClient.chat_completion`` with
+templates from ``prompts.py``. Placeholder ``to_email`` from ``constants``.
+
+**``send``:** delegates to ``GmailSmtpClient``; appends per-draft status to ``sent``.
+"""
 
 from __future__ import annotations
 

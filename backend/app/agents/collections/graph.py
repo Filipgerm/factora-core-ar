@@ -1,6 +1,14 @@
-"""Collections LangGraph — unresolved alerts → LLM-drafted email → SMTP (demo-safe).
+"""Compile the collections LangGraph and expose ``collections_graph``.
 
-Public API: ``collections_graph`` (import from ``app.agents.collections``).
+**Scope:** ``StateGraph`` wiring only — DB/LLM/mail side effects live in ``nodes``.
+
+**Flow:**
+    1. ``discover`` — load recent unresolved ``Alert`` rows for the organization.
+    2. ``draft`` — per alert, LLM body (or demo string) plus subject / placeholder recipient.
+    3. ``send`` — ``GmailSmtpClient.send_plain_text`` per draft (errors captured in ``sent``).
+
+**Contract:** Import from ``app.agents.collections``; initial state needs ``organization_id``
+and ``db``. Demo mode skips live LLM content and uses safe copy.
 """
 from __future__ import annotations
 

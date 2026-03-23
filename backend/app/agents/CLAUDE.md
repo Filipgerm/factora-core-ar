@@ -74,6 +74,31 @@ are built as Tier 2 from the start.
                          same scoring contract. LLM factory / shared retriever:
                          planned. Do **not** put agent-specific limits here.
 
+## Module-level docstrings (required)
+
+Every **significant** Python file under ``app/agents/`` (including ``base.py`` and
+each agent package: ``graph.py``, ``nodes.py``, ``state.py``, ``prompts.py``,
+``constants.py``, ``tools.py``, and package ``__init__.py``) MUST begin with a
+**module-level docstring** so a reader can grasp purpose and data flow without
+reading the whole file.
+
+Use Google-style or short narrative prose. Adjust emphasis by file kind:
+
+| File | Docstring should cover |
+| ---- | ---------------------- |
+| **graph.py** | End-to-end responsibility of the graph; name of the exported compiled graph; **numbered** high-level flow (which nodes run and in what order); note if wiring-only (no business logic in this file). |
+| **nodes.py** | What each node phase does to state; external calls (LLM, DB, SMTP, vector search); invariants (e.g. tenant scoping). |
+| **state.py** | Input vs output keys; optional runtime-injected keys (e.g. ``vector_store_factory``) and why they are not in ``constants.py``. |
+| **prompts.py** | Which node consumes each template; tone/constraints (length, language). |
+| **constants.py** | What belongs here vs ``base.py``; how constants are used in nodes (limits, k, placeholders, demo rows). |
+| **tools.py** | Planned or reserved tools; why the Phase N graph does not wire them yet. |
+| **``__init__.py``** | Public export rule (single graph symbol); one line on what that graph is for. |
+
+Trivial one-liners are acceptable only when the file is a pure re-export
+(e.g. ``__init__.py``) — but they must still state **what** is exported and **why**
+the package exists. Do not omit the module docstring on “obvious” files; agents and
+humans both benefit from the workflow summary.
+
 ### Public API rule
 
 Every agent package ``__init__.py`` exports **exactly one** symbol: the compiled
@@ -276,5 +301,8 @@ decorator key (e.g., `ingestion_result.json`).
 - **NEVER** skip creating an `Alert` when `requires_human_review is True`.
 - **NEVER** skip writing user feedback back to pgvector after human correction —
   the Active Learning Loop must close.
+- **NEVER** add or ship a significant module under ``app/agents/`` without a
+  module-level docstring that explains workflow and responsibility (see
+  **Module-level docstrings** above).
 
 </never_list>

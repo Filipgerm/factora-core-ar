@@ -1,4 +1,9 @@
-"""Reconciliation-specific limits and demo fixtures (not shared thresholds — see ``base.py``)."""
+"""Reconciliation tuning: SQL fetch cap and demo open-invoice rows.
+
+``BANK_TRANSACTION_FETCH_LIMIT`` caps how many recent transactions ``load_bank`` pulls.
+``DEMO_OPEN_INVOICES`` seeds stub matching in ``demo`` mode only. Cross-agent
+confidence thresholds belong in ``app.agents.base``, not here.
+"""
 
 from typing import Any
 

@@ -1,4 +1,14 @@
-"""Typed state and ports for the ingestion LangGraph."""
+"""Ingestion graph state schema and typing-only ports.
+
+**Keys:** ``organization_id`` and ``raw_text`` are required inputs; ``db`` is the
+caller's ``AsyncSession``. Optional ``vector_store_factory`` and ``llm`` are
+runtime dependencies (see ``CLAUDE.md``) — not configuration constants.
+
+**Outputs:** ``extracted``, ``neighbors``, and terminal ``result`` (or early error
+in ``result``) are written by nodes as the graph runs.
+
+**SimilaritySearchPort:** protocol implemented by services injecting vector search.
+"""
 
 from __future__ import annotations
 

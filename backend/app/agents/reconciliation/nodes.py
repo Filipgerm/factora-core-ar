@@ -1,4 +1,15 @@
-"""Reconciliation graph nodes."""
+"""Reconciliation nodes: load bank activity, stub invoices, then amount-match.
+
+**``stub_open_invoices``:** returns demo rows when ``settings.demo_mode`` else [] —
+patchable in tests.
+
+**``fetch_transactions``:** joins banking ORM models filtered by
+``CustomerModel.organization_id``; limit from ``constants.BANK_TRANSACTION_FETCH_LIMIT``.
+
+**``ReconciliationNodes``:** three LangGraph steps that populate ``bank_lines``,
+``open_invoices``, then ``matches`` / ``review_queue`` using exact ``Decimal``
+equality (no LLM in Phase 2).
+"""
 
 from __future__ import annotations
 

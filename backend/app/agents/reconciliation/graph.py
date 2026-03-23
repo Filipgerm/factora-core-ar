@@ -1,6 +1,14 @@
-"""Reconciliation LangGraph — bank lines vs open invoices (stub) with exact-amount heuristic.
+"""Compile the reconciliation LangGraph and expose ``reconciliation_graph``.
 
-Public API: ``reconciliation_graph`` (import from ``app.agents.reconciliation``).
+**Scope:** ``StateGraph`` wiring only — matching rules live in ``nodes``.
+
+**Flow:**
+    1. ``load_bank`` — recent ``Transaction`` rows for the tenant (SQL, multi-tenant safe).
+    2. ``load_invoices`` — stub open invoices (demo fixtures or empty until AR ships).
+    3. ``match`` — exact Decimal amount match → ``matches``; ambiguous / miss → ``review_queue``.
+
+**Contract:** Import ``reconciliation_graph`` from ``app.agents.reconciliation``;
+``ainvoke`` initial state requires ``organization_id`` and ``db``.
 """
 from __future__ import annotations
 

@@ -1,4 +1,8 @@
-"""Prompt templates for collections (draft reminder emails)."""
+"""LLM prompt pieces for the collections ``draft`` node.
+
+``DRAFT_SYSTEM_MESSAGE`` sets tone and length. ``draft_user_message`` formats alert
+title and description into the user turn. Keep all template text here.
+"""
 
 DRAFT_SYSTEM_MESSAGE = (
     "You write concise, polite accounts-receivable reminder emails. "

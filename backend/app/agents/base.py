@@ -1,12 +1,16 @@
-"""Shared agent constants (Phase 2 LangGraph).
+"""Cross-agent confidence thresholds (Phase 2 LangGraph).
 
-**Partial compliance:** The global spec in ``agents/CLAUDE.md`` expects every agent
-state to carry ``confidence`` (0.0–1.0) and ``requires_human_review``. The
-**ingestion** and **reconciliation** graphs shipped in Phase 2 do not populate
-those fields yet. Use the thresholds below when extending nodes to emit them.
+**Purpose:** Single place for **shared** numeric thresholds used when multiple
+agents adopt the same auto-apply vs human-review contract. Per-agent fetch limits,
+prompt windows, and placeholders live in each agent's ``constants.py``.
 
-Collections remains human-gated in Review Mode; auto-apply semantics apply only
-when product "Act Mode" is enabled.
+**Partial compliance:** ``agents/CLAUDE.md`` expects ``confidence`` and
+``requires_human_review`` on state for decision agents. Ingestion and reconciliation
+Phase 2 graphs do not set those fields yet — import these constants when nodes
+start emitting scores.
+
+**Collections:** human-gated in Review Mode; auto-apply only when product "Act Mode"
+is enabled (separate from the floats below).
 """
 
 INGESTION_CONFIDENCE_AUTO_APPLY_THRESHOLD = 0.85

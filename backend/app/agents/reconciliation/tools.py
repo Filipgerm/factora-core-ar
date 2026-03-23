@@ -1,4 +1,5 @@
-"""LangChain tools for reconciliation.
+"""Reserved module for LangChain tools (invoice search, embedding lookup, etc.).
 
-Reserved for future tool-calling nodes. The Phase 2 graph uses SQL + heuristics only.
+The Phase 2 reconciliation graph uses SQL + deterministic Decimal matching only.
+Add tool callables here when fuzzy or semantic matching needs model-invoked retrieval.
 """

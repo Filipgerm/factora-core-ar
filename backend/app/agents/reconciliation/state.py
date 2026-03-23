@@ -1,4 +1,11 @@
-"""Typed state for the reconciliation LangGraph."""
+"""Reconciliation graph state — inputs and accumulated match results.
+
+**Inputs:** ``organization_id``, ``db`` (``AsyncSession``).
+
+**Filled by nodes:** ``bank_lines`` (normalized tx dicts), ``open_invoices`` (stub
+or future real AR), ``matches`` (exact one-to-one amount hits), ``review_queue``
+(invalid amount, ambiguous, or no match).
+"""
 
 from __future__ import annotations
 

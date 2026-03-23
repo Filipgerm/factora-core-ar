@@ -1,4 +1,15 @@
-"""Ingestion graph nodes (state_in → state_out)."""
+"""LangGraph node callables for document ingestion (validate → extract → context → finalize).
+
+**Flow (mutations):**
+    * ``validate`` — sets ``result.error`` when text is blank; otherwise passes through.
+    * ``extract`` — fills ``extracted`` via ``LLMClient.chat_completion_json`` or demo JSON.
+    * ``context`` — fills ``neighbors`` from injected ``vector_store_factory`` similarity search.
+    * ``finalize`` — builds final ``result`` with ``extracted`` and ``vector_hints``.
+
+**Side effects:** LLM HTTP (non-demo), optional embedding search; all scoped by
+``organization_id`` when a factory is provided. Limits for truncation and k come
+from ``constants.py``.
+"""
 
 from __future__ import annotations
 

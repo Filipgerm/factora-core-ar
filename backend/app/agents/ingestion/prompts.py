@@ -1,4 +1,9 @@
-"""Prompt templates for ingestion (document text → structured invoice hints)."""
+"""Static prompt text for the ingestion ``extract`` node.
+
+``EXTRACT_SYSTEM_MESSAGE`` is the system role for ``LLMClient.chat_completion_json``.
+User content is the truncated raw invoice text (length capped in ``nodes`` via
+``constants``). Keep templates here — no inline template strings in ``nodes.py``.
+"""
 
 EXTRACT_SYSTEM_MESSAGE = (
     "You extract structured invoice data as JSON with keys: "

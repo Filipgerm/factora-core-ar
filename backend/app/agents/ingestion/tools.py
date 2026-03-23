@@ -1,5 +1,6 @@
-"""LangChain tools for ingestion.
+"""Reserved module for LangChain tools used by future ingestion nodes.
 
-Reserved for future tool-calling nodes (e.g. web lookup, calculator).
-No tools are wired into the Phase 2 graph.
+Phase 2 graph is extract + optional vector context only — no ``@tool`` bindings yet.
+When adding tools (e.g. web lookup, calculator), define them here and import from
+``nodes`` or subgraphs; do not embed tool schemas inline in ``nodes.py``.
 """

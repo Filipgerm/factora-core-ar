@@ -1,4 +1,5 @@
-"""LangChain tools for collections.
+"""Reserved module for LangChain tools (e.g. CRM or invoice lookup before draft).
 
-Reserved for future tool-calling nodes (e.g. CRM lookup). Phase 2 uses LLM + SMTP only.
+Phase 2 collections flow is alert → LLM draft → SMTP send with no tool loop.
+Define future tools here to keep ``nodes.py`` free of ad-hoc tool definitions.
 """
