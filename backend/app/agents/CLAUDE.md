@@ -10,33 +10,78 @@
 
 ## Directory Structure
 
-Each agent is a self-contained subdirectory. Graph wiring, state, nodes, tools, and
-prompts are separated per agent.
+Agents are organized in two tiers based on complexity.
 
-```
-app/agents/
-  base.py                  ← Named confidence thresholds (forward-compatible).
-                             LLM factory / shared retriever: planned consolidation;
-                             Phase 2 graphs inject ``LLMClient`` at construction.
-  ingestion/
-    graph.py               ← LangGraph StateGraph + public agent class (compiled graph)
-    state.py               ← TypedDict state schema for this agent
-    nodes.py               ← Node callables (state_in → state_out)
-    tools.py               ← Reserved / LangChain tools when wired
-    prompts.py             ← Prompt templates for this agent
-  reconciliation/
-    graph.py
-    state.py
-    nodes.py
-    tools.py
-    prompts.py
-  collections/
-    graph.py
-    state.py
-    nodes.py
-    tools.py
-    prompts.py
-```
+### Tier 1 — Flat (simple, single-phase agents)
+
+Use when the agent has ≤ 5 nodes, ≤ 150 lines in nodes.py, and a single
+logical phase. Categorization is permanently Tier 1.
+
+    agents/categorization/
+      __init__.py      ← Exports only: the compiled graph
+      graph.py         ← StateGraph wiring only. No logic.
+      state.py         ← TypedDict state definition
+      nodes.py         ← All node functions
+      tools.py         ← All tools
+      prompts.py       ← All prompt templates
+      constants.py     ← Agent-specific constants (distinct from base.py)
+
+### Tier 2 — Phase-split (multi-phase agents)
+
+Use when the agent has > 5 nodes, exceeds 150 lines in nodes.py, or has
+distinct phases with different concerns. Reconciliation and Collections
+are built as Tier 2 from the start.
+
+    agents/reconciliation/
+      __init__.py      ← Exports only: the compiled graph
+      graph.py         ← StateGraph wiring only. Imports from nodes/.
+      state.py         ← TypedDict state definition
+      constants.py     ← Agent-specific constants
+      prompts.py       ← All templates, organized by phase with comments
+      tools/
+        __init__.py
+        search.py      ← Invoice search, embedding lookup
+        ledger.py      ← Ledger read/write tools
+      nodes/
+        __init__.py
+        ingestion.py   ← Parse and normalize bank transaction
+        matching.py    ← Exact, partial, and embedding-based matching
+        scoring.py     ← Confidence calculation and threshold evaluation
+        decision.py    ← Route to auto-reconcile or PENDING_REVIEW + Alert
+
+    agents/collections/
+      __init__.py
+      graph.py
+      state.py
+      constants.py
+      prompts.py
+      tools/
+        __init__.py
+        invoice.py     ← Overdue invoice queries
+        email.py       ← Gmail SMTP tools
+      nodes/
+        __init__.py
+        monitor.py     ← Identify overdue invoices, calculate urgency
+        drafting.py    ← Draft email content via LLM
+        dispatch.py    ← Send (Act Mode) or queue for review (Review Mode)
+
+### The shared foundation
+
+    agents/
+      base.py          ← LLM factory, pgvector retriever, shared
+                         CONFIDENCE_THRESHOLD constants used across agents
+
+### Public API rule
+
+Every agent **init**.py exports exactly one thing: the compiled graph.
+Nothing inside the agent subdirectory should be imported directly by
+services/ or any other layer.
+
+    # ✅ CORRECT
+    from app.agents.reconciliation import reconciliation_graph
+
+    # ❌ WRONG — exposes internals, breaks encapsulation
+    from app.agents.reconciliation.nodes.matching import find_exact_match
 
 ## Implemented agents (Phase 2)
 
@@ -118,11 +163,11 @@ Do not skip step 3. Without it, the loop does not close and the model does not l
 Define all thresholds as named constants in `app/agents/base.py`.
 Never hardcode a float inside a node or graph file.
 
-| Agent           | Auto-apply (≥) | Requires human review (<) |
-| --------------- | ---------------- | ------------------------- |
-| Ingestion       | 0.85             | 0.85                      |
-| Reconciliation  | 0.90             | 0.90                      |
-| Collections     | "Act Mode" only; always human-gated in "Review Mode" |
+| Agent          | Auto-apply (≥)                                       | Requires human review (<) |
+| -------------- | ---------------------------------------------------- | ------------------------- |
+| Ingestion      | 0.85                                                 | 0.85                      |
+| Reconciliation | 0.90                                                 | 0.90                      |
+| Collections    | "Act Mode" only; always human-gated in "Review Mode" |
 
 ## LLM & Embedding Standards
 
