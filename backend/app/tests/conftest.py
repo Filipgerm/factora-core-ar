@@ -35,6 +35,7 @@ _TEST_ENV = {
     "ANTHROPIC_API_KEY": "",
     "STRIPE_SECRET_KEY": "",
     "STRIPE_WEBHOOK_SECRET": "",
+    "STRIPE_API_VERSION": "2026-02-25.clover",
     "GMAIL_SMTP_HOST": "",
     "GMAIL_SMTP_USER": "",
     "GMAIL_SMTP_PASSWORD": "",

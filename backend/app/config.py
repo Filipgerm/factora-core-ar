@@ -73,6 +73,10 @@ class Settings(BaseSettings):
         default="",
         description="Stripe signing secret for webhook verification",
     )
+    STRIPE_API_VERSION: str = Field(
+        default="2026-02-25.clover",
+        description="Pinned Stripe API version (must match webhook/dashboard settings)",
+    )
 
     # --- Gmail / SMTP (optional; collections agent outbound) ---
     GMAIL_SMTP_HOST: str = Field(default="", description="SMTP host for Gmail or workspace relay")
