@@ -26,12 +26,12 @@ Factora is an **AI-native ERP and financial platform**, built to be the "Rillet 
 
 ### The AI-Native Mandate (The "Agentic Swarm")
 
-Factora does not just use AI; it is built _around_ AI. We use a multi-agent architecture (LangGraph + Claude 3.5 / GPT-4o + pgvector) to automate end-to-end accounting processes. When designing features, always consider how AI can eliminate manual data entry. Always build an **Active Learning Loop**: if the AI is unsure, surface it to the user, and use that feedback to improve future predictions.
+Factora does not just use AI; it is built _around_ AI. We use a multi-agent architecture (LangGraph + OpenAI default chat/embeddings, Anthropic optional, pgvector) to automate end-to-end accounting processes. When designing features, always consider how AI can eliminate manual data entry. Always build an **Active Learning Loop**: if the AI is unsure, surface it to the user, and use that feedback to improve future predictions.
 
 **Core AI Workflows:**
 
-- **Data Ingestion & OCR:** Gmail SDK extracts invoices from email bodies/PDF attachments using Vision models. Google Sheets two-way sync. Manual CSV/XLSX uploads for legacy ERP records and bank statements.
-- **Smart Categorization Agent:** Automatically categorizes transactions (COGS, utilities, software, loan origination, shareholder transfers, etc.) based on industry context, historical embeddings, and web scraping.
+- **Data Ingestion & OCR:** Gmail SDK extracts invoices from email bodies/PDF attachments using Vision models. Google Sheets two-way sync. Manual CSV/XLSX uploads for legacy ERP records and bank statements. The backend **IngestionAgent** (LangGraph) turns document text into structured invoice hints and optional vector context; it is **not** the same as transaction ledger categorization.
+- **Smart Categorization Agent:** *(Product vision / future.)* Automatically categorizes transactions (COGS, utilities, software, loan origination, shareholder transfers, etc.) based on industry context, historical embeddings, and web scraping.
 - **Reconciliation Agent:** Auto-matches bank statement lines to AR/AP invoices, handling partial payments and exact matches autonomously, flagging low-confidence matches for human review.
 - **AR Collections Agent:** Monitors overdue invoices and connects to Gmail via SMTP to autonomously draft and (if toggled to "Act Mode") send follow-up nudges to customers.
 - **General Ledger & Journal Entries:** Automatically drafts standard journal entries from categorized data.
@@ -52,7 +52,7 @@ controllers/     ← Orchestration: calls services, maps domain exceptions → H
 services/        ← ALL business logic + DB access via AsyncSession. Returns Domain Models, ORM instances, or internal DTOs. NEVER return HTTP types or external DTOs.
 agents/          ← LangGraph agent graphs, state machines, nodes, tools, prompts. Called BY services. NEVER import from api/, controllers/, or services/.
 clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI). No business logic.
-packages/        ← Internal SDKs (AADE, SaltEdge). Standalone — must NEVER import from app/.
+packages/        ← Internal SDKs (AADE, SaltEdge, Stripe). Standalone — must NEVER import from app/.
 db/models/       ← SQLAlchemy ORM models only (split by domain: identity, counterparty, banking, aade, alerts).
 models/          ← Pydantic *Request / *Response schemas only. No ORM logic.
 core/            ← Cross-cutting utilities: security/, exceptions.py, config.py, demo.py.
@@ -453,6 +453,7 @@ Our frontend must look and feel like a top-tier, modern fintech application (Str
 
 - **AADE / myDATA**: Greek Tax Authority — strict XML/XSD compliance required.
 - **SaltEdge**: Open Banking — account and transaction aggregation.
+- **Stripe**: Billing — mirror Pydantic models and webhook verification in `packages/stripe`.
 - **Brevo** (formerly Sendinblue): Email and SMS via `sib_api_v3_sdk`.
 - **GEMI**: Greek Business Registry — company document lookup.
 - **Google OAuth**: Sign-in via Google ID token (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`).
