@@ -6,8 +6,9 @@ from datetime import datetime, date, timezone
 import asyncio
 from functools import partial
 
-from app.config import Settings
-from app.core.demo import demo_fixture
+from app.config import Settings, settings
+from app.core.demo import demo_fixture, get_demo_payload
+from app.core.exceptions import NotFoundError
 from packages.saltedge import SaltEdgeClient
 from packages.saltedge.models.accounts import (
     AccountsResponse,
@@ -213,6 +214,7 @@ class SaltEdgeService:
 
         return response
 
+    @demo_fixture("saltedge_customers")
     async def list_customers(
         self,
         *,
@@ -230,6 +232,18 @@ class SaltEdgeService:
         return response
 
     async def get_customer(self, *, customer_id: str) -> CustomerResponse:
+        if settings.demo_mode:
+            listed = CustomersResponse.model_validate(
+                get_demo_payload("saltedge_customers")
+            )
+            for c in listed.data:
+                if c.customer_id == customer_id:
+                    return CustomerResponse(data=c)
+            raise NotFoundError(
+                "Customer not found or access denied.",
+                code="resource.not_found",
+            )
+
         # Fetch from SaltEdge API
         response = await self._api.customers.get(customer_id=customer_id)
 

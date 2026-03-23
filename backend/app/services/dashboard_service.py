@@ -8,6 +8,12 @@ from typing import Any, Dict, List, Optional, Tuple, Sequence
 from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
+from app.core.demo import (
+    get_demo_dashboard_transactions,
+    get_demo_payload,
+    is_demo_saltedge_customer_id,
+)
 from app.core.exceptions import ExternalServiceError, NotFoundError
 from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
 from app.db.models.alerts import Alert
@@ -22,6 +28,7 @@ from app.db.models.banking import (
 from app.models.dashboard import (
     AadeDocumentsRequest,
     DashboardMetricsRequest,
+    PartySummary,
     TransactionsRequest,
 )
 
@@ -52,6 +59,14 @@ class DashboardService:
     async def get_dashboard_pl_metrics(
         self, request: DashboardMetricsRequest
     ) -> Dict[str, Any]:
+        if settings.demo_mode:
+            if not is_demo_saltedge_customer_id(request.customer_id):
+                raise NotFoundError(
+                    "Customer not found or access denied.",
+                    code="resource.not_found",
+                )
+            return dict(get_demo_payload("dashboard_pl_metrics"))
+
         await self._ensure_customer_belongs_to_org(request.customer_id)
         start_date, end_date = self._resolve_window(request=request)
         period_days = (end_date - start_date).days + 1
@@ -144,6 +159,10 @@ class DashboardService:
 
     async def get_seller_metrics(self) -> Tuple[int, int]:
         """Get metrics for an organization: total counterparties and active alerts."""
+        if settings.demo_mode:
+            d = get_demo_payload("dashboard_seller_metrics")
+            return int(d["total_counterparties"]), int(d["total_active_alerts"])
+
         from app.db.models.counterparty import Counterparty
 
         counterparty_result = await self.db.execute(
@@ -165,9 +184,18 @@ class DashboardService:
         return total_counterparties, total_active_alerts
 
     async def get_transaction_history(
-        self, request: TransactionsRequest
-    ) -> Sequence[Transaction]:
+        self, request: TransactionsRequest,
+    ) -> Sequence[Transaction] | list[dict[str, Any]]:
         """Get detailed transaction history with filtering and pagination."""
+        if settings.demo_mode:
+            if not is_demo_saltedge_customer_id(request.customer_id):
+                raise NotFoundError(
+                    "Customer not found or access denied.",
+                    code="resource.not_found",
+                )
+            raw = get_demo_dashboard_transactions()
+            return self._filter_demo_transaction_dicts(request, raw)
+
         await self._ensure_customer_belongs_to_org(request.customer_id)
 
         # Build base query
@@ -225,6 +253,49 @@ class DashboardService:
         return result.scalars().all()
 
     # ---------- helpers ----------
+
+    @staticmethod
+    def _filter_demo_transaction_dicts(
+        request: TransactionsRequest, rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Apply the same filter dimensions as the ORM query to demo fixture rows."""
+
+        def _made_on(r: dict[str, Any]) -> date:
+            v = r.get("made_on")
+            if isinstance(v, date):
+                return v
+            return date.fromisoformat(str(v))
+
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            if request.account_id and r.get("account_id") != request.account_id:
+                continue
+            if request.status and r.get("status") != request.status:
+                continue
+            mo = _made_on(r)
+            if request.start_date and mo < request.start_date:
+                continue
+            if request.end_date and mo > request.end_date:
+                continue
+            amt = r.get("amount")
+            if request.min_amount is not None and amt is not None and float(amt) < request.min_amount:
+                continue
+            if request.max_amount is not None and amt is not None and float(amt) > request.max_amount:
+                continue
+            if request.currency_code and r.get("currency_code") != request.currency_code:
+                continue
+            if request.category and r.get("category") != request.category:
+                continue
+            if request.merchant_id and r.get("merchant_id") != request.merchant_id:
+                continue
+            if request.mcc and str(r.get("mcc") or "") != str(request.mcc):
+                continue
+            out.append(r)
+
+        out.sort(key=lambda x: (_made_on(x), str(x.get("id") or "")), reverse=True)
+        if request.limit is not None:
+            out = out[: request.limit]
+        return out
 
     def _resolve_window(self, request: DashboardMetricsRequest) -> Tuple[date, date]:
         if request.start_date and request.end_date:

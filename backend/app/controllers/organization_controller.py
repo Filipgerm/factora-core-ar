@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from app.config import settings
+from app.core.demo import get_demo_payload
 from app.services.organization_service import OrganizationService
 from app.db.models.identity import Organization
 from app.db.models.counterparty import Counterparty
@@ -116,6 +118,16 @@ class OrganizationController:
         Returns:
             list[CounterpartyResponse]: A list of active counterparties (vendors/customers)
         """
+        if settings.demo_mode:
+            oid = self.service.organization_id
+            rows = get_demo_payload("organization_counterparties")["counterparties"]
+            return [
+                CounterpartyResponse.model_validate(
+                    {**r, "organization_id": UUID(oid) if isinstance(oid, str) else oid}
+                )
+                for r in rows
+            ]
+
         cp_models = await self.service.list_counterparties()
         return [self._map_counterparty_to_response(cp) for cp in cp_models]
 
