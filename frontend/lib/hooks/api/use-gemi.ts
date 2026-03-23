@@ -38,6 +38,22 @@ export function useGemiSearchQuery(
   });
 }
 
+/** Explicit GEMI search (e.g. VAT lookup button) — avoids ``useQuery`` enable rules. */
+export function useGemiSearchByAfmMutation() {
+  return useMutation({
+    mutationFn: async (afmRaw: string): Promise<GemiSearchResponse> => {
+      const q = afmRaw.replace(/\D/g, "");
+      if (q.length < 3) {
+        throw new Error("Enter at least 3 digits of the VAT / AFM number.");
+      }
+      const sp = new URLSearchParams({ q, mode: "afm", limit: "10" });
+      const res = await apiFetch(`/v1/companies/gemi/search?${sp.toString()}`);
+      if (!res.ok) throw await apiErrorFromResponse(res);
+      return parseJson(res, gemiSearchResponseSchema);
+    },
+  });
+}
+
 export function useGemiFetchDocumentsMutation() {
   return useMutation({
     mutationFn: async (afm: string): Promise<GemiFetchDocumentsResponse> => {

@@ -11,6 +11,7 @@ export function FeatureEmptyState({
   className,
   ctaHref,
   ctaLabel,
+  action,
 }: {
   icon: LucideIcon;
   title: string;
@@ -18,6 +19,12 @@ export function FeatureEmptyState({
   className?: string;
   ctaHref?: string;
   ctaLabel?: string;
+  /** Primary button when navigation should not use a ``Link`` (e.g. open sheet). */
+  action?: {
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+  };
 }) {
   return (
     <div
@@ -35,10 +42,25 @@ export function FeatureEmptyState({
       <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
         {description}
       </p>
-      {ctaHref && ctaLabel ? (
-        <Button asChild className="mt-6 rounded-xl transition-all duration-200" size="sm">
-          <Link href={ctaHref}>{ctaLabel}</Link>
-        </Button>
+      {action || (ctaHref && ctaLabel) ? (
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+          {action ? (
+            <Button
+              type="button"
+              className="rounded-xl transition-all duration-200"
+              size="sm"
+              disabled={action.disabled}
+              onClick={action.onClick}
+            >
+              {action.label}
+            </Button>
+          ) : null}
+          {ctaHref && ctaLabel ? (
+            <Button asChild className="rounded-xl transition-all duration-200" size="sm">
+              <Link href={ctaHref}>{ctaLabel}</Link>
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

@@ -46,4 +46,11 @@ export const queryKeys = {
     docs: (params: Record<string, string | undefined>) =>
       [...queryKeys.mydata.all, "docs", params] as const,
   },
+  files: {
+    all: ["files"] as const,
+  },
+  invoices: {
+    all: ["invoices"] as const,
+    manual: () => [...queryKeys.invoices.all, "manual"] as const,
+  },
 } as const;
