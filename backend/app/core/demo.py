@@ -28,9 +28,13 @@ import json
 import logging
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
+
+from pydantic import BaseModel
 
 from app.config import settings
+
+from app.core.demo_constants import DEMO_SALTEDGE_CUSTOMER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +50,15 @@ for _fixture_path in _FIXTURES_DIR.glob("*.json"):
     try:
         with _fixture_path.open("r", encoding="utf-8") as _fh:
             _raw = json.load(_fh)
-            # Strip the _comment meta-key so services receive clean data
-            _DEMO_FIXTURES[_key] = {k: v for k, v in _raw.items() if k != "_comment"}
+            if isinstance(_raw, list):
+                _DEMO_FIXTURES[_key] = _raw
+            elif isinstance(_raw, dict):
+                # Strip the _comment meta-key so services receive clean data
+                _DEMO_FIXTURES[_key] = {
+                    k: v for k, v in _raw.items() if k != "_comment"
+                }
+            else:
+                _DEMO_FIXTURES[_key] = _raw
     except (json.JSONDecodeError, OSError) as exc:
         logger.error("Failed to load demo fixture %s: %s", _fixture_path, exc)
 
@@ -109,3 +120,48 @@ def get_demo_fixtures() -> dict[str, Any]:
         Dict mapping fixture key to parsed JSON data.
     """
     return dict(_DEMO_FIXTURES)
+
+
+def get_demo_payload(fixture_key: str) -> Any:
+    """Return parsed fixture data for ``fixture_key`` (filename stem without ``.json``).
+
+    Raises:
+        KeyError: If the fixture was not loaded.
+    """
+    if fixture_key not in _DEMO_FIXTURES:
+        raise KeyError(
+            f"Demo fixture '{fixture_key}' not found. "
+            f"Available: {sorted(_DEMO_FIXTURES)}"
+        )
+    return _DEMO_FIXTURES[fixture_key]
+
+
+def is_demo_saltedge_customer_id(customer_id: str) -> bool:
+    """True when ``customer_id`` is the canonical demo Open Banking customer."""
+    return customer_id == DEMO_SALTEDGE_CUSTOMER_ID
+
+
+T = TypeVar("T", bound=BaseModel)
+
+
+def demo_model_validate(fixture_key: str, model: type[T], *, root_key: str | None = None) -> T:
+    """Load fixture ``fixture_key`` and validate with ``model``.
+
+    If ``root_key`` is set, validate ``payload[root_key]`` instead of the whole dict
+    (e.g. nested list under ``counterparties``).
+    """
+    payload = get_demo_payload(fixture_key)
+    if root_key is not None:
+        payload = payload[root_key]
+    return model.model_validate(payload)
+
+
+def get_demo_dashboard_transactions() -> list[dict[str, Any]]:
+    """Return transaction dicts for dashboard history demo."""
+    blob = get_demo_payload("dashboard_transactions")
+    if not isinstance(blob, dict):
+        raise TypeError("dashboard_transactions fixture must be a JSON object")
+    rows = blob.get("transactions")
+    if not isinstance(rows, list):
+        raise TypeError("dashboard_transactions.transactions must be a list")
+    return rows
