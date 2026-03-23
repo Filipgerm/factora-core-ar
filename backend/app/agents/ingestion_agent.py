@@ -8,8 +8,9 @@ Flow:
     1. **validate** — ensure non-empty payload / file stub reference.
     2. **extract** — call ``LLMClient.chat_completion_json`` with a strict prompt
        for vendor name, line totals, VAT rate, currency.
-    3. **context** — run ``VectorStoreService.similarity_search`` on a condensed
-       text of the invoice so prior human labels inform category suggestions.
+    3. **context** — if a ``vector_store_factory`` was injected, run
+       ``similarity_search`` on a condensed text of the invoice so prior human
+       labels inform category suggestions.
     4. **finalize** — merge JSON + top metadata hits into a single DTO for review UI.
 
 End-to-end customer story:
@@ -21,20 +22,31 @@ End-to-end customer story:
 Architectural notes:
     - Compiled graph is stateless; callers inject ``AsyncSession`` per request.
     - Demo mode short-circuits before any paid LLM call.
+    - Callers that need vector hints pass ``vector_store_factory`` (e.g.
+      ``lambda db, oid: VectorStoreService(db, oid)`` from the service layer).
 """
 from __future__ import annotations
 
 import logging
-from typing import Any, NotRequired, TypedDict
+from typing import Any, Callable, NotRequired, Protocol, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.llm_client import LLMClient
 from app.config import settings
-from app.services.embeddings.vector_store import VectorStoreService
 
 logger = logging.getLogger(__name__)
+
+
+class SimilaritySearchPort(Protocol):
+    async def similarity_search(
+        self, query_text: str, *, k: int = 8
+    ) -> list[dict[str, Any]]:
+        ...
+
+
+VectorStoreFactory = Callable[[AsyncSession, str], SimilaritySearchPort]
 
 
 class IngestionState(TypedDict, total=False):
@@ -49,8 +61,14 @@ class IngestionState(TypedDict, total=False):
 class IngestionAgent:
     """Compiled LangGraph runner for ingestion."""
 
-    def __init__(self) -> None:
-        self._llm = LLMClient()
+    def __init__(
+        self,
+        *,
+        llm: LLMClient | None = None,
+        vector_store_factory: VectorStoreFactory | None = None,
+    ) -> None:
+        self._llm = llm or LLMClient()
+        self._vector_store_factory = vector_store_factory
         self._graph = self._build_graph()
 
     def _build_graph(self):
@@ -89,8 +107,11 @@ class IngestionAgent:
         async def context(state: IngestionState) -> IngestionState:
             if "result" in state:
                 return state
+            factory = self._vector_store_factory
+            if factory is None:
+                return {**state, "neighbors": []}
             db: AsyncSession = state["db"]
-            vs = VectorStoreService(db, state["organization_id"])
+            vs = factory(db, state["organization_id"])
             try:
                 neighbors = await vs.similarity_search(
                     state["raw_text"][:2000],

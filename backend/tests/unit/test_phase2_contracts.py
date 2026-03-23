@@ -14,8 +14,8 @@ from app.db.models.identity import UserRole
 from app.main import app_error_handler
 from app.models.auth import AuthResponse
 from app.models.gemi import GemiDocumentsFetchResponse, GemiSearchResponse
-from app.services.agents.ingestion_agent import IngestionAgent
-from app.services.agents.reconciliation_agent import ReconciliationAgent
+from app.agents.ingestion_agent import IngestionAgent
+from app.agents.reconciliation_agent import ReconciliationAgent
 from app.services.auth_service import _build_auth_response
 from app.services.embeddings.vector_store import _vector_literal
 from app.core.security.jwt import encode_access_token
