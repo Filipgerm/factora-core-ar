@@ -55,8 +55,10 @@ app/controllers/         ← Orchestration: validate input, call services, map t
     ▼
 app/services/            ← Business logic: auth, dashboard metrics, AADE docs, SaltEdge sync
     │
-    ├── app/clients/     ← Thin wrappers around external APIs (Brevo email/SMS, GEMI)
-    └── app/db/          ← SQLAlchemy AsyncSession, ORM models (database_models.py)
+    ├── app/agents/      ← LangGraph flows (invoked from services; no imports from routes/controllers)
+    ├── app/clients/     ← Thin wrappers: email, GEMI, Gmail, LLM, Supabase Storage, etc.
+    ├── packages/        ← Standalone SDKs (AADE, SaltEdge) — must not import from app/
+    └── app/db/          ← SQLAlchemy AsyncSession, ORM models under app/db/models/
 ```
 
 **Key design principles:**
@@ -67,7 +69,7 @@ app/services/            ← Business logic: auth, dashboard metrics, AADE docs,
 - **Dependency injection**: `app/dependencies.py` provides FastAPI `Depends`
   callables for database sessions and services.
 - **Pydantic models**: All request/response contracts live in `app/models/`.
-  ORM objects (SQLAlchemy) live in `app/db/database_models.py`.
+  ORM objects (SQLAlchemy) live in `app/db/models/` (split by domain).
 
 ---
 
@@ -75,51 +77,36 @@ app/services/            ← Business logic: auth, dashboard metrics, AADE docs,
 
 ```
 backend/
+├── alembic.ini                  # Alembic config (run commands from this directory)
+├── alembic/
+│   ├── env.py
+│   └── versions/                # Migration revisions
+├── scripts/
+│   └── parse_pdf_cli.py         # Optional PDF text extraction CLI
+├── tests/
+│   ├── conftest.py              # Shared fixtures (env + mocked AsyncSession)
+│   ├── unit/                    # Fast, mocked unit tests
+│   └── integration/             # Broader stack / contract tests
+├── packages/
+│   ├── aade/                    # myDATA client SDK (api/, models/, xsd/, xml/)
+│   └── saltedge/                # Open Banking client SDK (api/, models/)
 ├── app/
-│   ├── api/
-│   │   └── routes/              # FastAPI routers (one file per domain)
-│   │       ├── dashboard_routes.py
-│   │       ├── file_routes.py
-│   │       ├── gemi_routes.py
-│   │       ├── mydata_routes.py
-│   │       ├── onboarding_routes.py
-│   │       └── saltedge_routes.py
-│   ├── clients/                 # External API wrappers
-│   │   ├── email_client.py      # Brevo transactional email
-│   │   ├── gemi_client.py       # Greek Business Registry (GEMI)
-│   │   └── sms_client.py        # Brevo SMS
-│   ├── controllers/             # Request orchestration (no business logic)
-│   │   ├── dashboard_controller.py
-│   │   ├── file_controller.py
-│   │   ├── gemi_controller.py
-│   │   ├── mydata_controller.py
-│   │   ├── saltedge_controller.py
-│   │   └── user_controller.py
-│   ├── db/
-│   │   ├── database_models.py   # SQLAlchemy ORM models
-│   │   └── postgres.py          # Async engine + session factory
-│   ├── models/                  # Pydantic request/response models
-│   │   ├── financial.py
-│   │   └── user.py
-│   ├── services/                # Business logic
-│   │   ├── dashboard_service.py
-│   │   ├── file_service.py
-│   │   ├── gemi_service.py
-│   │   ├── mydata_service.py
-│   │   ├── notification_service.py
-│   │   ├── saltedge_service.py
-│   │   ├── storage/             # Supabase file storage
-│   │   └── user_service.py      # Auth, sign-up, password management
-│   ├── tests/
-│   │   ├── conftest.py          # Shared fixtures (mocked AsyncSession)
-│   │   └── test_user_service.py
-│   ├── alembic/                 # Database migration scripts
-│   ├── config.py                # Pydantic settings (reads .env)
-│   ├── dependencies.py          # FastAPI Depends callables
-│   └── main.py                  # Application entry point
-├── .env.example                 # Template for required env vars
-├── pyproject.toml               # Dependencies (managed by uv)
-└── ONBOARDING_API.md            # Onboarding flow reference
+│   ├── api/routes/              # FastAPI routers (one file per domain)
+│   ├── agents/                  # LangGraph agents (ingestion, reconciliation, AR collections)
+│   ├── clients/                 # External I/O (email, GEMI, Gmail, LLM, storage, Stripe, …)
+│   ├── controllers/
+│   ├── core/                    # Exceptions, security, demo helpers
+│   ├── db/models/               # SQLAlchemy ORM (identity, banking, files, …)
+│   ├── db/postgres.py           # Async engine + session factory
+│   ├── middleware/
+│   ├── models/                  # Pydantic request/response schemas
+│   ├── services/                # Business logic (includes embeddings/, storage_upload_service)
+│   ├── config.py
+│   ├── dependencies.py
+│   └── main.py
+├── .env.example
+├── pyproject.toml
+└── uv.lock
 ```
 
 ---
@@ -243,19 +230,24 @@ Tests use `pytest-asyncio` in `auto` mode and mock all external dependencies
 are required.
 
 ```bash
-# Run all tests
-uv run --python 3.12 pytest app/tests/ -v
+# Run all tests (from backend/)
+uv run pytest tests/ -v
 
-# Run with coverage report
-uv run --python 3.12 pytest app/tests/ --cov=app --cov-report=term-missing
+# Unit or integration only
+uv run pytest tests/unit/ -v
+uv run pytest tests/integration/ -v
+
+# Coverage
+uv run pytest tests/ --cov=app --cov-report=term-missing
 ```
 
 ### Test layout
 
-| File | Coverage |
+| Path | Role |
 |---|---|
-| `tests/conftest.py` | Shared fixtures: mocked `AsyncSession`, `make_seller` helper |
-| `tests/test_user_service.py` | `UserService`: password hashing, token security, login, logout, change password, sign-up |
+| `tests/conftest.py` | Env defaults + mocked `AsyncSession`, shared fixtures |
+| `tests/unit/` | Domain unit tests (services, agents, clients, controllers) |
+| `tests/integration/` | Integration-style tests (e.g. Stripe flows) |
 
 ---
 
