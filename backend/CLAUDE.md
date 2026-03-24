@@ -193,10 +193,10 @@ The frontend stores tokens as follows. Backend endpoints must honour this contra
 | Access token  | In-memory React context only                  | Never written to localStorage. Invisible to XSS. |
 | Refresh token | `httpOnly` + `Secure` + `SameSite=Lax` cookie | JS cannot read it under any circumstance.        |
 
-**Backend rule**: `/v1/auth/refresh` sets the refresh token via
+**Backend rule**: Login, refresh, and Google auth set the refresh token via
 `response.set_cookie(key="refresh_token", httponly=True, secure=True,
-samesite="lax", path="/v1/auth/refresh")`. Never return the refresh token in the
-JSON response body.
+samesite="lax", path="/v1/auth")` so it is sent to auth endpoints including logout.
+Never return the refresh token in the JSON response body.
 
 **Frontend rule**: `lib/api/client.ts` stores the access token in React context.
 On a `401`, it calls `/v1/auth/refresh` (browser sends the cookie automatically)
