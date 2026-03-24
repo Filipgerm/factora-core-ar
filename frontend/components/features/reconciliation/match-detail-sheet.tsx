@@ -3,11 +3,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sparkles } from "lucide-react";
 
+import { useToast } from "@/hooks/use-toast";
+import { useSubmitAiFeedbackMutation } from "@/lib/hooks/api/use-ai-feedback";
+import { useAuthSession } from "@/lib/hooks/api/use-auth";
+
 import { BankTransactionCell } from "./bank-transaction-cell";
 import { LedgerInvoiceCell } from "./ledger-invoice-cell";
 import { formatReconciliationEUR } from "./reconciliation-money";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -19,9 +31,22 @@ import {
 } from "@/components/ui/sheet";
 import type {
   ReconciliationBookInvoice,
+  ReconciliationInvoiceCategory,
   ReconciliationPendingPair,
 } from "@/lib/views/reconciliation";
+import { isApiError } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+
+const INVOICE_CATEGORIES: ReconciliationInvoiceCategory[] = [
+  "subscription",
+  "services",
+  "travel",
+  "fee",
+  "receivable",
+  "payable",
+  "logistics",
+  "other",
+];
 
 interface MatchDetailSheetProps {
   open: boolean;
@@ -46,6 +71,10 @@ export function MatchDetailSheet({
   onConfirmMatch,
   onRejectMatch,
 }: MatchDetailSheetProps) {
+  const { toast } = useToast();
+  const { data: session } = useAuthSession();
+  const feedbackMut = useSubmitAiFeedbackMutation();
+
   const candidates = useMemo(() => {
     if (!pair) return [];
     const raw = pair.matchCandidates?.length
@@ -59,6 +88,8 @@ export function MatchDetailSheet({
   }, [pair]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [categoryChoice, setCategoryChoice] =
+    useState<ReconciliationInvoiceCategory>("other");
 
   useEffect(() => {
     if (!pair) {
@@ -69,6 +100,7 @@ export function MatchDetailSheet({
       ? new Set<string>()
       : new Set([pair.invoice.id]);
     setSelectedIds(defaults);
+    setCategoryChoice(pair.invoice.invoiceCategory);
   }, [pair]);
 
   const target = pair ? targetReconcileAmount(pair.transaction.amount) : 0;
@@ -83,6 +115,32 @@ export function MatchDetailSheet({
 
   const remaining = cents(target - allocated);
   const balanced = Math.abs(remaining) < 0.005;
+
+  async function handleApproveMatch() {
+    if (!pair) return;
+    const suggested = pair.invoice.invoiceCategory;
+    if (
+      categoryChoice !== suggested &&
+      session?.hasToken &&
+      session.profile?.organization_id
+    ) {
+      try {
+        await feedbackMut.mutateAsync({
+          content_text: `${pair.transaction.rawDescriptor} | ${pair.transaction.merchant}`,
+          suggested_label: suggested,
+          corrected_label: categoryChoice,
+          source: "reconciliation_sheet",
+        });
+      } catch (err) {
+        toast({
+          title: "Could not save learning feedback",
+          description: isApiError(err) ? err.message : "Request failed",
+          variant: "destructive",
+        });
+      }
+    }
+    onConfirmMatch(pair.id);
+  }
 
   const toggle = (id: string) => {
     setSelectedIds((prev) => {
@@ -136,7 +194,7 @@ export function MatchDetailSheet({
                         key={inv.id}
                         className={cn(
                           "flex gap-3 rounded-xl border border-slate-100 bg-slate-50/40 p-3 transition-colors",
-                          checked && "border-teal-200/60 bg-[var(--brand-primary-subtle)]"
+                          checked && "border-teal-200/60 bg-teal-50/50 dark:bg-teal-950/25"
                         )}
                       >
                         <div className="flex shrink-0 items-start pt-0.5">
@@ -218,14 +276,49 @@ export function MatchDetailSheet({
                     {pair.aiReasoning}
                   </p>
                 </div>
+
+                <div className="mt-6 space-y-2">
+                  <Label
+                    htmlFor="invoice-category-override"
+                    className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                  >
+                    Invoice category (override)
+                  </Label>
+                  <Select
+                    value={categoryChoice}
+                    onValueChange={(v) =>
+                      setCategoryChoice(v as ReconciliationInvoiceCategory)
+                    }
+                  >
+                    <SelectTrigger
+                      id="invoice-category-override"
+                      className="w-full transition-all duration-200"
+                    >
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INVOICE_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c} className="capitalize">
+                          {c.replace(/_/g, " ")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {categoryChoice !== pair.invoice.invoiceCategory ? (
+                    <p className="flex items-center gap-1.5 text-xs text-violet-700 dark:text-violet-300">
+                      <Sparkles className="size-3.5 shrink-0" aria-hidden />
+                      Your correction will train future suggestions for this org.
+                    </p>
+                  ) : null}
+                </div>
               </div>
 
               <SheetFooter className="shrink-0 gap-2 border-t border-slate-100 bg-white/90 px-6 py-4 backdrop-blur-md">
                 <Button
                   type="button"
-                  className="w-full rounded-xl shadow-sm"
-                  disabled={!balanced}
-                  onClick={() => onConfirmMatch(pair.id)}
+                  className="w-full rounded-xl shadow-sm transition-all duration-200"
+                  disabled={!balanced || feedbackMut.isPending}
+                  onClick={() => void handleApproveMatch()}
                 >
                   Approve match
                 </Button>
