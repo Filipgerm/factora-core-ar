@@ -309,7 +309,10 @@ class OrganizationService:
             from app.config import settings as _settings
             from app.clients.gemi_client import GemiApiClient
 
-            client = GemiApiClient(api_key=_settings.GEMH_API_KEY)
+            client = GemiApiClient(
+                api_key=_settings.GEMH_API_KEY,
+                demo_mode=_settings.demo_mode,
+            )
             data = await client.search_companies_by_afm(vat_number)
             results = data.get("searchResults", [])
             if results:

@@ -38,7 +38,10 @@ class GemiService:
     ) -> None:
         self.db = db
         self.organization_id = organization_id
-        self.client = client or GemiApiClient(api_key=settings.GEMH_API_KEY)
+        self.client = client or GemiApiClient(
+            api_key=settings.GEMH_API_KEY,
+            demo_mode=settings.demo_mode,
+        )
 
     def _digits(self, s: str) -> str:
         return re.sub(r"\D", "", s or "")

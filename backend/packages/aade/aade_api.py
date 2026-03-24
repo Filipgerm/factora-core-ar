@@ -1,3 +1,10 @@
+"""AADE myDATA API facade (grouped endpoint clients).
+
+Demo mode: ``DocsAPI`` short-circuits RequestDocs / RequestTransmittedDocs using
+fixtures from ``app/core/demo_fixtures/`` when ``AadeClient.settings.demo_mode``
+is true. Other endpoints still use ``packages/aade/http.py`` (add demo handling
+there if a code path must not hit production URLs in demo).
+"""
 from __future__ import annotations
 from typing import Dict, Any
 from .http import AadeClient

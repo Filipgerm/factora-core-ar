@@ -1,24 +1,35 @@
-import os
 from typing import Any, Dict, List, Optional, Tuple
 import httpx
 from fastapi import HTTPException
 
+from app.core.demo import get_demo_payload
+
 API_BASE = "https://opendata-api.businessportal.gr/api/opendata/v1"
+
+# Minimal valid PDF for demo document downloads (no external HTTP).
+_DEMO_PDF_BYTES = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+
 
 class GemiApiClient:
     """
     Thin wrapper over GEMI OpenData API.
     Reuse this for *all* endpoints to avoid duplication.
+    In ``demo_mode``, returns fixtures from ``app/core/demo_fixtures/`` and never
+    calls the real GEMI HTTP API.
     """
+
     def __init__(
         self,
         api_key: str,
         client: Optional[httpx.AsyncClient] = None,
         timeout: float = 70.0,
+        *,
+        demo_mode: bool = False,
     ):
         self.api_key = api_key
         self._external_client = client  # if provided, we won't close it
         self._timeout = timeout
+        self._demo_mode = demo_mode
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -35,6 +46,15 @@ class GemiApiClient:
         headers: Optional[Dict[str, str]] = None,
         stream: bool = False,
     ) -> httpx.Response:
+        if self._demo_mode and method == "GET" and path.rstrip("/") == "/companies":
+            p = params or {}
+            if "afm" in p or "arGemi" in p:
+                return httpx.Response(
+                    200, json=get_demo_payload("gemi_search_companies")
+                )
+        if self._demo_mode and method == "GET" and "/documents" in path:
+            return httpx.Response(200, json=get_demo_payload("gemi_company_documents"))
+
         url = f"{API_BASE.rstrip('/')}/{path.lstrip('/')}"
         h = self._headers()
         if headers:
@@ -95,6 +115,9 @@ class GemiApiClient:
         Note: these downloads also require `api_key` header, so we reuse _request by path-mapping.
         Since url is absolute, call httpx directly with headers to preserve API key.
         """
+        if self._demo_mode:
+            return httpx.Response(200, content=_DEMO_PDF_BYTES)
+
         if self._external_client:
             client = self._external_client
             close_after = False

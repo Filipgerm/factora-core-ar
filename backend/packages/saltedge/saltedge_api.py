@@ -1,3 +1,9 @@
+"""Salt Edge v6 API facade (grouped endpoint clients).
+
+Demo mode: all HTTP is handled in ``SaltEdgeClient`` (``packages/saltedge/http.py``)
+when ``settings.demo_mode`` is true — synthetic JSON from
+``app/core/demo_fixtures/`` with no real requests.
+"""
 from __future__ import annotations
 from .http import SaltEdgeClient
 from packages.saltedge.api.connections import ConnectionsAPI

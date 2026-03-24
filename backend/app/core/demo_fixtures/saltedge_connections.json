@@ -1,0 +1,22 @@
+{
+  "_comment": "Salt Edge connections list for demo — matches demo-connection-001 in saltedge_accounts",
+  "data": [
+    {
+      "id": "demo-connection-001",
+      "customer_id": "demo-customer-se-001",
+      "customer_identifier": "Factora Demo Tenant — Primary Banking",
+      "provider_code": "demo_bank_gr",
+      "provider_name": "Demo Bank Greece",
+      "country_code": "GR",
+      "status": "active",
+      "automatic_refresh": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-03-01T08:30:00Z",
+      "last_consent_id": "demo-consent-001"
+    }
+  ],
+  "meta": {
+    "next_id": null,
+    "next_page": null
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "_comment": "Wire-shape GEMI OpenData GET /companies?afm= response for demo",
+  "searchResults": [
+    {
+      "arGemi": "000000001",
+      "coNameEl": "DEMO ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ",
+      "coName": "DEMO AE"
+    }
+  ]
+}
