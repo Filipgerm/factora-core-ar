@@ -7,8 +7,6 @@ from typing import Any, List
 
 from fastapi import HTTPException
 
-from app.config import settings
-from app.core.demo import get_demo_payload
 from app.core.exceptions import AppError
 from app.db.models.aade import AadeInvoiceModel
 from app.db.models.banking import Transaction
@@ -126,8 +124,6 @@ class DashboardController:
         """Return filtered, paginated transaction history for a customer."""
         try:
             transactions = await self.dashboard_service.get_transaction_history(request)
-            if transactions and isinstance(transactions[0], dict):
-                return [TransactionsResponse.model_validate(t) for t in transactions]
             return [self._map_transaction_to_response(tx) for tx in transactions]
         except (HTTPException, AppError):
             raise
@@ -149,50 +145,11 @@ class DashboardController:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @staticmethod
-    def _filter_demo_aade_rows(
-        rows: list[dict[str, Any]], request: AadeDocumentsRequest
-    ) -> list[dict[str, Any]]:
-        filtered: list[dict[str, Any]] = []
-        for r in rows:
-            raw_date = r.get("issue_date")
-            inv_date = (
-                raw_date
-                if isinstance(raw_date, date)
-                else date.fromisoformat(str(raw_date))
-            )
-            if request.date_from and inv_date < request.date_from:
-                continue
-            if request.date_to and inv_date > request.date_to:
-                continue
-            if request.invoice_type and r.get("invoice_type") != request.invoice_type:
-                continue
-            if request.issuer_vat and r.get("issuer_vat") != request.issuer_vat:
-                continue
-            if request.counterpart_vat and r.get("counterpart_vat") != request.counterpart_vat:
-                continue
-            filtered.append(r)
-        return filtered
-
     async def get_aade_documents(
         self, request: AadeDocumentsRequest
     ) -> AadeDocumentsResponse:
         """Return paginated AADE invoices for an organization with optional filters."""
         try:
-            if settings.demo_mode:
-                blob = get_demo_payload("dashboard_aade_documents")
-                all_rows = blob["invoices"]
-                filtered = self._filter_demo_aade_rows(all_rows, request)
-                total = len(filtered)
-                page = filtered[request.offset : request.offset + request.limit]
-                invoice_items = [AadeInvoiceItem.model_validate(r) for r in page]
-                return AadeDocumentsResponse(
-                    invoices=invoice_items,
-                    total=total,
-                    limit=request.limit,
-                    offset=request.offset,
-                )
-
             invoices, total = await self.dashboard_service.get_aade_documents(request)
             invoice_items = [self._map_invoice_to_item(inv) for inv in invoices]
 
@@ -210,11 +167,6 @@ class DashboardController:
     async def get_aade_summary(self) -> AadeSummaryResponse:
         """Return aggregated AADE invoice statistics for an organization."""
         try:
-            if settings.demo_mode:
-                return AadeSummaryResponse.model_validate(
-                    get_demo_payload("dashboard_aade_summary")
-                )
-
             (
                 net_sum,
                 vat_sum,

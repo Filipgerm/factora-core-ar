@@ -1,13 +1,12 @@
 from __future__ import annotations
 from typing import Iterator, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from datetime import datetime, date, timezone
 import asyncio
 from functools import partial
 
-from app.config import Settings, settings
-from app.core.demo import demo_fixture, get_demo_payload
+from app.config import Settings
 from app.core.exceptions import NotFoundError
 from packages.saltedge import SaltEdgeClient
 from packages.saltedge.models.accounts import (
@@ -60,7 +59,6 @@ class SaltEdgeService:
         self._api: API = API(self._client)
 
     # ---------- Accounts ----------
-    @demo_fixture("saltedge_accounts")
     async def list_accounts(
         self,
         *,
@@ -214,7 +212,6 @@ class SaltEdgeService:
 
         return response
 
-    @demo_fixture("saltedge_customers")
     async def list_customers(
         self,
         *,
@@ -232,18 +229,6 @@ class SaltEdgeService:
         return response
 
     async def get_customer(self, *, customer_id: str) -> CustomerResponse:
-        if settings.demo_mode:
-            listed = CustomersResponse.model_validate(
-                get_demo_payload("saltedge_customers")
-            )
-            for c in listed.data:
-                if c.customer_id == customer_id:
-                    return CustomerResponse(data=c)
-            raise NotFoundError(
-                "Customer not found or access denied.",
-                code="resource.not_found",
-            )
-
         # Fetch from SaltEdge API
         response = await self._api.customers.get(customer_id=customer_id)
 
@@ -270,13 +255,17 @@ class SaltEdgeService:
         existing = existing_result.scalar_one_or_none()
 
         if existing:
-            existing.deleted_at = datetime.now(timezone.utc)
+            await self.db.execute(
+                delete(CustomerModel).where(
+                    CustomerModel.id == customer_id,
+                    CustomerModel.organization_id == self.organization_id,
+                )
+            )
             await self.db.commit()
 
         return response
 
     # ---------- Transactions ----------
-    @demo_fixture("saltedge_transactions")
     async def list_transactions(
         self,
         *,
@@ -404,7 +393,12 @@ class SaltEdgeService:
             db: Async database session.
             customer_data: SaltEdge SDK customer model instance to persist.
         """
-        customer_id = str(customer_data.id)  # Use string directly
+        raw = getattr(customer_data, "customer_id", None) or getattr(
+            customer_data, "id", None
+        )
+        if raw is None:
+            return
+        customer_id = str(raw)
 
         # 1. 🔒 SECURE LOOKUP: Filter by both ID and Organization
         query = select(CustomerModel).where(
@@ -465,11 +459,13 @@ class SaltEdgeService:
             ),
         }
 
-        # SECURE: Filter by organization_id
+        # SECURE: Scope via customer.organization_id (connections have no org column)
         existing_result = await self.db.execute(
-            select(ConnectionModel).where(
+            select(ConnectionModel)
+            .join(CustomerModel, CustomerModel.id == ConnectionModel.customer_id)
+            .where(
                 ConnectionModel.id == connection_id,
-                ConnectionModel.organization_id == self.organization_id,
+                CustomerModel.organization_id == self.organization_id,
             )
         )
         existing = existing_result.scalar_one_or_none()
@@ -481,7 +477,6 @@ class SaltEdgeService:
             self.db.add(
                 ConnectionModel(
                     id=connection_id,
-                    organization_id=self.organization_id,  # SECURE: Insert tenant ID
                     **fields,
                 )
             )
@@ -499,9 +494,13 @@ class SaltEdgeService:
 
         if connection_id:
             # SECURE: Also ensure the parent connection belongs to this organization
-            connection_query = select(ConnectionModel.id).where(
-                ConnectionModel.external_id == connection_id,
-                ConnectionModel.organization_id == self.organization_id,
+            connection_query = (
+                select(ConnectionModel.id)
+                .join(CustomerModel, CustomerModel.id == ConnectionModel.customer_id)
+                .where(
+                    ConnectionModel.external_id == connection_id,
+                    CustomerModel.organization_id == self.organization_id,
+                )
             )
             connection_result = await self.db.execute(connection_query)
             internal_connection_id = connection_result.scalar_one_or_none()
@@ -601,10 +600,14 @@ class SaltEdgeService:
         external_connection_id = consent_data.connection_id
 
         if external_connection_id:
-            # SECURE
-            connection_query = select(ConnectionModel.id).where(
-                ConnectionModel.external_id == external_connection_id,
-                ConnectionModel.organization_id == self.organization_id,
+            # SECURE: resolve connection via customer.organization_id
+            connection_query = (
+                select(ConnectionModel.id)
+                .join(CustomerModel, CustomerModel.id == ConnectionModel.customer_id)
+                .where(
+                    ConnectionModel.external_id == external_connection_id,
+                    CustomerModel.organization_id == self.organization_id,
+                )
             )
             connection_result = await self.db.execute(connection_query)
             internal_connection_id = connection_result.scalar_one_or_none()
@@ -614,11 +617,14 @@ class SaltEdgeService:
         else:
             internal_connection_id = None
 
-        # SECURE
+        # SECURE: consent rows are scoped through connection → customer
         existing_result = await self.db.execute(
-            select(ConsentModel).where(
+            select(ConsentModel)
+            .join(ConnectionModel, ConnectionModel.id == ConsentModel.connection_id)
+            .join(CustomerModel, CustomerModel.id == ConnectionModel.customer_id)
+            .where(
                 ConsentModel.id == consent_id,
-                ConsentModel.organization_id == self.organization_id,
+                CustomerModel.organization_id == self.organization_id,
             )
         )
         existing = existing_result.scalar_one_or_none()
@@ -640,7 +646,6 @@ class SaltEdgeService:
         else:
             consent = ConsentModel(
                 id=consent_id,
-                organization_id=self.organization_id,  # SECURE
                 external_id=consent_data.id,
                 external_customer_id=consent_data.customer_id,
                 external_connection_id=external_connection_id,

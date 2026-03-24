@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gemi_client import GemiApiClient
 from app.config import settings
-from app.core.demo import demo_fixture
 from app.core.exceptions import GemiError, NotFoundError, ValidationError
 from app.core.filename_content_disposition import extract_filename
 from app.services.storage_upload_service import upload_file_to_storage
@@ -54,7 +53,6 @@ class GemiService:
         check = total % 11 % 10
         return check == int(afm[8])
 
-    @demo_fixture("gemi_company")
     async def fetch_and_store_company_documents(self, afm: str) -> Dict[str, Any]:
         # 1) Search by AFM
         data = await self.client.search_companies_by_afm(afm)

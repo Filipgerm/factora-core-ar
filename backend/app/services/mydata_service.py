@@ -5,9 +5,7 @@ import logging
 from packages.aade.http import AadeClient
 from packages.aade.aade_api import API as MyDataAPI
 from app.config import Settings
-from app.core.demo import demo_fixture
 from app.core.exceptions import ValidationError
-from packages.aade import AadeClient
 from packages.aade.models.docs import DocsQuery, RequestedDocsResponse
 from packages.aade.models.my_book_info import (
     BookInfoQuery,
@@ -75,7 +73,6 @@ class MyDataService:
     # -----------------------------
     # RequestDocs / RequestTransmittedDocs
     # -----------------------------
-    @demo_fixture("aade_documents")
     async def get_docs(
         self, q: DocsQuery, transmitted: bool = False
     ) -> RequestedDocsResponse:

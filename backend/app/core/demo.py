@@ -1,26 +1,19 @@
-"""Demo-mode fixture injection for Factora.
+"""Demo-mode fixtures for Factora.
 
-How it works (following the Stripe / Plaid pattern):
-  - When ``ENVIRONMENT=demo`` in the settings, all external API calls
-    (AADE/myDATA, SaltEdge, GEMI, Brevo) return pre-canned JSON fixtures
-    instead of making real HTTP requests.
-  - Fixture data is loaded from ``core/demo_fixtures/*.json`` at import time
-    so there is zero latency penalty.
-  - A middleware adds the ``X-Demo-Mode: true`` response header so the frontend
-    can display a "Demo Mode" banner and disable destructive actions.
+When ``ENVIRONMENT=demo`` (``settings.demo_mode``):
 
-Usage::
+  - **Business data** (dashboard, counterparties, banking rows, etc.) is read from
+    PostgreSQL. Populate demo databases with ``scripts/seed_demo_db.py``.
+  - **External HTTP clients** (AADE/myDATA, SaltEdge, GEMI) return pre-canned JSON
+    from ``core/demo_fixtures/*.json`` instead of calling the real APIs.
+  - **Agents** may still use ``@demo_fixture`` so ``ainvoke`` returns static JSON
+    from ``core/demo_fixtures/agents/`` without LLM calls (see ``app/agents/CLAUDE.md``).
+  - **Notifications** (Brevo) are suppressed in ``NotificationService`` when demo.
 
-    from app.core.demo import demo_fixture
+Fixture files are loaded from ``core/demo_fixtures/*.json`` at import time.
 
-    class MyDataService:
-        @demo_fixture("aade_documents")
-        async def fetch_documents(self, ...):
-            # This only runs when ENVIRONMENT != "demo"
-            return await real_aade_client.get_docs(...)
-
-The ``fixture_key`` must match a filename inside ``core/demo_fixtures/``
-(without the ``.json`` extension).
+``fixture_key`` for ``get_demo_payload`` / ``demo_fixture`` must match a filename
+stem under ``core/demo_fixtures/`` (without ``.json``).
 """
 from __future__ import annotations
 
