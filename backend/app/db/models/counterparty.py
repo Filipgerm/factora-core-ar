@@ -18,6 +18,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -92,4 +93,9 @@ class Counterparty(Base):
         Index("ix_counterparties_organization_id", "organization_id"),
         Index("ix_counterparties_vat_number", "vat_number"),
         Index("ix_counterparties_deleted_at", "deleted_at"),
+        Index(
+            "ix_counterparties_org_active",
+            "organization_id",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )

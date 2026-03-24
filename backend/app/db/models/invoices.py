@@ -90,4 +90,9 @@ class Invoice(Base):
             "source",
             "external_id",
         ),
+        Index(
+            "ix_invoices_org_active",
+            "organization_id",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
