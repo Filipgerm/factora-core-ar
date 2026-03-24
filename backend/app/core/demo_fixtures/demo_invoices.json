@@ -1,0 +1,29 @@
+{
+  "_comment": "Unified AR invoices for demo org — counterparty_id must exist in organization_counterparties",
+  "invoices": [
+    {
+      "id": "f1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b01",
+      "counterparty_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c01",
+      "counterparty_display_name": "Atlas Cloud Services IKE",
+      "amount": "1240.00",
+      "currency": "EUR",
+      "issue_date": "2025-01-10",
+      "due_date": "2025-02-10",
+      "status": "sent",
+      "source": "manual",
+      "external_id": "demo-inv-001"
+    },
+    {
+      "id": "f2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c02",
+      "counterparty_id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d02",
+      "counterparty_display_name": "Nordic Parts AB",
+      "amount": "875.50",
+      "currency": "EUR",
+      "issue_date": "2025-01-22",
+      "due_date": null,
+      "status": "draft",
+      "source": "aade",
+      "external_id": "demo-inv-002"
+    }
+  ]
+}
