@@ -2,7 +2,7 @@ import { differenceInCalendarDays, parseISO } from "date-fns";
 
 import type { ArInvoicePipeline, ArInvoiceRow } from "@/lib/views/ar";
 import type { AadeDocumentsResponse } from "@/lib/schemas/dashboard";
-import type { ManualInvoiceResponse } from "@/lib/schemas/invoices";
+import type { InvoiceResponse } from "@/lib/schemas/invoices";
 
 function num(
   v: number | string | null | undefined
@@ -56,21 +56,36 @@ export function aadeDocumentsToArInvoiceRows(
   });
 }
 
-/** Map persisted manual invoices to AR table rows (not AADE). */
+function pipelineFromUnifiedStatus(status: string): ArInvoicePipeline {
+  const s = status.toLowerCase();
+  if (s === "draft") return "draft";
+  if (s === "paid") return "paid";
+  if (s === "overdue") return "overdue";
+  if (s === "partially_paid" || s === "partial") return "partially_paid";
+  // TODO: Phase 3 Backend — align invoice status enum with AR pipeline
+  return "sent";
+}
+
+/** Map unified ``invoices`` rows (e.g. source=manual) into AR table rows. */
 export function manualInvoicesToArInvoiceRows(
-  items: ManualInvoiceResponse[]
+  items: InvoiceResponse[]
 ): ArInvoiceRow[] {
   return items.map((inv) => ({
-    id: `manual-${inv.id}`,
-    invoiceNumber: "Manual",
-    customerName: inv.customer_name,
-    customerTaxLabel: "Manual entry · not synced to myDATA",
+    id: `inv-${inv.id}`,
+    invoiceNumber:
+      inv.source === "manual"
+        ? "Manual"
+        : inv.source === "aade"
+          ? "AADE"
+          : inv.source.toUpperCase(),
+    customerName: inv.counterparty_display_name ?? "—",
+    customerTaxLabel: `${inv.source} · ${inv.status}`,
     amount: Number(inv.amount),
-    dueDate: null,
+    dueDate: inv.due_date,
     issueDate: inv.issue_date,
-    pipeline: "draft",
-    mydataStatus: "pending",
-    mydataMark: null,
+    pipeline: pipelineFromUnifiedStatus(inv.status),
+    mydataStatus: inv.source === "aade" ? "pending" : "pending",
+    mydataMark: inv.external_id,
     paidAt: null,
   }));
 }

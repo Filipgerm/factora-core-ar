@@ -83,6 +83,7 @@ backend/
     │       ├── counterparty.py  ← Counterparty, CounterpartyType
     │       ├── banking.py       ← CustomerModel, ConnectionModel, BankAccountModel, Transaction
     │       ├── aade.py          ← AadeDocumentModel, AadeInvoiceModel
+    │       ├── invoices.py      ← Invoice, InvoiceSource (unified manual / AADE / OCR / CSV)
     │       ├── files.py         ← Document (file metadata)
     │       ├── embeddings.py    ← Vector embedding records
     │       ├── alerts.py        ← Alert, AlertSeverity
@@ -118,6 +119,13 @@ When adding a new domain (e.g., `Invoices`), update `dependencies.py` in this ex
    `InvSvc = Annotated[InvoiceService, Depends(get_invoice_service)]`
    `InvCtrl = Annotated[InvoiceController, Depends(get_invoice_controller)]`
 4. Routers import the `Ctrl` alias and use it as their sole business-logic dependency.
+
+**Invoices vs dashboard:** Persisted AR/AP-style invoices live in ``InvoiceService`` and the
+unified ``invoices`` table (``source`` + ``external_id`` for idempotent ingest from AADE,
+OCR, CSV, or manual UI). ``DashboardService`` stays a **read aggregator** for KPIs,
+SaltEdge transactions, and **AADE document snapshots**—not the system of record for
+invoice rows. Keeping invoice writes out of the dashboard service avoids a god-object
+service and matches how reconciliation and future agents will reference invoice IDs.
 
 ### Module Documentation Standards
 

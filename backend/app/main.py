@@ -33,6 +33,7 @@ from app.api.routes.ai_routes import router as ai_router
 from app.api.routes.auth_routes import router as auth_router
 from app.api.routes.dashboard_routes import router as dashboard_router
 from app.api.routes.file_routes import router as file_router
+from app.api.routes.invoice_routes import router as invoice_router
 from app.api.routes.gemi_routes import router as companies_router
 from app.api.routes.mydata_routes import router as aade_router
 from app.api.routes.organization_routes import router as organization_router
@@ -187,6 +188,7 @@ app.include_router(organization_router, prefix=f"{_V1}/organization", tags=["Org
 app.include_router(organizations_router, prefix=f"{_V1}/organizations", tags=["Organizations"])
 app.include_router(companies_router, prefix=f"{_V1}/companies", tags=["External APIs"])
 app.include_router(file_router, prefix=f"{_V1}/files", tags=["File Management"])
+app.include_router(invoice_router, prefix=f"{_V1}/invoices", tags=["Invoices"])
 app.include_router(saltedge_router, prefix=f"{_V1}/saltedge", tags=["SaltEdge"])
 app.include_router(aade_router, prefix=f"{_V1}/aade", tags=["AADE"])
 app.include_router(dashboard_router, prefix=f"{_V1}/dashboard", tags=["Dashboard"])

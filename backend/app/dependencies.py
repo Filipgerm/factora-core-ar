@@ -41,6 +41,7 @@ from app.services.gemi_service import GemiService
 from app.services.mydata_service import MyDataService
 from app.services.ai_service import AIService
 from app.services.file_service import FileService
+from app.services.invoice_service import InvoiceService
 from app.services.stripe_sync_service import StripeSyncService
 from app.services.stripe_webhook_service import StripeWebhookService
 from app.controllers.membership_controller import MembershipController
@@ -52,6 +53,7 @@ from app.controllers.gemi_controller import GemiController
 from app.controllers.mydata_controller import MyDataController
 from app.controllers.ai_controller import AIController
 from app.controllers.file_controller import FileController
+from app.controllers.invoice_controller import InvoiceController
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -367,6 +369,27 @@ def get_ai_controller(
 
 FileCtrl = Annotated[FileController, Depends(get_file_controller)]
 AICtrl = Annotated[AIController, Depends(get_ai_controller)]
+
+
+# ---------------------------------------------------------------------------
+# Invoices (unified manual / AADE / OCR / CSV)
+# ---------------------------------------------------------------------------
+
+
+def get_invoice_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+) -> InvoiceService:
+    return InvoiceService(db, org_id)
+
+
+def get_invoice_controller(
+    service: Annotated[InvoiceService, Depends(get_invoice_service)],
+) -> InvoiceController:
+    return InvoiceController(service)
+
+
+InvoiceCtrl = Annotated[InvoiceController, Depends(get_invoice_controller)]
 
 
 # ---------------------------------------------------------------------------

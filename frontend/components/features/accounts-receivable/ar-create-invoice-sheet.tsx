@@ -23,9 +23,9 @@ import {
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { isApiError } from "@/lib/api/types";
-import { useCreateManualInvoiceMutation } from "@/lib/hooks/api/use-invoices";
+import { useCreateInvoiceMutation } from "@/lib/hooks/api/use-invoices";
 import {
-  manualInvoiceCreateFromSheet,
+  invoiceCreateFromSheet,
   manualInvoiceSheetFormSchema,
   type ManualInvoiceSheetFormValues,
 } from "@/lib/schemas/invoices";
@@ -40,7 +40,7 @@ export function ArCreateInvoiceSheet({
   onOpenChange,
 }: ArCreateInvoiceSheetProps) {
   const { toast } = useToast();
-  const createMut = useCreateManualInvoiceMutation();
+  const createMut = useCreateInvoiceMutation();
 
   const form = useForm<ManualInvoiceSheetFormValues>({
     resolver: zodResolver(manualInvoiceSheetFormSchema),
@@ -87,12 +87,12 @@ export function ArCreateInvoiceSheet({
           <form
             className="mt-6 flex flex-1 flex-col gap-5 px-1"
             onSubmit={form.handleSubmit((values) => {
-              const body = manualInvoiceCreateFromSheet(values);
+              const body = invoiceCreateFromSheet(values);
               createMut.mutate(body, {
                 onSuccess: () => {
                   toast({
                     title: "Invoice saved",
-                    description: `${body.customer_name} · ${body.amount} ${body.currency}`,
+                    description: `${body.counterparty_display_name ?? values.customer_name} · ${body.amount} ${body.currency}`,
                   });
                   resetDefaults();
                   onOpenChange(false);

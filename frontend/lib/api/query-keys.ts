@@ -51,6 +51,7 @@ export const queryKeys = {
   },
   invoices: {
     all: ["invoices"] as const,
-    manual: () => [...queryKeys.invoices.all, "manual"] as const,
+    list: (params?: { source?: string }) =>
+      [...queryKeys.invoices.all, "list", params ?? {}] as const,
   },
 } as const;

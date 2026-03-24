@@ -99,6 +99,7 @@ ORM models live in `app/db/models/` split by domain:
 - `counterparty.py` → `Counterparty`, `CounterpartyType`
 - `banking.py` → `CustomerModel`, `ConnectionModel`, `BankAccountModel`, `Transaction`
 - `aade.py` → `AadeDocumentModel`, `AadeInvoiceModel`
+- `invoices.py` → `Invoice`, `InvoiceSource` (unified manual / AADE / OCR / CSV)
 - `alerts.py` → `Alert`, `AlertSeverity`
 
 `app/db/database_models.py` has been removed. Never recreate it.
