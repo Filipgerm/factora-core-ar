@@ -280,9 +280,9 @@ When `requires_human_review is True`, the calling service must:
 - **Prompt templates**: always live in `prompts.py`. Inline f-strings for prompts inside `nodes.py` are forbidden.
 - **Async**: all graph nodes must be `async def`. Use `graph.ainvoke()`, never `graph.invoke()` in FastAPI workers.
 
-### Demo Mode
+### Demo Mode (agents)
 
-Every agent `ainvoke` call in service methods must be decorated with `@demo_fixture(...)` to return static JSON fixtures when `ENVIRONMENT=demo`. Add fixture files under `app/core/demo_fixtures/agents/`.
+Agent graphs may use `@demo_fixture(...)` on `ainvoke` paths so `ENVIRONMENT=demo` returns static JSON from `app/core/demo_fixtures/agents/` without LLM calls. See `app/agents/CLAUDE.md`.
 
 </agents_architecture>
 
@@ -491,22 +491,13 @@ All environment variables are documented in `backend/.env.example`.
 
 When demo mode is active:
 
-- External API calls (AADE, SaltEdge, GEMI) return static JSON fixtures from `app/core/demo_fixtures/`.
-- Agent `ainvoke` calls return static JSON fixtures from `app/core/demo_fixtures/agents/`.
-- Notification service (Brevo email/SMS) logs messages instead of dispatching.
+- **Business data** is read from PostgreSQL. Populate the canonical demo tenant with `backend/scripts/seed_demo_db.py` (requires `ENVIRONMENT=demo` or `ALLOW_DEMO_SEED=1` on disposable databases only).
+- **External HTTP only** — fixtures replace real calls for AADE RequestDocs / RequestTransmittedDocs (`packages/aade/api/docs.py`), Salt Edge (`packages/saltedge/http.py`), and GEMI (`app/clients/gemi_client.py`). JSON lives under `app/core/demo_fixtures/`. Do not short-circuit internal services or controllers with demo fixtures for domain data.
+- **Agents** may use `@demo_fixture` and `app/core/demo_fixtures/agents/` per `app/agents/CLAUDE.md`.
+- **Notification service** (Brevo email/SMS) logs messages instead of dispatching.
 - Every HTTP response carries an `X-Demo-Mode: true` header (via `DemoModeMiddleware`).
 
-To mock a service function for demo mode, apply the decorator:
-
-```python
-from app.core.demo import demo_fixture
-
-@demo_fixture("fixture_key")   # matches a key in demo_fixtures/*.json
-async def my_external_call(...):
-    ...  # real implementation runs only in production/development
-```
-
-Fixture keys must match filenames in `app/core/demo_fixtures/` (without `.json`). If you add a new external integration, add a corresponding fixture file AND decorate the relevant service method.
+Fixture keys for `get_demo_payload` / `@demo_fixture` match filenames in `app/core/demo_fixtures/` (without `.json`). New third-party APIs should use a thin client with demo-mode interception and a matching JSON fixture — not service-layer decorators for DB-backed reads.
 
 </environment_config>
 

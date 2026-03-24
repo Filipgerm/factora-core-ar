@@ -374,20 +374,13 @@ Computed on `settings`: `demo_mode`, `is_production`, `is_development` (derived 
 
 `settings.demo_mode` is `True` when `ENVIRONMENT=demo`.
 
-- External API calls (AADE, SaltEdge, GEMI) → static JSON from `core/demo_fixtures/`
-- Agent `ainvoke` calls → static JSON from `core/demo_fixtures/agents/`
+- **Domain data** → PostgreSQL; seed with `scripts/seed_demo_db.py` (`ENVIRONMENT=demo` or `ALLOW_DEMO_SEED=1`).
+- **AADE / SaltEdge / GEMI HTTP** → static JSON from `core/demo_fixtures/` inside the respective clients (`packages/aade/api/docs.py`, `packages/saltedge/http.py`, `app/clients/gemi_client.py`).
+- **Agents** → optional `@demo_fixture` + `core/demo_fixtures/agents/`
 - Brevo email/SMS → logged, not dispatched
 - Every response carries `X-Demo-Mode: true` header
 
-Decorate any service method that calls an external service:
-
-```python
-from app.core.demo import demo_fixture
-
-@demo_fixture("fixture_key")   # matches filename in demo_fixtures/ without .json
-async def my_external_call(...):
-    ...  # runs only in production / development
-```
+Do not use `@demo_fixture` on internal services for dashboard, counterparties, or other DB-backed reads — use a seeded database instead.
 
 </environment_config>
 

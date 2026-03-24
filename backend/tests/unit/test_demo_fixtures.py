@@ -1,7 +1,7 @@
 """Validate demo JSON fixtures against Pydantic models used by API responses."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
@@ -14,7 +14,6 @@ from app.models.dashboard import (
     AadeInvoiceItem,
     AadeSummaryResponse,
     DashboardMetricsResponse,
-    TransactionsRequest,
     TransactionsResponse,
 )
 from app.models.organization import CounterpartyResponse
@@ -66,31 +65,35 @@ def test_saltedge_customers_fixture() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_pl_metrics_demo_rejects_unknown_customer() -> None:
-    with patch("app.services.dashboard_service.settings") as s:
-        s.demo_mode = True
-        svc = DashboardService(AsyncMock(), "00000000-0000-0000-0000-000000000001")
-        from app.models.dashboard import DashboardMetricsRequest
+async def test_dashboard_pl_metrics_rejects_unknown_customer() -> None:
+    from app.models.dashboard import DashboardMetricsRequest
 
-        with pytest.raises(NotFoundError):
-            await svc.get_dashboard_pl_metrics(
-                DashboardMetricsRequest(customer_id="not-a-demo-customer")
-            )
+    db = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    db.execute.return_value = result
+    svc = DashboardService(db, "00000000-0000-0000-0000-000000000001")
+
+    with pytest.raises(NotFoundError):
+        await svc.get_dashboard_pl_metrics(
+            DashboardMetricsRequest(customer_id="not-a-demo-customer")
+        )
 
 
 @pytest.mark.asyncio
-async def test_saltedge_get_customer_demo_unknown_raises() -> None:
+async def test_saltedge_get_customer_demo_unknown_raises_api_error() -> None:
+    from packages.saltedge.errors import ApiError
+
     app_settings = MagicMock()
+    app_settings.demo_mode = True
     app_settings.SALTEDGE_APP_ID = "test-app"
     app_settings.SALTEDGE_SECRET = "test-secret"
     app_settings.SALTEDGE_BASE_URL = "https://www.saltedge.com/api/v6"
 
-    with patch("app.services.saltedge_service.settings") as s:
-        s.demo_mode = True
-        svc = SaltEdgeService(
-            AsyncMock(),
-            app_settings,
-            "00000000-0000-0000-0000-000000000001",
-        )
-        with pytest.raises(NotFoundError):
-            await svc.get_customer(customer_id="no-such-demo-customer")
+    svc = SaltEdgeService(
+        AsyncMock(),
+        app_settings,
+        "00000000-0000-0000-0000-000000000001",
+    )
+    with pytest.raises(ApiError):
+        await svc.get_customer(customer_id="no-such-demo-customer")
