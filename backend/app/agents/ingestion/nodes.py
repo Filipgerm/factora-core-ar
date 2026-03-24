@@ -26,7 +26,10 @@ from app.agents.ingestion.constants import (
     SIMILARITY_QUERY_MAX_CHARS,
     SIMILARITY_SEARCH_TOP_K,
 )
-from app.agents.ingestion.prompts import EXTRACT_SYSTEM_MESSAGE
+from app.agents.ingestion.prompts import (
+    EXTRACT_SYSTEM_MESSAGE,
+    format_extract_user_content,
+)
 from app.agents.ingestion.state import IngestionState
 
 logger = logging.getLogger(__name__)
@@ -60,12 +63,10 @@ class IngestionNodes:
                 "currency": "EUR",
             }
             return {**state, "extracted": extracted}
+        truncated = state["raw_text"][:EXTRACT_RAW_TEXT_MAX_CHARS]
         messages = [
             {"role": "system", "content": EXTRACT_SYSTEM_MESSAGE},
-            {
-                "role": "user",
-                "content": state["raw_text"][:EXTRACT_RAW_TEXT_MAX_CHARS],
-            },
+            {"role": "user", "content": format_extract_user_content(truncated)},
         ]
         extracted = await self._llm(state).chat_completion_json(messages)
         return {**state, "extracted": extracted}
