@@ -7,15 +7,10 @@ import { apiFetch } from "@/lib/api/client";
 import { createOrganization } from "@/lib/api/organizations";
 import { queryKeys } from "@/lib/api/query-keys";
 import { apiErrorFromResponse } from "@/lib/api/error";
+import { setSession, type StoredAuthProfile } from "@/lib/api/session";
 import {
-  getRefreshToken,
-  setStoredProfile,
-  setTokens,
-  type StoredAuthProfile,
-} from "@/lib/api/session";
-import {
-  authResponseSchema,
-  type AuthResponse,
+  authPublicResponseSchema,
+  type AuthPublicResponse,
 } from "@/lib/schemas/auth";
 import {
   switchOrganizationRequestSchema,
@@ -39,7 +34,7 @@ function profileFromSwitch(res: SwitchOrganizationResponse): StoredAuthProfile {
   };
 }
 
-function profileFromAuth(res: AuthResponse): StoredAuthProfile {
+function profileFromAuth(res: AuthPublicResponse): StoredAuthProfile {
   return {
     user_id: res.user_id,
     username: res.username,
@@ -80,14 +75,12 @@ export function useSwitchOrganizationMutation() {
       });
       if (!res.ok) throw await apiErrorFromResponse(res);
       const data = switchOrganizationResponseSchema.parse(await res.json());
-      setTokens(data.access_token);
-      setStoredProfile(profileFromSwitch(data));
+      setSession(data.access_token, profileFromSwitch(data));
       return data;
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.organizations.all });
       void qc.invalidateQueries({ queryKey: queryKeys.organization.all });
-      void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
       void qc.invalidateQueries({ queryKey: queryKeys.saltedge.all });
       void qc.invalidateQueries({ queryKey: queryKeys.dashboard.all });
       void qc.invalidateQueries({ queryKey: queryKeys.mydata.all });
@@ -100,25 +93,20 @@ export function useCreateOrganizationMutation() {
   return useMutation({
     mutationFn: async (body: OrganizationSetupRequest) => {
       const business = await createOrganization(body);
-      const refresh = getRefreshToken();
-      if (refresh) {
-        const res = await apiFetch("/v1/auth/refresh", {
-          method: "POST",
-          body: JSON.stringify({ refresh_token: refresh }),
-          skipAuth: true,
-        });
-        if (res.ok) {
-          const data = authResponseSchema.parse(await res.json());
-          setTokens(data.access_token, data.refresh_token);
-          setStoredProfile(profileFromAuth(data));
-        }
+      const res = await apiFetch("/v1/auth/refresh", {
+        method: "POST",
+        body: JSON.stringify({}),
+        skipAuth: true,
+      });
+      if (res.ok) {
+        const data = authPublicResponseSchema.parse(await res.json());
+        setSession(data.access_token, profileFromAuth(data));
       }
       return business;
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.organizations.all });
       void qc.invalidateQueries({ queryKey: queryKeys.organization.all });
-      void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
       void qc.invalidateQueries({ queryKey: queryKeys.saltedge.all });
       void qc.invalidateQueries({ queryKey: queryKeys.dashboard.all });
       void qc.invalidateQueries({ queryKey: queryKeys.mydata.all });

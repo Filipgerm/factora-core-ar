@@ -1,20 +1,17 @@
 /**
- * Client auth helpers backed by localStorage session (access token + profile).
- * Prefer `useLoginMutation` / `useLogoutMutation` from `@/lib/hooks/api/use-auth` in React.
+ * Client auth helpers. Prefer `useLoginMutation` / `useLogoutMutation` from `@/lib/hooks/api/use-auth` in React.
  */
 
 import { apiFetch } from "@/lib/api/client";
 import {
   clearSession,
   getAccessToken,
-  getRefreshToken,
   getStoredProfile,
-  setStoredProfile,
-  setTokens,
+  setSession,
   type StoredAuthProfile,
 } from "@/lib/api/session";
 import { apiErrorFromResponse } from "@/lib/api/error";
-import { authResponseSchema } from "@/lib/schemas/auth";
+import { authPublicResponseSchema } from "@/lib/schemas/auth";
 import type { SignInCredentials, UserSession, UserType } from "@/lib/types/auth";
 
 function profileToSession(p: StoredAuthProfile): UserSession {
@@ -30,7 +27,7 @@ function profileToSession(p: StoredAuthProfile): UserSession {
 }
 
 /**
- * Password login (imperative). Validates response with Zod and persists tokens.
+ * Password login (imperative). Validates response with Zod and persists access + profile in memory.
  */
 export async function signIn(
   credentials: SignInCredentials,
@@ -51,8 +48,7 @@ export async function signIn(
     throw await apiErrorFromResponse(res);
   }
 
-  const data = authResponseSchema.parse(await res.json());
-  setTokens(data.access_token, data.refresh_token);
+  const data = authPublicResponseSchema.parse(await res.json());
   const stored = {
     user_id: data.user_id,
     username: data.username,
@@ -62,7 +58,7 @@ export async function signIn(
     email_verified: data.email_verified ?? false,
     phone_verified: data.phone_verified ?? false,
   };
-  setStoredProfile(stored);
+  setSession(data.access_token, stored);
 
   return {
     access_token: data.access_token,
@@ -72,7 +68,7 @@ export async function signIn(
 
 export function getSession(): UserSession | null {
   const profile = getStoredProfile();
-  if (!profile) return null;
+  if (!profile?.user_id) return null;
   return profileToSession(profile);
 }
 
@@ -81,23 +77,20 @@ export function isAuthenticated(): boolean {
 }
 
 /**
- * Revokes refresh token on the server when present, then clears local session.
+ * Revokes refresh session (httpOnly cookie) and clears in-memory access state.
  */
 export async function signOut(): Promise<void> {
-  const refresh = getRefreshToken();
-  if (refresh) {
-    try {
-      const res = await apiFetch("/v1/auth/logout", {
-        method: "POST",
-        body: JSON.stringify({ refresh_token: refresh }),
-        skipAuth: true,
-      });
-      if (!res.ok && res.status !== 401) {
-        await apiErrorFromResponse(res);
-      }
-    } catch {
-      /* still clear locally */
+  try {
+    const res = await apiFetch("/v1/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({}),
+      skipAuth: true,
+    });
+    if (!res.ok && res.status !== 401) {
+      await apiErrorFromResponse(res);
     }
+  } catch {
+    /* still clear locally */
   }
   clearSession();
 }
@@ -108,8 +101,8 @@ export async function signOut(): Promise<void> {
  */
 export async function updateUserType(_newUserType: UserType): Promise<void> {
   const current = getStoredProfile();
-  if (!current) {
+  if (!current?.user_id) {
     throw new Error("No active session found");
   }
-  setStoredProfile({ ...current });
+  setSession(getAccessToken() ?? "", { ...current });
 }

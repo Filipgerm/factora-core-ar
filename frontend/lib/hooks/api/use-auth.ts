@@ -1,31 +1,24 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { useAuthSessionState } from "@/components/providers/auth-session-provider";
 import { apiFetch } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/query-keys";
-import {
-  clearSession,
-  getAccessToken,
-  getRefreshToken,
-  getStoredProfile,
-  setStoredProfile,
-  setTokens,
-  type StoredAuthProfile,
-} from "@/lib/api/session";
+import { clearSession, setSession, type StoredAuthProfile } from "@/lib/api/session";
 import { apiErrorFromResponse } from "@/lib/api/error";
 import {
-  authResponseSchema,
+  authPublicResponseSchema,
   messageResponseSchema,
   userProfileResponseSchema,
-  type AuthResponse,
+  type AuthPublicResponse,
   type GoogleAuthRequest,
   type LoginRequest,
   type RefreshTokenRequest,
   type SignUpRequest,
 } from "@/lib/schemas/auth";
 
-function profileFromAuth(res: AuthResponse): StoredAuthProfile {
+function profileFromAuth(res: AuthPublicResponse): StoredAuthProfile {
   return {
     user_id: res.user_id,
     username: res.username,
@@ -45,17 +38,19 @@ async function parseJson<T>(
   return schema.parse(json);
 }
 
+/** Mirrors prior TanStack shape: `{ data: { profile, hasToken } }` for consumers. */
 export function useAuthSession() {
-  return useQuery({
-    queryKey: queryKeys.auth.session(),
-    queryFn: (): { profile: StoredAuthProfile | null; hasToken: boolean } => {
-      const token = getAccessToken();
-      const profile = getStoredProfile();
-      return { profile, hasToken: Boolean(token) };
+  const { accessToken, profile, bootstrapDone } = useAuthSessionState();
+  return {
+    data: {
+      profile,
+      hasToken: Boolean(accessToken),
     },
-    staleTime: Infinity,
-    gcTime: Infinity,
-  });
+    isLoading: !bootstrapDone,
+    isSuccess: bootstrapDone,
+    isError: false,
+    error: null,
+  };
 }
 
 export function useLoginMutation() {
@@ -68,13 +63,11 @@ export function useLoginMutation() {
         skipAuth: true,
       });
       if (!res.ok) throw await apiErrorFromResponse(res);
-      const data = await parseJson(res, authResponseSchema);
-      setTokens(data.access_token, data.refresh_token);
-      setStoredProfile(profileFromAuth(data));
+      const data = await parseJson(res, authPublicResponseSchema);
+      setSession(data.access_token, profileFromAuth(data));
       return data;
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
       void qc.invalidateQueries({ queryKey: queryKeys.organization.all });
       void qc.invalidateQueries({ queryKey: queryKeys.organizations.all });
     },
@@ -83,7 +76,6 @@ export function useLoginMutation() {
 
 /** Registers via `POST /v1/auth/signup`; returns profile only (no tokens). User must log in next. */
 export function useSignupMutation() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: SignUpRequest) => {
       const res = await apiFetch("/v1/auth/signup", {
@@ -93,9 +85,6 @@ export function useSignupMutation() {
       });
       if (!res.ok) throw await apiErrorFromResponse(res);
       return parseJson(res, userProfileResponseSchema);
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
     },
   });
 }
@@ -113,13 +102,11 @@ export function useGoogleAuthMutation() {
         skipAuth: true,
       });
       if (!res.ok) throw await apiErrorFromResponse(res);
-      const data = await parseJson(res, authResponseSchema);
-      setTokens(data.access_token, data.refresh_token);
-      setStoredProfile(profileFromAuth(data));
+      const data = await parseJson(res, authPublicResponseSchema);
+      setSession(data.access_token, profileFromAuth(data));
       return data;
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
       void qc.invalidateQueries({ queryKey: queryKeys.organization.all });
       void qc.invalidateQueries({ queryKey: queryKeys.organizations.all });
     },
@@ -130,21 +117,17 @@ export function useLogoutMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const refresh = getRefreshToken();
-      if (refresh) {
-        const res = await apiFetch("/v1/auth/logout", {
-          method: "POST",
-          body: JSON.stringify({ refresh_token: refresh } satisfies RefreshTokenRequest),
-          skipAuth: true,
-        });
-        if (!res.ok && res.status !== 401) {
-          throw await apiErrorFromResponse(res);
-        }
+      const res = await apiFetch("/v1/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({} satisfies RefreshTokenRequest),
+        skipAuth: true,
+      });
+      if (!res.ok && res.status !== 401) {
+        throw await apiErrorFromResponse(res);
       }
       clearSession();
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
       void qc.removeQueries({ queryKey: queryKeys.organization.all });
       void qc.removeQueries({ queryKey: queryKeys.organizations.all });
       void qc.removeQueries({ queryKey: queryKeys.saltedge.all });
@@ -155,22 +138,17 @@ export function useLogoutMutation() {
 }
 
 export function useRefreshMutation() {
-  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: RefreshTokenRequest) => {
+    mutationFn: async (_body: RefreshTokenRequest = {}) => {
       const res = await apiFetch("/v1/auth/refresh", {
         method: "POST",
-        body: JSON.stringify(body),
+        body: JSON.stringify({}),
         skipAuth: true,
       });
       if (!res.ok) throw await apiErrorFromResponse(res);
-      const data = await parseJson(res, authResponseSchema);
-      setTokens(data.access_token, data.refresh_token);
-      setStoredProfile(profileFromAuth(data));
+      const data = await parseJson(res, authPublicResponseSchema);
+      setSession(data.access_token, profileFromAuth(data));
       return data;
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
     },
   });
 }

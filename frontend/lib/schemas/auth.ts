@@ -19,7 +19,7 @@ export const googleAuthRequestSchema = z.object({
 });
 
 export const refreshTokenRequestSchema = z.object({
-  refresh_token: z.string().min(1),
+  refresh_token: z.string().min(1).optional(),
 });
 
 export const forgotPasswordRequestSchema = z.object({
@@ -62,12 +62,15 @@ export const userProfileResponseSchema = z.object({
   phone_verified: z.boolean().optional().default(false),
 });
 
-export const authResponseSchema = userProfileResponseSchema.extend({
+/** Login / refresh / Google — refresh token is httpOnly cookie only, never in JSON. */
+export const authPublicResponseSchema = userProfileResponseSchema.extend({
   access_token: z.string(),
   token_type: z.string().default("bearer"),
   expires_at: z.coerce.date(),
-  refresh_token: z.string().min(1),
 });
+
+/** @deprecated Prefer authPublicResponseSchema */
+export const authResponseSchema = authPublicResponseSchema;
 
 export const messageResponseSchema = z.object({
   message: z.string(),
@@ -83,7 +86,9 @@ export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type GoogleAuthRequest = z.infer<typeof googleAuthRequestSchema>;
 export type RefreshTokenRequest = z.infer<typeof refreshTokenRequestSchema>;
 export type UserProfileResponse = z.infer<typeof userProfileResponseSchema>;
-export type AuthResponse = z.infer<typeof authResponseSchema>;
+export type AuthPublicResponse = z.infer<typeof authPublicResponseSchema>;
+/** @deprecated Use AuthPublicResponse */
+export type AuthResponse = AuthPublicResponse;
 export type MessageResponse = z.infer<typeof messageResponseSchema>;
 export type VerificationInitResponse = z.infer<
   typeof verificationInitResponseSchema

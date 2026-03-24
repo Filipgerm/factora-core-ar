@@ -4,14 +4,13 @@
  */
 
 import { apiErrorFromResponse } from "@/lib/api/error";
-import { ApiError } from "@/lib/api/types";
 import {
   clearSession,
   getAccessToken,
-  getRefreshToken,
-  setTokens,
+  setSession,
+  type StoredAuthProfile,
 } from "@/lib/api/session";
-import { authResponseSchema } from "@/lib/schemas/auth";
+import { authPublicResponseSchema } from "@/lib/schemas/auth";
 
 export function getApiOrigin(): string {
   const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
@@ -23,7 +22,9 @@ export function getApiOrigin(): string {
   return raw.replace(/\/$/, "");
 }
 
-let refreshInFlight: Promise<boolean> | null = null;
+/** Single in-flight refresh; concurrent 401s wait and then all retry with the new access token. */
+let refreshRunning = false;
+const refreshWaiters: Array<(ok: boolean) => void> = [];
 
 function buildRequestHeaders(
   initHeaders: HeadersInit | undefined,
@@ -64,10 +65,27 @@ function buildRetryHeaders(
   return h;
 }
 
-async function postRefresh(): Promise<boolean> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
+function profileFromPublic(res: {
+  user_id: string;
+  username: string;
+  email: string;
+  role: string;
+  organization_id?: string | null;
+  email_verified?: boolean;
+  phone_verified?: boolean;
+}): StoredAuthProfile {
+  return {
+    user_id: res.user_id,
+    username: res.username,
+    email: res.email,
+    role: res.role,
+    organization_id: res.organization_id ?? null,
+    email_verified: res.email_verified ?? false,
+    phone_verified: res.phone_verified ?? false,
+  };
+}
 
+async function postRefresh(): Promise<boolean> {
   const res = await fetch(`${getApiOrigin()}/v1/auth/refresh`, {
     method: "POST",
     credentials: "include",
@@ -75,7 +93,7 @@ async function postRefresh(): Promise<boolean> {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify({ refresh_token: refreshToken }),
+    body: JSON.stringify({}),
   });
 
   if (!res.ok) {
@@ -90,21 +108,36 @@ async function postRefresh(): Promise<boolean> {
   }
 
   try {
-    const data = authResponseSchema.parse(body);
-    setTokens(data.access_token, data.refresh_token);
+    const data = authPublicResponseSchema.parse(body);
+    setSession(data.access_token, profileFromPublic(data));
     return true;
   } catch {
     return false;
   }
 }
 
-async function tryRefreshSession(): Promise<boolean> {
-  if (!refreshInFlight) {
-    refreshInFlight = postRefresh().finally(() => {
-      refreshInFlight = null;
-    });
-  }
-  return refreshInFlight;
+function waitForSharedRefresh(): Promise<boolean> {
+  return new Promise((resolve) => {
+    refreshWaiters.push(resolve);
+    if (!refreshRunning) {
+      refreshRunning = true;
+      void postRefresh()
+        .then((ok) => {
+          refreshRunning = false;
+          const ws = refreshWaiters.splice(0, refreshWaiters.length);
+          for (const w of ws) {
+            w(ok);
+          }
+        })
+        .catch(() => {
+          refreshRunning = false;
+          const ws = refreshWaiters.splice(0, refreshWaiters.length);
+          for (const w of ws) {
+            w(false);
+          }
+        });
+    }
+  });
 }
 
 async function parseErrorResponse(res: Response): Promise<ApiError> {
@@ -140,8 +173,8 @@ export async function apiFetch(
     headers,
   });
 
-  if (res.status === 401 && !skipAuth && getRefreshToken()) {
-    const ok = await tryRefreshSession();
+  if (res.status === 401 && !skipAuth) {
+    const ok = await waitForSharedRefresh();
     if (ok) {
       const retryHeaders = buildRetryHeaders(body, getAccessToken());
       res = await fetch(url, {

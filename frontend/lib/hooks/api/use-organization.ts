@@ -4,8 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { apiFetch } from "@/lib/api/client";
+import { setSession } from "@/lib/api/session";
 import { queryKeys } from "@/lib/api/query-keys";
 import { apiErrorFromResponse } from "@/lib/api/error";
+import { authPublicResponseSchema } from "@/lib/schemas/auth";
 import {
   businessResponseSchema,
   counterpartyCreateSchema,
@@ -26,6 +28,26 @@ async function parseJson<T>(
 ): Promise<T> {
   const json = await res.json();
   return schema.parse(json);
+}
+
+function profileFromAuth(res: {
+  user_id: string;
+  username: string;
+  email: string;
+  role: string;
+  organization_id?: string | null;
+  email_verified?: boolean;
+  phone_verified?: boolean;
+}) {
+  return {
+    user_id: res.user_id,
+    username: res.username,
+    email: res.email,
+    role: res.role,
+    organization_id: res.organization_id ?? null,
+    email_verified: res.email_verified ?? false,
+    phone_verified: res.phone_verified ?? false,
+  };
 }
 
 export function useOrganizationMeQuery() {
@@ -66,11 +88,20 @@ export function useSetupOrganizationMutation() {
         body: JSON.stringify(body),
       });
       if (!res.ok) throw await apiErrorFromResponse(res);
-      return parseJson(res, businessResponseSchema);
+      const business = await parseJson(res, businessResponseSchema);
+      const refreshRes = await apiFetch("/v1/auth/refresh", {
+        method: "POST",
+        body: JSON.stringify({}),
+        skipAuth: true,
+      });
+      if (refreshRes.ok) {
+        const data = authPublicResponseSchema.parse(await refreshRes.json());
+        setSession(data.access_token, profileFromAuth(data));
+      }
+      return business;
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.organization.me() });
-      void qc.invalidateQueries({ queryKey: queryKeys.auth.session() });
     },
   });
 }

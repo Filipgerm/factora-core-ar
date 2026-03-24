@@ -149,7 +149,7 @@ ORM models live in `app/db/models/` split by domain:
 | Access token  | **In-memory only** (React context / state)        | Short-lived (30 min). Lost on page refresh — the refresh flow silently issues a new one. Never written to `localStorage` or any persistent storage. Invisible to XSS.       |
 | Refresh token | **`httpOnly` + `Secure` + `SameSite=Lax` cookie** | Long-lived (7 days). Survives page refresh. JavaScript cannot read it under any circumstance, including XSS. The browser sends it automatically on requests to the backend. |
 
-**Backend contract**: the `/v1/auth/refresh` endpoint must set the refresh token exclusively via `response.set_cookie(key="refresh_token", httponly=True, secure=True, samesite="lax", path="/v1/auth/refresh")`. It must never return the refresh token in the JSON response body.
+**Backend contract**: login, refresh, and Google auth set the refresh token exclusively via `response.set_cookie(key="refresh_token", httponly=True, secure=True, samesite="lax", path="/v1/auth")` so the cookie is sent to `/v1/auth/login`, `/v1/auth/refresh`, and `/v1/auth/logout`. It must never return the refresh token in the JSON response body.
 
 **Frontend contract**: `lib/api/client.ts` stores the access token in a React context (never `localStorage`). On a `401` response, it calls `/v1/auth/refresh` — the browser sends the `httpOnly` cookie automatically — and retries the original request with the new access token. The client code never reads or writes the refresh token directly.
 

@@ -1,11 +1,7 @@
 /**
- * Token + profile persistence for SPA auth. Access token is sent as Bearer;
- * refresh token is persisted when returned from login / refresh / Google auth.
+ * In-memory auth session bridge. Values are owned by AuthSessionProvider (React state).
+ * getAccessToken / getStoredProfile back the API client and non-React helpers.
  */
-
-const ACCESS = "factora_access_token";
-const REFRESH = "factora_refresh_token";
-const PROFILE = "factora_auth_profile";
 
 export type StoredAuthProfile = {
   user_id: string;
@@ -17,46 +13,59 @@ export type StoredAuthProfile = {
   phone_verified: boolean;
 };
 
-function readStorage(key: string): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(key);
-}
+export type AuthSessionBridge = {
+  getAccessToken: () => string | null;
+  getProfile: () => StoredAuthProfile | null;
+  setSession: (accessToken: string, profile: StoredAuthProfile) => void;
+  /** New access JWT only (profile unchanged), e.g. after silent refresh. */
+  setAccessToken: (accessToken: string) => void;
+  clear: () => void;
+};
 
-function writeStorage(key: string, value: string | null): void {
-  if (typeof window === "undefined") return;
-  if (value === null) localStorage.removeItem(key);
-  else localStorage.setItem(key, value);
+const noopBridge: AuthSessionBridge = {
+  getAccessToken: () => null,
+  getProfile: () => null,
+  setSession: () => {},
+  setAccessToken: () => {},
+  clear: () => {},
+};
+
+let bridge: AuthSessionBridge = noopBridge;
+
+export function registerAuthSessionBridge(next: AuthSessionBridge): void {
+  bridge = next;
 }
 
 export function getAccessToken(): string | null {
-  return readStorage(ACCESS);
-}
-
-export function getRefreshToken(): string | null {
-  return readStorage(REFRESH);
+  return bridge.getAccessToken();
 }
 
 export function getStoredProfile(): StoredAuthProfile | null {
-  const raw = readStorage(PROFILE);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as StoredAuthProfile;
-  } catch {
-    return null;
-  }
+  return bridge.getProfile();
 }
 
-export function setTokens(accessToken: string, refreshToken?: string | null): void {
-  writeStorage(ACCESS, accessToken);
-  if (refreshToken) writeStorage(REFRESH, refreshToken);
+export function setSession(accessToken: string, profile: StoredAuthProfile): void {
+  bridge.setSession(accessToken, profile);
+}
+
+/** Refresh rotated access token only; profile unchanged. */
+export function setAccessTokenOnly(accessToken: string): void {
+  bridge.setAccessToken(accessToken);
+}
+
+/** @deprecated Use setSession — kept for incremental refactors. */
+export function setTokens(
+  accessToken: string,
+  _refreshToken?: string | null
+): void {
+  bridge.setAccessToken(accessToken);
 }
 
 export function setStoredProfile(profile: StoredAuthProfile): void {
-  writeStorage(PROFILE, JSON.stringify(profile));
+  const t = bridge.getAccessToken();
+  bridge.setSession(t ?? "", profile);
 }
 
 export function clearSession(): void {
-  writeStorage(ACCESS, null);
-  writeStorage(REFRESH, null);
-  writeStorage(PROFILE, null);
+  bridge.clear();
 }
