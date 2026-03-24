@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Building2, ChevronsUpDown, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,12 +27,20 @@ import { cn } from "@/lib/utils";
 
 export function OrganizationSwitcher({ className }: { className?: string }) {
   const { toast } = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
   const { data: session } = useAuthSession();
   const list = useOrganizationsListQuery();
   const orgMe = useOrganizationMeQuery();
   const switchOrg = useSwitchOrganizationMutation();
 
   const hasToken = Boolean(session?.hasToken);
+
+  useEffect(() => {
+    if (!hasToken || !list.isSuccess || (list.data?.length ?? 0) > 0) return;
+    if (pathname === "/onboarding") return;
+    router.replace("/onboarding");
+  }, [hasToken, list.isSuccess, list.data, pathname, router]);
   const currentMembership = list.data?.find((m) => m.is_current);
 
   const label = (() => {
@@ -113,11 +123,13 @@ export function OrganizationSwitcher({ className }: { className?: string }) {
           ))
         ) : hasToken && list.isSuccess ? (
           <DropdownMenuItem
-            disabled
-            className="text-xs text-muted-foreground"
-            onSelect={(e) => e.preventDefault()}
+            className="text-xs transition-all duration-200"
+            onSelect={(e) => {
+              e.preventDefault();
+              router.push("/onboarding");
+            }}
           >
-            Create your org via POST /v1/organization/
+            Set up your company…
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuSeparator />

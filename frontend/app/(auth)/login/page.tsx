@@ -51,9 +51,9 @@ export default function LoginPage() {
       return;
     }
     try {
-      await login.mutateAsync(parsed.data);
+      const auth = await login.mutateAsync(parsed.data);
       toast({ title: "Signed in" });
-      router.push("/home");
+      router.push(auth.organization_id ? "/home" : "/onboarding");
       router.refresh();
     } catch (err) {
       setBanner({
