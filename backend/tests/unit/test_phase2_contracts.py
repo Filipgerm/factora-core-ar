@@ -12,13 +12,33 @@ from fastapi import Request
 from app.core.exceptions import NotFoundError, ValidationError
 from app.db.models.identity import UserRole
 from app.main import app_error_handler
-from app.models.auth import AuthResponse
+from app.models.auth import AuthPublicResponse, AuthResponse
 from app.models.gemi import GemiDocumentsFetchResponse, GemiSearchResponse
 from app.agents.ingestion import ingestion_graph
 from app.agents.reconciliation import reconciliation_graph
 from app.services.auth_service import _build_auth_response
 from app.services.embeddings.vector_store import _vector_literal
-from app.core.security.jwt import encode_access_token
+from app.core.security.jwt import encode_access_token, get_token_expires_at
+
+
+def test_auth_public_response_has_no_refresh_token_field() -> None:
+    uid = str(uuid.uuid4())
+    tok, _ = encode_access_token(uid, role="owner", organization_id=None)
+    expires_at = get_token_expires_at(tok)
+    pub = AuthPublicResponse(
+        access_token=tok,
+        token_type="bearer",
+        expires_at=expires_at,
+        user_id=uuid.UUID(uid),
+        username="alice",
+        email="alice@example.com",
+        role="owner",
+        organization_id=None,
+        email_verified=True,
+        phone_verified=False,
+    )
+    dumped = pub.model_dump()
+    assert "refresh_token" not in dumped
 
 
 def test_auth_response_includes_refresh_token() -> None:
