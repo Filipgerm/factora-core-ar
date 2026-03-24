@@ -7,12 +7,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from stripe import SignatureVerificationError
 
 from app.controllers.stripe_controller import StripeController
-from app.dependencies import get_stripe_client
+from app.dependencies import get_stripe_client, get_stripe_webhook_service
 from app.main import app
 from app.core.exceptions import StripeError
 from packages.stripe.api.client import StripeClient
@@ -210,40 +209,47 @@ async def test_webhook_dispatch_unknown_event() -> None:
 
 @pytest.mark.asyncio
 async def test_controller_webhook_invalid_signature() -> None:
-    sync = MagicMock()
-    wh = MagicMock()
-    sc = MagicMock()
-    sc.is_webhook_configured.return_value = True
-    sc.verify_webhook_event.side_effect = SignatureVerificationError("bad", "hdr")
-    ctrl = StripeController(sync, wh, sc)
-    with pytest.raises(HTTPException) as ei:
-        await ctrl.ingest_webhook(b"{}", "v1 sig")
-    assert ei.value.status_code == 400
+    from app.core.exceptions import ClientBadRequestError
+
+    db = AsyncMock()
+    wh = StripeWebhookService(
+        db,
+        app_settings=SimpleNamespace(STRIPE_WEBHOOK_SECRET="whsec_test"),
+    )
+    with patch(
+        "app.services.stripe_webhook_service.stripe.Webhook.construct_event",
+        side_effect=SignatureVerificationError("bad", "hdr"),
+    ):
+        with pytest.raises(ClientBadRequestError):
+            await wh.process_webhook(b"{}", "v1 sig")
 
 
 @pytest.mark.asyncio
 async def test_controller_webhook_missing_sig() -> None:
-    ctrl = StripeController(MagicMock(), MagicMock(), MagicMock())
-    with pytest.raises(HTTPException) as ei:
-        await ctrl.ingest_webhook(b"{}", None)
-    assert ei.value.status_code == 400
+    from app.core.exceptions import ClientBadRequestError
+
+    wh = StripeWebhookService(
+        AsyncMock(),
+        app_settings=SimpleNamespace(STRIPE_WEBHOOK_SECRET="whsec_test"),
+    )
+    with pytest.raises(ClientBadRequestError):
+        await wh.process_webhook(b"{}", None)
 
 
 @pytest.mark.asyncio
 async def test_controller_webhook_ok() -> None:
     wh = AsyncMock()
-    wh.dispatch = AsyncMock(
+    wh.process_webhook = AsyncMock(
         return_value=StripeWebhookAckResponse(
-            handled=True, event_type="customer.updated"
+            received=True,
+            handled=True,
+            event_type="customer.updated",
         )
     )
-    sc = MagicMock()
-    sc.is_webhook_configured.return_value = True
-    sc.verify_webhook_event.return_value = {"type": "x", "data": {}}
-    ctrl = StripeController(MagicMock(), wh, sc)
+    ctrl = StripeController(MagicMock(), wh, MagicMock())
     out = await ctrl.ingest_webhook(b"{}", "v1 abc")
     assert out.handled is True
-    wh.dispatch.assert_awaited_once()
+    wh.process_webhook.assert_awaited_once_with(b"{}", "v1 abc")
 
 
 @pytest.mark.asyncio
@@ -331,30 +337,37 @@ def test_get_stripe_client_singleton() -> None:
     assert a is b
 
 
+def _stripe_webhook_service_with_secret() -> StripeWebhookService:
+    return StripeWebhookService(
+        AsyncMock(),
+        app_settings=SimpleNamespace(STRIPE_WEBHOOK_SECRET="whsec_test"),
+    )
+
+
 @pytest.mark.asyncio
 async def test_stripe_webhook_route_bad_signature() -> None:
-    mock_client = MagicMock()
-    mock_client.is_webhook_configured.return_value = True
-    mock_client.verify_webhook_event.side_effect = SignatureVerificationError("x", "sig")
-    app.dependency_overrides[get_stripe_client] = lambda: mock_client
+    app.dependency_overrides[get_stripe_webhook_service] = _stripe_webhook_service_with_secret
     transport = ASGITransport(app=app)
     try:
-        async with AsyncClient(transport=transport, base_url="http://localhost") as client:
-            r = await client.post(
-                "/v1/stripe/webhook",
-                content=b'{"x":1}',
-                headers={"stripe-signature": "t=1,v1=abc"},
-            )
-            assert r.status_code == 400
+        with patch(
+            "app.services.stripe_webhook_service.stripe.Webhook.construct_event",
+            side_effect=SignatureVerificationError("x", "sig"),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://localhost") as client:
+                r = await client.post(
+                    "/v1/stripe/webhook",
+                    content=b'{"x":1}',
+                    headers={"stripe-signature": "t=1,v1=abc"},
+                )
+                assert r.status_code == 400
     finally:
-        app.dependency_overrides.pop(get_stripe_client, None)
+        app.dependency_overrides.pop(get_stripe_webhook_service, None)
 
 
 @pytest.mark.asyncio
 async def test_stripe_webhook_route_success() -> None:
-    mock_client = MagicMock()
-    mock_client.is_webhook_configured.return_value = True
-    mock_client.verify_webhook_event.return_value = {
+    ev = MagicMock()
+    ev.to_dict_recursive = lambda: {
         "type": "customer.created",
         "data": {"object": {"id": "cus_a", "metadata": {}}},
     }
@@ -363,10 +376,16 @@ async def test_stripe_webhook_route_success() -> None:
             received=True, event_type="customer.created", handled=False
         )
     )
-    app.dependency_overrides[get_stripe_client] = lambda: mock_client
+    app.dependency_overrides[get_stripe_webhook_service] = _stripe_webhook_service_with_secret
     transport = ASGITransport(app=app)
     try:
-        with patch.object(StripeWebhookService, "dispatch", async_dispatch):
+        with (
+            patch(
+                "app.services.stripe_webhook_service.stripe.Webhook.construct_event",
+                return_value=ev,
+            ),
+            patch.object(StripeWebhookService, "dispatch", async_dispatch),
+        ):
             async with AsyncClient(transport=transport, base_url="http://localhost") as client:
                 r = await client.post(
                     "/v1/stripe/webhook",
@@ -377,7 +396,7 @@ async def test_stripe_webhook_route_success() -> None:
                 body = r.json()
                 assert body.get("received") is True
     finally:
-        app.dependency_overrides.pop(get_stripe_client, None)
+        app.dependency_overrides.pop(get_stripe_webhook_service, None)
 
 
 @pytest.mark.asyncio
@@ -858,14 +877,18 @@ async def test_stripe_controller_reraises_stripe_error() -> None:
 
 @pytest.mark.asyncio
 async def test_stripe_controller_webhook_value_error() -> None:
-    mock_client = MagicMock()
-    mock_client.is_webhook_configured.return_value = True
-    mock_client.verify_webhook_event.side_effect = ValueError("misconfigured")
-    ctrl = StripeController(MagicMock(), MagicMock(), mock_client)
     from app.core.exceptions import ValidationError
 
-    with pytest.raises(ValidationError, match="misconfigured"):
-        await ctrl.ingest_webhook(b"{}", "sig")
+    wh = StripeWebhookService(
+        AsyncMock(),
+        app_settings=SimpleNamespace(STRIPE_WEBHOOK_SECRET="whsec_test"),
+    )
+    with patch(
+        "app.services.stripe_webhook_service.stripe.Webhook.construct_event",
+        side_effect=ValueError("misconfigured"),
+    ):
+        with pytest.raises(ValidationError, match="misconfigured"):
+            await wh.process_webhook(b"{}", "sig")
 
 
 @pytest.mark.asyncio

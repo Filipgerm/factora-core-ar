@@ -1,22 +1,27 @@
-"""StripeWebhookService — dispatch verified Stripe events to mirror upserts.
+"""StripeWebhookService — verify Stripe signatures and dispatch events to mirror upserts.
 
-**Scope:** Map ``event.type`` to ``StripeSyncService`` apply methods; commit once per delivery.
+**Scope:** Cryptographically verify webhook payloads, then map ``event.type`` to
+``StripeSyncService`` apply methods; commit once per delivery.
 
-**Contract:** Expects an event dict (from ``StripeClient.verify_webhook_event``). Returns
-ack metadata; does not verify signatures (caller responsibility).
+**Contract:** ``process_webhook`` raises ``ClientBadRequestError`` / ``ValidationError``
+from ``app.core.exceptions``; returns ``StripeWebhookAckResponse`` on success.
 
-**Architectural notes:** Tenant resolution is exclusively via ``metadata.organization_id``
-on Stripe objects — events without it are acknowledged but not persisted.
+**Architectural notes:** Uses ``stripe.Webhook.construct_event`` with
+``STRIPE_WEBHOOK_SECRET`` from settings. Tenant resolution in ``dispatch`` is via
+``metadata.organization_id`` on Stripe objects.
 """
 from __future__ import annotations
 
 from typing import Any
 
+import stripe
 from sqlalchemy.ext.asyncio import AsyncSession
+from stripe import SignatureVerificationError
 
 from packages.stripe.api.serialize import stripe_object_to_dict
-from app.config import Settings, settings
 from packages.stripe.models import StripeWebhookAckResponse
+from app.config import Settings, settings
+from app.core.exceptions import ClientBadRequestError, ValidationError
 from app.services.stripe_sync_service import StripeSyncService
 
 
@@ -25,8 +30,35 @@ class StripeWebhookService:
         self._db = db
         self._settings = app_settings or settings
 
+    async def process_webhook(
+        self, payload: bytes, stripe_signature: str | None
+    ) -> StripeWebhookAckResponse:
+        """Verify ``Stripe-Signature`` and run ``dispatch`` on the event dict."""
+        if not stripe_signature:
+            raise ClientBadRequestError(
+                "Missing Stripe-Signature header",
+                code="stripe.missing_signature",
+            )
+        secret = (self._settings.STRIPE_WEBHOOK_SECRET or "").strip()
+        if not secret:
+            raise ValidationError(
+                "Stripe webhook secret is not configured",
+                code="stripe.webhook_unconfigured",
+            )
+        try:
+            event = stripe.Webhook.construct_event(payload, stripe_signature, secret)
+        except SignatureVerificationError as e:
+            raise ClientBadRequestError(
+                "Invalid Stripe webhook signature",
+                code="stripe.signature_invalid",
+            ) from e
+        except ValueError as e:
+            raise ValidationError(str(e), code="stripe.webhook_config") from e
+        event_dict = stripe_object_to_dict(event)
+        return await self.dispatch(event_dict)
+
     async def dispatch(self, event: dict[str, Any]) -> StripeWebhookAckResponse:
-        """Route a Stripe event to the correct upsert handler."""
+        """Route a verified Stripe event to the correct upsert handler."""
         etype = str(event.get("type") or "")
         raw_obj = (event.get("data") or {}).get("object")
         obj_d = stripe_object_to_dict(raw_obj) if raw_obj is not None else {}

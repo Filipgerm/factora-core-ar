@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import stripe
-from fastapi import HTTPException
-
 from packages.stripe.api.client import StripeClient
 from packages.stripe.models import (
     StripeBalanceSnapshotResponse,
@@ -17,7 +14,7 @@ from packages.stripe.models import (
     StripeWebhookAckResponse,
 )
 
-from app.core.exceptions import StripeError, ValidationError
+from app.core.exceptions import StripeError
 from app.services.stripe_sync_service import StripeSyncService
 from app.services.stripe_webhook_service import StripeWebhookService
 
@@ -42,20 +39,7 @@ class StripeController:
             raise StripeError(err_detail.format(exc=exc), code="external.stripe.sync") from exc
 
     async def ingest_webhook(self, payload: bytes, stripe_signature: str | None) -> StripeWebhookAckResponse:
-        if not stripe_signature:
-            raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
-        if not self._stripe.is_webhook_configured():
-            raise ValidationError(
-                "Stripe webhook secret is not configured",
-                code="stripe.webhook_unconfigured",
-            )
-        try:
-            event = self._stripe.verify_webhook_event(payload, stripe_signature)
-        except stripe.SignatureVerificationError:
-            raise HTTPException(status_code=400, detail="Invalid Stripe webhook signature")
-        except ValueError as exc:
-            raise ValidationError(str(exc), code="stripe.webhook_config") from exc
-        return await self._webhook.dispatch(event)
+        return await self._webhook.process_webhook(payload, stripe_signature)
 
     async def sync_balance_transactions(
         self, *, page_size: int = 100, max_pages: int = 50

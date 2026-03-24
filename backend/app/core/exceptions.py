@@ -90,6 +90,15 @@ class ConflictError(AppError):
         super().__init__(detail, code=code, **extra)
 
 
+class ClientBadRequestError(AppError):
+    """Malformed or untrusted client input (e.g. invalid webhook signature).  HTTP 400."""
+
+    status_code = 400
+
+    def __init__(self, detail: str, *, code: str = "request.bad_request", **extra: Any) -> None:
+        super().__init__(detail, code=code, **extra)
+
+
 # ---------------------------------------------------------------------------
 # Domain validation errors
 # ---------------------------------------------------------------------------
