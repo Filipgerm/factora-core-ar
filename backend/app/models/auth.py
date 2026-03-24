@@ -37,12 +37,18 @@ class UserProfileResponse(BaseModel):
     phone_verified: bool = False
 
 
-class AuthResponse(TokenResponse, UserProfileResponse):
-    """Combined token + profile returned on login, refresh, or Google OAuth.
+class AuthPublicResponse(TokenResponse, UserProfileResponse):
+    """Token + profile returned in JSON on login, refresh, or Google OAuth.
 
-    ``refresh_token`` is the opaque string for ``POST /v1/auth/refresh`` and logout.
-    The server persists only its SHA-256 hash in ``user_sessions`` — never the raw value.
+    The refresh token is never included in the response body; it is issued only
+    as an ``httpOnly`` cookie (see ``app.core.security.cookies``).
     """
+
+    model_config = {"from_attributes": True}
+
+
+class AuthResponse(AuthPublicResponse):
+    """Internal DTO including raw ``refresh_token`` for cookie attachment in routes."""
 
     refresh_token: str
 
@@ -143,4 +149,6 @@ class EmailVerificationCodeRequest(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str
+    """Optional body token for logout/refresh; cookie is used when omitted."""
+
+    refresh_token: str | None = None

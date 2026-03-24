@@ -19,11 +19,17 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
+from app.core.exceptions import AuthError
+from app.core.security.cookies import (
+    REFRESH_TOKEN_COOKIE,
+    clear_refresh_token_cookie,
+    set_refresh_token_cookie,
+)
 from app.dependencies import AuthSvc, AuthUser, require_auth
 from app.models.auth import (
-    AuthResponse,
+    AuthPublicResponse,
     ChangePasswordRequest,
     EmailVerificationCodeRequest,
     EmailVerificationRequest,
@@ -73,20 +79,23 @@ async def sign_up(
 
 @router.post(
     "/login",
-    response_model=AuthResponse,
+    response_model=AuthPublicResponse,
     summary="Authenticate with email and password",
 )
 async def login(
     req: LoginRequest,
     request: Request,
+    response: Response,
     auth_service: AuthSvc,
-) -> AuthResponse:
-    """Validate credentials and issue JWT access token + opaque refresh token."""
-    return await auth_service.login(
+) -> AuthPublicResponse:
+    """Validate credentials; JSON returns access JWT + profile; refresh is httpOnly cookie."""
+    auth = await auth_service.login(
         req,
         user_agent=request.headers.get("user-agent"),
         ip_address=request.client.host if request.client else None,
     )
+    set_refresh_token_cookie(response, auth.refresh_token)
+    return AuthPublicResponse.model_validate(auth.model_dump(exclude={"refresh_token"}))
 
 
 @router.post(
@@ -96,29 +105,40 @@ async def login(
 )
 async def logout(
     req: RefreshTokenRequest,
+    request: Request,
+    response: Response,
     auth_service: AuthSvc,
 ) -> MessageResponse:
-    """Revoke the provided refresh token.  The access token expires naturally."""
-    await auth_service.logout(req.refresh_token)
+    """Revoke refresh session (body or cookie) and clear the refresh cookie."""
+    raw = req.refresh_token or request.cookies.get(REFRESH_TOKEN_COOKIE)
+    if raw:
+        await auth_service.logout(raw)
+    clear_refresh_token_cookie(response)
     return MessageResponse(message="Logged out successfully.")
 
 
 @router.post(
     "/refresh",
-    response_model=AuthResponse,
+    response_model=AuthPublicResponse,
     summary="Rotate refresh token and issue new access token",
 )
 async def refresh_tokens(
     req: RefreshTokenRequest,
     request: Request,
+    response: Response,
     auth_service: AuthSvc,
-) -> AuthResponse:
-    """Exchange a valid refresh token for a new JWT + rotated refresh token."""
-    return await auth_service.refresh_tokens(
-        req.refresh_token,
+) -> AuthPublicResponse:
+    """Rotate refresh (body or cookie); JSON has access + profile; new refresh is cookie-only."""
+    raw = req.refresh_token or request.cookies.get(REFRESH_TOKEN_COOKIE)
+    if not raw:
+        raise AuthError("Missing refresh token.", code="auth.token_missing")
+    auth = await auth_service.refresh_tokens(
+        raw,
         user_agent=request.headers.get("user-agent"),
         ip_address=request.client.host if request.client else None,
     )
+    set_refresh_token_cookie(response, auth.refresh_token)
+    return AuthPublicResponse.model_validate(auth.model_dump(exclude={"refresh_token"}))
 
 
 # ---------------------------------------------------------------------------
@@ -128,23 +148,23 @@ async def refresh_tokens(
 
 @router.post(
     "/google",
-    response_model=AuthResponse,
+    response_model=AuthPublicResponse,
     summary="Sign in or sign up via Google ID token",
 )
 async def google_auth(
     req: GoogleAuthRequest,
     request: Request,
+    response: Response,
     auth_service: AuthSvc,
-) -> AuthResponse:
-    """Verify a Google ID token and create or authenticate the user.
-
-    The ``id_token`` must be obtained from Google Sign-In on the frontend.
-    """
-    return await auth_service.sign_up_with_google(
+) -> AuthPublicResponse:
+    """Verify a Google ID token; refresh token is set as httpOnly cookie only."""
+    auth = await auth_service.sign_up_with_google(
         req.id_token,
         user_agent=request.headers.get("user-agent"),
         ip_address=request.client.host if request.client else None,
     )
+    set_refresh_token_cookie(response, auth.refresh_token)
+    return AuthPublicResponse.model_validate(auth.model_dump(exclude={"refresh_token"}))
 
 
 # ---------------------------------------------------------------------------
