@@ -61,7 +61,7 @@ async def test_gmail_client_demo() -> None:
 
 @pytest.mark.asyncio
 async def test_ai_controller_streams_bytes() -> None:
-    svc = AIService(str(uuid.uuid4()))
+    svc = AIService(AsyncMock(), str(uuid.uuid4()))
     ctl = AIController(svc)
 
     async def _agen():

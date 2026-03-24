@@ -158,3 +158,30 @@ class VectorStoreService:
                 code="external.vector_search",
             ) from e
         return [dict(r) for r in rows]
+
+    async def record_category_feedback(
+        self,
+        *,
+        content_text: str,
+        suggested_label: str,
+        corrected_label: str,
+        source: str = "human_feedback",
+    ) -> OrganizationEmbedding:
+        """Persist a human correction as a new embedding row for active learning."""
+        trimmed = content_text.strip()
+        if not trimmed:
+            raise ValidationError(
+                "content_text is required.",
+                code="validation.empty_content",
+                fields={"content_text": "Provide non-empty text"},
+            )
+        embed_body = f"{trimmed}\nconfirmed_category={corrected_label}"
+        return await self.upsert_memory(
+            content_text=embed_body,
+            source=source[:64],
+            embedding_metadata={
+                "suggested_label": suggested_label,
+                "corrected_label": corrected_label,
+                "feedback_type": "category_correction",
+            },
+        )

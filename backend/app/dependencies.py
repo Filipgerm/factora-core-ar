@@ -350,8 +350,11 @@ def get_file_service(
     return FileService(db, org_id)
 
 
-def get_ai_service(org_id: CurrentOrgId) -> AIService:
-    return AIService(org_id)
+def get_ai_service(
+    db: DB,
+    org_id: CurrentOrgId,
+) -> AIService:
+    return AIService(db, org_id)
 
 
 def get_file_controller(
