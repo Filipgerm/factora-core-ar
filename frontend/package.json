@@ -7,7 +7,9 @@
     "dev": "next dev --turbopack",
     "lint": "next lint",
     "start": "next start",
-    "knip": "knip"
+    "knip": "knip",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -77,6 +79,7 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^16.0.6",
+    "@playwright/test": "1.52.0",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/quill": "^2.0.14",
