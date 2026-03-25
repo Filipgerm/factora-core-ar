@@ -137,6 +137,18 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (typeof window !== "undefined") {
+        const injected = (
+          window as unknown as {
+            __E2E_AUTH__?: { token: string; profile: StoredAuthProfile };
+          }
+        ).__E2E_AUTH__;
+        if (injected?.token && injected.profile) {
+          setSession(injected.token, injected.profile);
+          if (!cancelled) setBootstrapDone(true);
+          return;
+        }
+      }
       if (accessRef.current) {
         if (!cancelled) setBootstrapDone(true);
         return;
@@ -147,7 +159,7 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [setSession]);
 
   const sessionValue = useMemo(
     () => ({

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { apiFetch } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/query-keys";
 import { apiErrorFromResponse } from "@/lib/api/error";
+import { ApiError } from "@/lib/api/types";
 import {
   aadeDocumentsResponseSchema,
   aadeSummaryResponseSchema,
@@ -22,10 +23,29 @@ import { useAuthSession } from "@/lib/hooks/api/use-auth";
 
 async function parseJson<T>(
   res: Response,
-  schema: { parse: (data: unknown) => T }
+  schema: { safeParse: (data: unknown) => z.SafeParseReturnType<unknown, T> }
 ): Promise<T> {
-  const json = await res.json();
-  return schema.parse(json);
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    throw new ApiError(
+      "The server returned data we could not read. Try again shortly.",
+      res.status,
+      "parse.json",
+      {}
+    );
+  }
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) {
+    throw new ApiError(
+      "We received an unexpected response from the server. Try again or contact support if this continues.",
+      res.status,
+      "parse.schema",
+      {}
+    );
+  }
+  return parsed.data;
 }
 
 function useHasOrg() {
@@ -114,8 +134,7 @@ export function useDashboardTransactionsQuery(params: TransactionsQueryParams | 
       sp.set("limit", String(params.limit ?? 50));
       const res = await apiFetch(`/v1/dashboard/transactions?${sp.toString()}`);
       if (!res.ok) throw await apiErrorFromResponse(res);
-      const json: unknown = await res.json();
-      return z.array(transactionsResponseSchema).parse(json);
+      return parseJson(res, z.array(transactionsResponseSchema));
     },
     enabled,
   });

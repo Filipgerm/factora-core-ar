@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { BarChart3 } from "lucide-react";
 
 import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
@@ -16,6 +17,8 @@ import {
   useDashboardTransactionsQuery,
 } from "@/lib/hooks/api/use-dashboard";
 import { useResolvedSaltEdgeCustomerId } from "@/lib/hooks/api/use-saltedge";
+import { isApiError } from "@/lib/api/types";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
 import { ActionItemsList } from "./action-items-list";
@@ -28,6 +31,7 @@ import { RecentActivityFeed } from "./recent-activity-feed";
 
 export function HomeDashboardClient() {
   const { data: session } = useAuthSession();
+  const { toast } = useToast();
   const { customerId } = useResolvedSaltEdgeCustomerId();
   const pl = useDashboardPlMetricsQuery(
     customerId ? { customerId, days: 30 } : null
@@ -36,6 +40,25 @@ export function HomeDashboardClient() {
   const txs = useDashboardTransactionsQuery(
     customerId ? { customerId, limit: 12 } : null
   );
+
+  const lastToastKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    const errs = [pl.error, seller.error, txs.error].filter(Boolean);
+    if (errs.length === 0) return;
+    const first = errs[0];
+    const message = isApiError(first)
+      ? first.message
+      : "Something went wrong loading the dashboard.";
+    const key = `${message}:${errs.length}`;
+    if (lastToastKey.current === key) return;
+    lastToastKey.current = key;
+    toast({
+      variant: "destructive",
+      title: "Could not load dashboard data",
+      description: message,
+    });
+  }, [pl.error, seller.error, txs.error, toast]);
 
   const hasOrg = Boolean(session?.profile?.organization_id);
 
@@ -66,6 +89,17 @@ export function HomeDashboardClient() {
     }
     if (pl.isLoading) {
       return <HomeKpiBentoSkeleton />;
+    }
+    if (pl.isError) {
+      return (
+        <FeatureEmptyState
+          icon={BarChart3}
+          title="Could not load metrics"
+          description="We could not load P&amp;L metrics from banking. Check your connection or try again."
+          ctaHref="/integrations"
+          ctaLabel="Integrations"
+        />
+      );
     }
     if (pl.data) {
       return <HomeKpiBento metrics={buildHomeKpiMetricsFromPlMetrics(pl.data)} />;
@@ -111,6 +145,18 @@ export function HomeDashboardClient() {
           {hasOrg && customerId ? (
             txs.isLoading ? (
               <HomeActivitySkeleton />
+            ) : txs.isError ? (
+              <div
+                className="rounded-2xl border border-dashed border-amber-200/80 bg-amber-50/40 px-6 py-8 text-center dark:border-amber-900/50 dark:bg-amber-950/20"
+                data-testid="dashboard-activity-error"
+              >
+                <p className="text-sm font-medium text-foreground">
+                  Recent activity unavailable
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Banking transactions could not be loaded. Try again in a moment.
+                </p>
+              </div>
             ) : (
               <RecentActivityFeed items={activityItems} />
             )

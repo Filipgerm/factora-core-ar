@@ -33,7 +33,10 @@ export function HomeDashboardGreeting({
       transition={SNAP_SPRING}
       className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between"
     >
-      <h1 className="text-3xl font-bold tracking-tight text-foreground">
+      <h1
+        className="text-3xl font-bold tracking-tight text-foreground"
+        data-testid="home-dashboard-greeting"
+      >
         Hi, {firstName}
       </h1>
       <p
