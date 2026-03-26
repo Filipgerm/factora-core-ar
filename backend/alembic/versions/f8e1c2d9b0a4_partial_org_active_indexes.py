@@ -22,7 +22,7 @@ _TABLES: list[tuple[str, str]] = [
     ("invoices", "ix_invoices_org_active"),
     ("stripe_balance_transactions", "ix_stripe_balance_transactions_org_active"),
     ("stripe_payouts", "ix_stripe_payouts_org_active"),
-    ("stripe_balance_snapshots", "ix_stripe_balance_snapshots_org_active"),
+    # stripe_balance_snapshots has no deleted_at (snapshot rows, not soft-deleted).
     ("stripe_customers", "ix_stripe_customers_org_active"),
     ("stripe_subscriptions", "ix_stripe_subscriptions_org_active"),
     ("stripe_invoices", "ix_stripe_invoices_org_active"),

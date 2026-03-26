@@ -18,6 +18,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Create enum once; use create_type=False on the column so create_table does not
+    # emit a second CREATE TYPE (fails if the type already exists from a partial run).
     invoicesource = postgresql.ENUM(
         "manual",
         "aade",
@@ -27,11 +29,20 @@ def upgrade() -> None:
     )
     invoicesource.create(op.get_bind(), checkfirst=True)
 
+    invoicesource_no_ddl = postgresql.ENUM(
+        "manual",
+        "aade",
+        "ocr_pdf",
+        "csv_import",
+        name="invoicesource",
+        create_type=False,
+    )
+
     op.create_table(
         "invoices",
         sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
         sa.Column("organization_id", sa.UUID(as_uuid=False), nullable=False),
-        sa.Column("source", invoicesource, nullable=False),
+        sa.Column("source", invoicesource_no_ddl, nullable=False),
         sa.Column("external_id", sa.String(length=255), nullable=True),
         sa.Column("counterparty_id", sa.UUID(as_uuid=False), nullable=True),
         sa.Column("counterparty_display_name", sa.String(length=255), nullable=True),
