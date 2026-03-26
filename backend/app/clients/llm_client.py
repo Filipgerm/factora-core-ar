@@ -2,6 +2,7 @@
 
 Embeddings delegate to ``app.services.embeddings.backend`` so VectorStoreService stays aligned.
 """
+
 from __future__ import annotations
 
 import base64
@@ -41,12 +42,18 @@ class LLMClient:
     def __init__(self) -> None:
         self._openai: AsyncOpenAI | None = None
         self._genai_client: Any = None
-        if settings.LLM_PROVIDER == "openai_compatible" and (settings.LLM_COMPAT_BASE_URL or "").strip():
+        if (
+            settings.LLM_PROVIDER == "openai_compatible"
+            and (settings.LLM_COMPAT_BASE_URL or "").strip()
+        ):
             self._openai = AsyncOpenAI(
                 api_key=settings.LLM_COMPAT_API_KEY,
                 base_url=settings.LLM_COMPAT_BASE_URL.strip().rstrip("/"),
             )
-        elif settings.LLM_PROVIDER == "gemini" and (settings.GEMINI_API_KEY or "").strip():
+        elif (
+            settings.LLM_PROVIDER == "gemini"
+            and (settings.GEMINI_API_KEY or "").strip()
+        ):
             from google import genai
 
             self._genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -111,7 +118,12 @@ class LLMClient:
         temperature: float = 0.1,
     ) -> dict[str, Any]:
         if settings.demo_mode:
-            return {"demo": True, "vendor": "Demo Supplier", "total": "0.00", "vat_rate": "24"}
+            return {
+                "demo": True,
+                "vendor": "Demo Supplier",
+                "total": "0.00",
+                "vat_rate": "24",
+            }
         if settings.LLM_PROVIDER == "openai_compatible":
             client = self._require_openai()
             m = model or settings.GEMINI_CHAT_MODEL
@@ -122,7 +134,11 @@ class LLMClient:
                 temperature=temperature,
             )
             raw = resp.choices[0].message.content or "{}"
-            return json.loads(raw)
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                logger.warning("LLM returned invalid JSON: %s", raw[:200])
+                return {}
 
         from google.genai import types
 
