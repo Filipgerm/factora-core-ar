@@ -124,3 +124,42 @@ def generate_refresh_token() -> tuple[str, str]:
 def hash_jti(jti: str) -> str:
     """Return SHA-256 hex of a JWT ``jti`` claim value."""
     return hashlib.sha256(jti.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Gmail OAuth CSRF state (short-lived HS256 JWT)
+# ---------------------------------------------------------------------------
+
+GMAIL_OAUTH_STATE_TTL_MINUTES: int = 15
+
+
+def encode_gmail_oauth_state(*, user_id: str, organization_id: str) -> str:
+    """Return a JWT used as ``state`` for Google Gmail OAuth redirect."""
+    now = now_utc()
+    expires_at = now + timedelta(minutes=GMAIL_OAUTH_STATE_TTL_MINUTES)
+    payload: dict[str, Any] = {
+        "typ": "gmail_oauth",
+        "sub": user_id,
+        "organization_id": organization_id,
+        "iat": now,
+        "exp": expires_at,
+    }
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=_ALGORITHM)
+
+
+def decode_gmail_oauth_state(token: str) -> dict[str, Any]:
+    """Decode and validate Gmail OAuth ``state`` JWT."""
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[_ALGORITHM],
+            options={"require": ["sub", "exp", "iat", "typ", "organization_id"]},
+        )
+    except ExpiredSignatureError:
+        raise AuthError("Gmail OAuth state has expired", code="auth.gmail_state_expired")
+    except InvalidTokenError as exc:
+        raise AuthError(f"Invalid Gmail OAuth state: {exc}", code="auth.gmail_state_invalid")
+    if payload.get("typ") != "gmail_oauth":
+        raise AuthError("Invalid Gmail OAuth state type", code="auth.gmail_state_invalid")
+    return payload
