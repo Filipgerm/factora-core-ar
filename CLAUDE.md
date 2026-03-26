@@ -194,6 +194,10 @@ Then in `<never_list>` → Frontend section, add:
 - **Timestamps**: use `utcnow()` from `app.db.models._utils` (wraps `datetime.now(timezone.utc)`). NEVER use `datetime.utcnow()` (deprecated).
 - **Soft deletes**: prefer `deleted_at` nullable timestamp columns over hard deletes for audit trails (e.g. `Counterparty.deleted_at`).
 - **Indexes**: add explicit indexes on all FK columns and columns used in `WHERE` / `ORDER BY` clauses.
+- **ORM index definitions**: do not combine `index=True` on a `mapped_column` with a separate
+  `Index(..., "same_column")` in `__table_args__` for the same column — that creates duplicate
+  indexes in metadata (wasted storage, slower writes). Use **either** the column flag **or** one
+  named `Index`, not both.
 - **Multi-tenancy**: every business table must carry `organization_id UUID FK → organizations`. All service queries must filter by `organization_id` obtained from the authenticated user's JWT.
 
 </database_rules>
@@ -700,6 +704,7 @@ Every significant task must conclude with:
 
 - **NEVER** use `datetime.utcnow()` (deprecated) — use `datetime.now(timezone.utc)`.
 - **NEVER** run `alembic upgrade` against the original V1 database instance — V2 migrations target a new Supabase project.
+- **NEVER** declare the same column index twice in SQLAlchemy ORM metadata (e.g. `index=True` on the column **and** an explicit `Index` on that column) — pick one approach per column.
 
 ### Python Tooling
 
