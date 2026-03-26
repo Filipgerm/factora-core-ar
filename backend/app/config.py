@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-LLMProvider = Literal["gemini", "openai_compatible"]
-EmbeddingProvider = Literal["gemini", "sentence_transformers", "openai_compatible"]
+LLMProvider = Literal["gemini", "openai", "anthropic"]
+EmbeddingProvider = Literal["gemini", "openai"]
 
 from dotenv import load_dotenv
 from pydantic import Field, computed_field
@@ -49,10 +49,10 @@ class Settings(BaseSettings):
     SALTEDGE_APP_ID: str = Field(..., description="SaltEdge application ID")
     SALTEDGE_SECRET: str = Field(..., description="SaltEdge API secret")
 
-    # --- AI / LLM (Gemini or LM Studio OpenAI-compatible) ---
+    # --- AI / LLM (Gemini, OpenAI, or Anthropic Claude) ---
     LLM_PROVIDER: LLMProvider = Field(
         default="gemini",
-        description="gemini = Google Gemini API; openai_compatible = LM Studio / local OpenAI-compatible server",
+        description="gemini | openai | anthropic — chat/JSON/vision/stream provider",
     )
     GEMINI_API_KEY: str = Field(default="", description="Google AI Studio / Gemini API key")
     GEMINI_CHAT_MODEL: str = Field(
@@ -63,29 +63,37 @@ class Settings(BaseSettings):
         default="text-embedding-004",
         description="Gemini embedding model (output dimensionality set via EMBEDDING_DIMENSIONS)",
     )
-    LLM_COMPAT_BASE_URL: str = Field(
+    OPENAI_API_KEY: str = Field(
         default="",
-        description="OpenAI-compatible base URL e.g. http://localhost:1234/v1 for LM Studio",
+        description="OpenAI API key; required when LLM_PROVIDER=openai or EMBEDDING_PROVIDER=openai",
     )
-    LLM_COMPAT_API_KEY: str = Field(
-        default="lm-studio",
-        description="API key sent to openai_compatible servers (LM Studio often ignores)",
+    OPENAI_CHAT_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="OpenAI chat model when LLM_PROVIDER=openai",
+    )
+    OPENAI_EMBEDDING_MODEL: str = Field(
+        default="text-embedding-3-small",
+        description="OpenAI embedding model when EMBEDDING_PROVIDER=openai",
+    )
+    ANTHROPIC_API_KEY: str = Field(
+        default="",
+        description="Anthropic API key; required when LLM_PROVIDER=anthropic",
+    )
+    ANTHROPIC_CHAT_MODEL: str = Field(
+        default="claude-sonnet-4-20250514",
+        description="Anthropic model id when LLM_PROVIDER=anthropic",
     )
 
     # --- Embeddings (must match organization_embeddings.vector width) ---
     EMBEDDING_PROVIDER: EmbeddingProvider = Field(
         default="gemini",
-        description="gemini | sentence_transformers | openai_compatible",
+        description="gemini | openai",
     )
     EMBEDDING_DIMENSIONS: int = Field(
         default=768,
         ge=64,
         le=3072,
         description="Vector width; DB column must match (default 768)",
-    )
-    SENTENCE_TRANSFORMER_MODEL: str = Field(
-        default="sentence-transformers/all-mpnet-base-v2",
-        description="HuggingFace id when EMBEDDING_PROVIDER=sentence_transformers (768-dim)",
     )
 
     # --- Gmail OAuth + token encryption ---

@@ -1,8 +1,8 @@
 """Shared embedding backends for LLMClient and VectorStoreService.
 
 **Scope:** Produce float vectors of length ``settings.EMBEDDING_DIMENSIONS`` using
-Gemini API, sentence-transformers (optional group ``local_ml``), or an OpenAI-compatible
-embedding endpoint (LM Studio).
+the Gemini API or OpenAI embeddings (``text-embedding-3-*`` supports a ``dimensions``
+parameter aligned with the DB column).
 
 **Contract:** Async functions; raise ``ValidationError`` / ``ExternalServiceError`` from
 ``app.core.exceptions`` on misconfiguration or provider failure.
@@ -12,9 +12,6 @@ from __future__ import annotations
 
 import logging
 from typing import Sequence
-
-import anyio
-import httpx
 
 from app.config import settings
 from app.core.exceptions import ExternalServiceError, ValidationError
@@ -33,6 +30,17 @@ def _require_gemini_key() -> str:
     return k
 
 
+def _require_openai_key() -> str:
+    k = (settings.OPENAI_API_KEY or "").strip()
+    if not k:
+        raise ValidationError(
+            "OpenAI API key is not configured.",
+            code="config.openai_missing",
+            fields={"OPENAI_API_KEY": "Required when EMBEDDING_PROVIDER=openai"},
+        )
+    return k
+
+
 async def embed_texts(texts: list[str]) -> list[list[float]]:
     """Batch-embed non-empty strings; skip empty inputs in place."""
     if not texts:
@@ -44,10 +52,8 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
     provider = settings.EMBEDDING_PROVIDER
     if provider == "gemini":
         return await _embed_gemini(texts)
-    if provider == "sentence_transformers":
-        return await _embed_sentence_transformers(texts)
-    if provider == "openai_compatible":
-        return await _embed_openai_compatible(texts)
+    if provider == "openai":
+        return await _embed_openai(texts)
     raise ValidationError(
         f"Unknown EMBEDDING_PROVIDER: {provider}",
         code="config.embedding_provider",
@@ -102,73 +108,29 @@ async def _embed_gemini(texts: list[str]) -> list[list[float]]:
     return [_truncate(e.values, dim) for e in resp.embeddings]
 
 
-def _sentence_transformer_encode(texts: list[str]) -> list[list[float]]:
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError as e:
-        raise ValidationError(
-            "sentence-transformers is not installed. Use: uv sync --group local_ml",
-            code="config.sentence_transformers_missing",
-            fields={"EMBEDDING_PROVIDER": "sentence_transformers requires optional deps"},
-        ) from e
+async def _embed_openai(texts: list[str]) -> list[list[float]]:
+    from openai import AsyncOpenAI
 
-    model_name = settings.SENTENCE_TRANSFORMER_MODEL
-    # Module-level cache: reload if model id changes (tests / process reconfiguration).
-    cached_name = getattr(_sentence_transformer_encode, "_cached_model_name", None)
-    if cached_name != model_name:
-        setattr(
-            _sentence_transformer_encode,
-            "_model",
-            SentenceTransformer(model_name),
-        )
-        setattr(_sentence_transformer_encode, "_cached_model_name", model_name)
-    model = getattr(_sentence_transformer_encode, "_model")
-    raw = model.encode(texts, convert_to_numpy=True, normalize_embeddings=False)
+    _require_openai_key()
     dim = int(settings.EMBEDDING_DIMENSIONS)
-    return [_truncate(row.tolist(), dim) for row in raw]
-
-
-async def _embed_sentence_transformers(texts: list[str]) -> list[list[float]]:
+    model = (settings.OPENAI_EMBEDDING_MODEL or "text-embedding-3-small").strip()
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    kwargs: dict = {"model": model, "input": texts}
+    if model.startswith("text-embedding-3"):
+        kwargs["dimensions"] = dim
     try:
-        return await anyio.to_thread.run_sync(lambda: _sentence_transformer_encode(texts))
-    except ValidationError:
-        raise
+        resp = await client.embeddings.create(**kwargs)
     except Exception as e:
-        logger.error("sentence-transformers embedding failed: %s", e)
+        logger.error("OpenAI embedding failed: %s", e)
         raise ExternalServiceError(
-            "Failed to generate local embeddings.",
-            code="external.local_embedding",
+            "Failed to generate embeddings.",
+            code="external.openai_embedding",
         ) from e
-
-
-async def _embed_openai_compatible(texts: list[str]) -> list[list[float]]:
-    base = (settings.LLM_COMPAT_BASE_URL or "").strip().rstrip("/")
-    if not base:
-        raise ValidationError(
-            "LLM_COMPAT_BASE_URL is required for openai_compatible embeddings.",
-            code="config.llm_compat_base_missing",
-            fields={"LLM_COMPAT_BASE_URL": "Set to LM Studio server /v1 base"},
+    if not resp.data:
+        raise ExternalServiceError(
+            "Empty embedding response from OpenAI.",
+            code="external.openai_embedding_empty",
         )
-    url = f"{base}/embeddings"
-    headers = {"Authorization": f"Bearer {settings.LLM_COMPAT_API_KEY}"}
-    dim = int(settings.EMBEDDING_DIMENSIONS)
-    out: list[list[float]] = []
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            for t in texts:
-                r = await client.post(
-                    url,
-                    headers=headers,
-                    json={"model": settings.GEMINI_EMBEDDING_MODEL, "input": t[:8000]},
-                )
-                r.raise_for_status()
-                data = r.json()
-                emb = data["data"][0]["embedding"]
-                out.append(_truncate(emb, dim))
-        return out
-    except Exception as e:
-        logger.error("OpenAI-compatible embedding failed: %s", e)
-        raise ExternalServiceError(
-            "Failed to generate embeddings from local server.",
-            code="external.local_openai_embedding",
-        ) from e
+    # Preserve input order
+    by_index = sorted(resp.data, key=lambda d: d.index)
+    return [_truncate(item.embedding, dim) for item in by_index]

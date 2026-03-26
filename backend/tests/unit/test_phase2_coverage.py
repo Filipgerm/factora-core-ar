@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.clients.email_client import BrevoEmailClient
-from app.clients.gmail_client import GmailSmtpClient
 from app.clients.llm_client import LLMClient
 from app.controllers.ai_controller import AIController
 from app.core.exceptions import ExternalServiceError, ForbiddenError, ValidationError
@@ -73,13 +72,6 @@ async def test_llm_client_demo_stream() -> None:
         async for c in client.stream_chat_completion([{"role": "user", "content": "x"}]):
             chunks.append(c)
         assert chunks
-
-
-@pytest.mark.asyncio
-async def test_gmail_smtp_client_removed() -> None:
-    c = GmailSmtpClient()
-    with pytest.raises(RuntimeError, match="GmailSmtpClient is removed"):
-        await c.send_plain_text(to_email="a@b.com", subject="s", body="b")
 
 
 @pytest.mark.asyncio
@@ -163,10 +155,9 @@ async def test_membership_service_switch() -> None:
 async def test_llm_openai_chat_mocked() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = False
-        s.LLM_PROVIDER = "openai_compatible"
-        s.LLM_COMPAT_BASE_URL = "http://localhost:19999/v1"
-        s.LLM_COMPAT_API_KEY = "x"
-        s.GEMINI_CHAT_MODEL = "local-model"
+        s.LLM_PROVIDER = "openai"
+        s.OPENAI_API_KEY = "sk-test"
+        s.OPENAI_CHAT_MODEL = "gpt-4o-mini"
         with patch("app.clients.llm_client.AsyncOpenAI") as ao:
             inst = ao.return_value
             inst.chat.completions.create = AsyncMock(
@@ -180,13 +171,28 @@ async def test_llm_openai_chat_mocked() -> None:
 
 
 @pytest.mark.asyncio
+async def test_llm_anthropic_chat_mocked() -> None:
+    with patch("app.clients.llm_client.settings") as s:
+        s.demo_mode = False
+        s.LLM_PROVIDER = "anthropic"
+        s.ANTHROPIC_API_KEY = "sk-ant-test"
+        s.ANTHROPIC_CHAT_MODEL = "claude-sonnet-4-20250514"
+        with patch("app.clients.llm_client.AsyncAnthropic") as aa:
+            inst = aa.return_value
+            block = MagicMock(type="text", text="anthropic-ok")
+            inst.messages.create = AsyncMock(return_value=MagicMock(content=[block]))
+            client = LLMClient()
+            text = await client.chat_completion([{"role": "user", "content": "x"}])
+            assert text == "anthropic-ok"
+
+
+@pytest.mark.asyncio
 async def test_llm_openai_json_mocked() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = False
-        s.LLM_PROVIDER = "openai_compatible"
-        s.LLM_COMPAT_BASE_URL = "http://localhost:19999/v1"
-        s.LLM_COMPAT_API_KEY = "x"
-        s.GEMINI_CHAT_MODEL = "local-model"
+        s.LLM_PROVIDER = "openai"
+        s.OPENAI_API_KEY = "sk-test"
+        s.OPENAI_CHAT_MODEL = "gpt-4o-mini"
         with patch("app.clients.llm_client.AsyncOpenAI") as ao:
             inst = ao.return_value
             inst.chat.completions.create = AsyncMock(
@@ -213,10 +219,9 @@ def test_brevo_send_plain_text_delegates_to_html() -> None:
 async def test_llm_openai_stream_mocked() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = False
-        s.LLM_PROVIDER = "openai_compatible"
-        s.LLM_COMPAT_BASE_URL = "http://localhost:19999/v1"
-        s.LLM_COMPAT_API_KEY = "x"
-        s.GEMINI_CHAT_MODEL = "local-model"
+        s.LLM_PROVIDER = "openai"
+        s.OPENAI_API_KEY = "sk-test"
+        s.OPENAI_CHAT_MODEL = "gpt-4o-mini"
         with patch("app.clients.llm_client.AsyncOpenAI") as ao:
             inst = ao.return_value
 

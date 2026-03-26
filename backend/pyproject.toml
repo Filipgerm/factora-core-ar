@@ -56,9 +56,6 @@ dev = [
     "asgi-lifespan",
     "httpx",
 ]
-local_ml = [
-    "sentence-transformers>=3.0.0",
-]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

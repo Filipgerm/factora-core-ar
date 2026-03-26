@@ -1,7 +1,7 @@
 """VectorStoreService — pgvector-backed semantic memory per organization.
 
 Scope:
-    Generate embeddings (Gemini / local / compatible) for arbitrary text, persist rows in
+    Generate embeddings (Gemini or OpenAI) for arbitrary text, persist rows in
     ``organization_embeddings``, and run similarity search **always filtered by**
     ``organization_id`` so tenants never leak context across org boundaries.
 
@@ -28,7 +28,7 @@ Architectural notes:
     - Uses raw SQL with the ``<=>`` cosine-distance operator for predictable
       behaviour across SQLAlchemy versions.
     - Embedding width must match the DB column; configure ``EMBEDDING_DIMENSIONS``
-      and ``EMBEDDING_PROVIDER`` (Gemini, sentence-transformers, or OpenAI-compatible).
+      and ``EMBEDDING_PROVIDER`` (``gemini`` or ``openai``).
 """
 from __future__ import annotations
 
