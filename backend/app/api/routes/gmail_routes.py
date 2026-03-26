@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from app.controllers.gmail_controller import GmailController
 from app.db.models.identity import UserRole
@@ -18,6 +18,9 @@ from app.dependencies import (
 
 router = APIRouter()
 
+# Ingestion preview multipart: cap attachment size (aligned with ingestion agent limits).
+MAX_INGESTION_PREVIEW_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB
+
 
 @router.get(
     "/integrations/gmail/authorize",
@@ -29,7 +32,12 @@ async def gmail_authorize(
     ctl: GmailCtrl,
 ):
     """Return Google OAuth URL to connect Gmail (read-only scope)."""
-    uid = str(user.get("sub") or "")
+    uid = str(user.get("sub") or "").strip()
+    if not uid:
+        raise HTTPException(
+            status_code=401,
+            detail="Access token is missing a subject (sub) claim.",
+        )
     return ctl.authorize_url(user_id=uid, organization_id=org_id)
 
 
@@ -71,6 +79,11 @@ async def ingestion_preview(
     mime: str | None = None
     if file is not None and file.filename:
         data = await file.read()
+        if len(data) > MAX_INGESTION_PREVIEW_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds maximum size of {MAX_INGESTION_PREVIEW_UPLOAD_BYTES // (1024 * 1024)} MiB.",
+            )
         b64 = base64.b64encode(data).decode("ascii")
         mime = file.content_type or "application/octet-stream"
     return await ctl.preview_ingestion(

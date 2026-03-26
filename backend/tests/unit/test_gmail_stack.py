@@ -5,10 +5,12 @@ from __future__ import annotations
 import base64
 import json
 import uuid
+import sys
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from app.clients.gmail_api_client import GmailApiClient
 from app.controllers.gmail_controller import GmailController
@@ -95,6 +97,46 @@ async def test_pubsub_push_decodes_envelope_and_calls_sync() -> None:
 
 
 @pytest.mark.asyncio
+async def test_pubsub_push_401_when_audience_configured_without_bearer() -> None:
+    """If OIDC audience is set, missing or non-Bearer Authorization must not bypass verify."""
+    req = MagicMock(spec=Request)
+    req.headers = {}
+
+    ctl = GmailController(
+        oauth_service=MagicMock(),
+        sync_service=MagicMock(),
+        db=AsyncMock(),
+    )
+
+    with patch("app.controllers.gmail_controller.settings") as st:
+        st.demo_mode = False
+        st.GMAIL_PUBSUB_VERIFICATION_AUDIENCE = "https://pubsub.googleapis.com/myproject"
+        with pytest.raises(HTTPException) as exc:
+            await ctl.pubsub_push(req)
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "missing_pubsub_token"
+
+
+@pytest.mark.asyncio
+async def test_pubsub_push_401_when_audience_configured_non_bearer_scheme() -> None:
+    req = MagicMock(spec=Request)
+    req.headers = {"Authorization": "Basic abc"}
+
+    ctl = GmailController(
+        oauth_service=MagicMock(),
+        sync_service=MagicMock(),
+        db=AsyncMock(),
+    )
+
+    with patch("app.controllers.gmail_controller.settings") as st:
+        st.demo_mode = False
+        st.GMAIL_PUBSUB_VERIFICATION_AUDIENCE = "https://pubsub.googleapis.com/myproject"
+        with pytest.raises(HTTPException) as exc:
+            await ctl.pubsub_push(req)
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_pubsub_push_demo_short_circuit() -> None:
     req = MagicMock(spec=Request)
     ctl = GmailController(
@@ -106,3 +148,48 @@ async def test_pubsub_push_demo_short_circuit() -> None:
         st.demo_mode = True
         out = await ctl.pubsub_push(req)
     assert out["status"] == "ignored_demo"
+
+
+def test_sentence_transformer_cache_reloads_when_model_name_changes() -> None:
+    """Cache must invalidate when ``SENTENCE_TRANSFORMER_MODEL`` changes (no stale weights)."""
+    import numpy as np
+
+    import app.services.embeddings.backend as emb
+
+    fn = emb._sentence_transformer_encode
+    fn.__dict__.pop("_model", None)
+    fn.__dict__.pop("_cached_model_name", None)
+
+    constructed: list[str] = []
+
+    class _TrackingSentenceTransformer:
+        def __init__(self, name: str) -> None:
+            constructed.append(name)
+
+        def encode(self, texts, convert_to_numpy=True, normalize_embeddings=False):
+            return np.ones((len(texts), 768))
+
+    fake_mod = ModuleType("sentence_transformers")
+    fake_mod.SentenceTransformer = _TrackingSentenceTransformer
+    prev = sys.modules.get("sentence_transformers")
+    sys.modules["sentence_transformers"] = fake_mod
+    try:
+        with patch.object(
+            emb,
+            "settings",
+            SimpleNamespace(SENTENCE_TRANSFORMER_MODEL="model-a", EMBEDDING_DIMENSIONS=768),
+        ):
+            fn(["one"])
+        with patch.object(
+            emb,
+            "settings",
+            SimpleNamespace(SENTENCE_TRANSFORMER_MODEL="model-b", EMBEDDING_DIMENSIONS=768),
+        ):
+            fn(["two"])
+    finally:
+        if prev is not None:
+            sys.modules["sentence_transformers"] = prev
+        else:
+            sys.modules.pop("sentence_transformers", None)
+
+    assert constructed == ["model-a", "model-b"]

@@ -113,9 +113,15 @@ def _sentence_transformer_encode(texts: list[str]) -> list[list[float]]:
         ) from e
 
     model_name = settings.SENTENCE_TRANSFORMER_MODEL
-    # Module-level cache
-    if not hasattr(_sentence_transformer_encode, "_model"):
-        setattr(_sentence_transformer_encode, "_model", SentenceTransformer(model_name))
+    # Module-level cache: reload if model id changes (tests / process reconfiguration).
+    cached_name = getattr(_sentence_transformer_encode, "_cached_model_name", None)
+    if cached_name != model_name:
+        setattr(
+            _sentence_transformer_encode,
+            "_model",
+            SentenceTransformer(model_name),
+        )
+        setattr(_sentence_transformer_encode, "_cached_model_name", model_name)
     model = getattr(_sentence_transformer_encode, "_model")
     raw = model.encode(texts, convert_to_numpy=True, normalize_embeddings=False)
     dim = int(settings.EMBEDDING_DIMENSIONS)

@@ -35,7 +35,9 @@ class GmailController:
         self._sync = sync_service
         self._db = db
 
-    def authorize_url(self, *, user_id: str, organization_id: str) -> GmailAuthorizeResponse:
+    def authorize_url(
+        self, *, user_id: str, organization_id: str
+    ) -> GmailAuthorizeResponse:
         try:
             url = self._oauth.build_authorization_url(
                 user_id=user_id,
@@ -77,13 +79,16 @@ class GmailController:
         attachment_base64: str | None = None,
         attachment_mime_type: str | None = None,
     ) -> IngestionPreviewResponse:
-        svc = IngestionService(self._db, organization_id)
-        result = await svc.run_ingestion(
-            raw_text=raw_text,
-            attachment_base64=attachment_base64,
-            attachment_mime_type=attachment_mime_type,
-            include_vector_hints=False,
-        )
+        try:
+            svc = IngestionService(self._db, organization_id)
+            result = await svc.run_ingestion(
+                raw_text=raw_text,
+                attachment_base64=attachment_base64,
+                attachment_mime_type=attachment_mime_type,
+                include_vector_hints=False,
+            )
+        except AppError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         return IngestionPreviewResponse(result=result)
 
     async def pubsub_push(self, request: Request) -> dict[str, str]:
@@ -93,8 +98,12 @@ class GmailController:
 
         auth = request.headers.get("Authorization")
         aud = (settings.GMAIL_PUBSUB_VERIFICATION_AUDIENCE or "").strip()
-        if aud and auth and auth.startswith("Bearer "):
+        if aud:
+            if not auth or not auth.startswith("Bearer "):
+                raise HTTPException(status_code=401, detail="missing_pubsub_token")
             token = auth[7:].strip()
+            if not token:
+                raise HTTPException(status_code=401, detail="missing_pubsub_token")
             try:
                 from google.auth.transport import requests as greq
                 from google.oauth2 import id_token
@@ -102,7 +111,9 @@ class GmailController:
                 id_token.verify_oauth2_token(token, greq.Request(), audience=aud)
             except Exception as e:
                 logger.warning("Pub/Sub OIDC verification failed: %s", e)
-                raise HTTPException(status_code=403, detail="invalid_pubsub_token") from e
+                raise HTTPException(
+                    status_code=403, detail="invalid_pubsub_token"
+                ) from e
 
         try:
             body = await request.json()
@@ -118,7 +129,9 @@ class GmailController:
         except Exception as e:
             raise HTTPException(status_code=400, detail="invalid_pubsub_payload") from e
 
-        email_address = (inner.get("emailAddress") or inner.get("email_address") or "").strip()
+        email_address = (
+            inner.get("emailAddress") or inner.get("email_address") or ""
+        ).strip()
         history_id = inner.get("historyId")
         if history_id is not None:
             history_id = str(history_id)

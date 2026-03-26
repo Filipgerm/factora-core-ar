@@ -40,7 +40,7 @@ class GmailMailboxConnection(Base):
         nullable=False,
         index=True,
     )
-    google_email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    google_email: Mapped[str] = mapped_column(String(320), nullable=False)
     encrypted_refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
     scopes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     history_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
