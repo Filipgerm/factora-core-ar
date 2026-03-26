@@ -74,9 +74,7 @@ class CollectionsNodes:
         drafts: list[dict[str, Any]] = []
         for a in state.get("alerts", []):
             if settings.demo_mode:
-                body = (
-                    f"Demo draft for alert {a['name']}: please remit payment at your earliest convenience."
-                )
+                body = f"Demo draft for alert {a['name']}: please remit payment at your earliest convenience."
             else:
                 messages = [
                     {"role": "system", "content": DRAFT_SYSTEM_MESSAGE},
@@ -109,7 +107,9 @@ class CollectionsNodes:
                         d["to_email"],
                         d["subject"],
                     )
-                    sent.append({"alert_id": d["alert_id"], "status": "sent"})
+                    sent.append(
+                        {"alert_id": d["alert_id"], "status": "sent", "detail": None}
+                    )
                     continue
 
                 ok = await anyio.to_thread.run_sync(
