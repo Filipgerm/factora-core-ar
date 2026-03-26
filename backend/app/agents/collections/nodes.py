@@ -1,4 +1,4 @@
-"""Collections nodes: discover alerts, draft reminder emails, send via SMTP.
+"""Collections nodes: discover alerts, draft reminder emails, send via Brevo.
 
 **``discover``:** queries ``Alert`` where ``resolved_at`` is null, ordered by
 ``created_at``, limited by ``constants.UNRESOLVED_ALERTS_FETCH_LIMIT``.
@@ -6,7 +6,7 @@
 **``draft``:** demo mode uses fixed copy; otherwise ``LLMClient.chat_completion`` with
 templates from ``prompts.py``. Placeholder ``to_email`` from ``constants``.
 
-**``send``:** delegates to ``GmailSmtpClient``; appends per-draft status to ``sent``.
+**``send``:** delegates to ``BrevoEmailClient.send_plain_text`` (sync API in thread).
 """
 
 from __future__ import annotations
@@ -14,10 +14,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import anyio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.gmail_client import GmailSmtpClient
+from app.clients.email_client import BrevoEmailClient
 from app.clients.llm_client import LLMClient
 from app.config import settings
 from app.db.models.alerts import Alert
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 class CollectionsNodes:
     def __init__(self) -> None:
         self._llm = LLMClient()
-        self._mail = GmailSmtpClient()
+        self._mail = BrevoEmailClient()
 
     async def _load_alerts(
         self,
@@ -102,12 +103,28 @@ class CollectionsNodes:
         sent: list[dict[str, Any]] = []
         for d in state.get("drafts", []):
             try:
-                await self._mail.send_plain_text(
-                    to_email=d["to_email"],
-                    subject=d["subject"],
-                    body=d["body"],
+                if settings.demo_mode:
+                    logger.info(
+                        "[DEMO] Brevo would send collections to=%s subject=%s",
+                        d["to_email"],
+                        d["subject"],
+                    )
+                    sent.append({"alert_id": d["alert_id"], "status": "sent"})
+                    continue
+
+                ok = await anyio.to_thread.run_sync(
+                    self._mail.send_plain_text,
+                    d["to_email"],
+                    d["subject"],
+                    d["body"],
                 )
-                sent.append({"alert_id": d["alert_id"], "status": "sent"})
+                sent.append(
+                    {
+                        "alert_id": d["alert_id"],
+                        "status": "sent" if ok else "error",
+                        "detail": None if ok else "brevo_rejected",
+                    }
+                )
             except Exception as e:
                 logger.error("collections send failed: %s", e)
                 sent.append(
