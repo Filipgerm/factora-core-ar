@@ -3,14 +3,15 @@
 **Scope:** Wire ``StateGraph`` nodes only — no extraction logic in this file.
 
 **Flow:**
-    1. ``validate`` — reject empty ``raw_text`` (early ``result`` with error).
-    2. ``extract`` — LLM JSON field extraction (or demo fixture).
-    3. ``context`` — optional pgvector similarity hints via ``vector_store_factory``.
-    4. ``finalize`` — merge ``extracted`` + ``neighbors`` into ``result``.
+    1. ``materialize`` — decode optional base64 PDF (text append) or stage image for vision.
+    2. ``validate`` — reject empty input (no text and no image).
+    3. ``extract`` — LLM JSON with ERP fields, confidence, summary (text or vision).
+    4. ``context`` — optional pgvector similarity hints via ``vector_store_factory``.
+    5. ``finalize`` — document embedding + ``requires_human_review`` + flat invoice payload.
 
 **Contract:** Services import ``ingestion_graph`` from ``app.agents.ingestion`` and
-call ``ainvoke`` with ``organization_id``, ``raw_text``, ``db``, and optionally
-``vector_store_factory`` / ``llm`` (tests) on the initial state.
+call ``ainvoke`` with ``organization_id``, ``raw_text`` and/or attachment fields,
+``db``, and optionally ``vector_store_factory`` / ``llm`` (tests).
 """
 from __future__ import annotations
 
@@ -26,11 +27,13 @@ def _build_ingestion_workflow():
     workflow = StateGraph(IngestionState)
     n = _nodes
 
+    workflow.add_node("materialize", n.materialize)
     workflow.add_node("validate", n.validate)
     workflow.add_node("extract", n.extract)
     workflow.add_node("context", n.context)
     workflow.add_node("finalize", n.finalize)
-    workflow.add_edge(START, "validate")
+    workflow.add_edge(START, "materialize")
+    workflow.add_edge("materialize", "validate")
 
     def route_after_validate(state: IngestionState) -> str:
         return "end" if state.get("result") else "extract"

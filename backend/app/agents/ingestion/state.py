@@ -1,11 +1,14 @@
 """Ingestion graph state schema and typing-only ports.
 
-**Keys:** ``organization_id`` and ``raw_text`` are required inputs; ``db`` is the
-caller's ``AsyncSession``. Optional ``vector_store_factory`` and ``llm`` are
-runtime dependencies (see ``CLAUDE.md``) — not configuration constants.
+**Inputs:** ``organization_id`` and either ``raw_text`` (after materialize), a Gmail
+image attachment (``attachment_base64`` + ``attachment_mime_type``), or both.
+Optional ``email_subject`` / ``email_from`` improve vision extraction context.
 
-**Outputs:** ``extracted``, ``neighbors``, and terminal ``result`` (or early error
-in ``result``) are written by nodes as the graph runs.
+**Runtime hooks:** ``vector_store_factory`` and ``llm`` are injected by the calling
+service or tests — not ``constants.py`` values.
+
+**Outputs:** ``extracted``, ``neighbors``, vision staging keys, and terminal ``result``
+(including ``embedding``, ``confidence``, ``requires_human_review``).
 
 **SimilaritySearchPort:** protocol implemented by services injecting vector search.
 """
@@ -31,6 +34,14 @@ class IngestionState(TypedDict, total=False):
     organization_id: str
     raw_text: str
     db: NotRequired[Any]
+    # Optional Gmail / webhook context (not secrets — metadata only).
+    email_subject: NotRequired[str]
+    email_from: NotRequired[str]
+    # Raw attachment as base64; ``materialize`` decodes PDFs to text or stages images.
+    attachment_base64: NotRequired[str]
+    attachment_mime_type: NotRequired[str]
+    vision_image_base64: NotRequired[str]
+    vision_image_mime: NotRequired[str]
     # Runtime injection (optional). Not constants — see ``constants.py`` for limits.
     vector_store_factory: NotRequired[VectorStoreFactory]
     llm: NotRequired[Any]
