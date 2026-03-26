@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import Request
@@ -121,11 +121,18 @@ async def test_reconciliation_agent_run_empty_ledger() -> None:
 
 
 @pytest.mark.asyncio
-async def test_vector_store_requires_openai_key() -> None:
+async def test_vector_store_requires_gemini_key_when_gemini_embedding() -> None:
     from app.services.embeddings.vector_store import VectorStoreService
 
     vs = VectorStoreService(AsyncMock(), str(uuid.uuid4()))
-    with pytest.raises(ValidationError, match="OpenAI"):
+    with (
+        patch("app.services.embeddings.backend.settings") as st,
+        pytest.raises(ValidationError, match="Gemini"),
+    ):
+        st.demo_mode = False
+        st.EMBEDDING_PROVIDER = "gemini"
+        st.GEMINI_API_KEY = ""
+        st.EMBEDDING_DIMENSIONS = 768
         await vs.embed_texts(["hello"])
 
 
