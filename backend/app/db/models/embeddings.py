@@ -30,7 +30,7 @@ class OrganizationEmbedding(Base):
     )
     source: Mapped[str] = mapped_column(String(64), nullable=False)
     content_text: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(1536), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(768), nullable=False)
     embedding_metadata: Mapped[dict] = mapped_column(
         "embedding_metadata",
         JSONB,

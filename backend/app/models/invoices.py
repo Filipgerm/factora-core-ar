@@ -16,6 +16,7 @@ class InvoiceSourceEnum(str, Enum):
     AADE = "aade"
     OCR_PDF = "ocr_pdf"
     CSV_IMPORT = "csv_import"
+    GMAIL = "gmail"
 
 
 class InvoiceCreateRequest(BaseModel):
