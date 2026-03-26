@@ -215,14 +215,13 @@ Do not skip step 3. Without it, the loop does not close and the model does not l
 ## LLM & Embedding Standards
 
 - **LLM (Phase 2)** — graphs construct **`LLMClient`** (or accept an injected instance
-  in tests). Runtime provider is **`LLM_PROVIDER`**: **`gemini`** (Google GenAI) or
-  **`openai_compatible`** (LM Studio / local OpenAI-style HTTP). Do not add new raw
+  in tests). Runtime provider is **`LLM_PROVIDER`**: **`gemini`** (Google GenAI),
+  **`openai`** (OpenAI API), or **`anthropic`** (Claude). Do not add new raw
   provider SDK construction inside nodes beyond what `LLMClient` already wraps.
 - **Embeddings** — dimensions are **`EMBEDDING_DIMENSIONS`** (DB **768**). Batch/single
-  embedding calls go through **`app/services/embeddings/backend.py`** (Gemini,
-  optional **sentence-transformers** with `uv sync --group local_ml`, or compatible
-  HTTP). Ingestion may use a service-injected vector store factory; pgvector I/O
-  stays in `app/services/embeddings/`, not duplicated per node.
+  embedding calls go through **`app/services/embeddings/backend.py`** (**Gemini** or
+  **OpenAI** embeddings). Ingestion may use a service-injected vector store factory;
+  pgvector I/O stays in `app/services/embeddings/`, not duplicated per node.
 - **Prompts** — all prompt templates live in `prompts.py`. Inline f-strings for
   **template text** inside `nodes.py` are forbidden (formatting user content via
   small helpers that call `prompts.py` is fine).

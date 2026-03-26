@@ -26,7 +26,7 @@ Factora is an **AI-native ERP and financial platform**, built to be the "Rillet 
 
 ### The AI-Native Mandate (The "Agentic Swarm")
 
-Factora does not just use AI; it is built _around_ AI. We use a multi-agent architecture (**LangGraph** + **Google Gemini** or an **OpenAI-compatible** local server (e.g. LM Studio) for chat, **Gemini / sentence-transformers / compatible** embeddings via `app/services/embeddings/backend.py`, plus **pgvector**) to automate end-to-end accounting processes. When designing features, always consider how AI can eliminate manual data entry. Always build an **Active Learning Loop**: if the AI is unsure, surface it to the user, and use that feedback to improve future predictions.
+Factora does not just use AI; it is built _around_ AI. We use a multi-agent architecture (**LangGraph** + **Google Gemini**, **OpenAI**, or **Anthropic Claude** for chat, and **Gemini** or **OpenAI** embeddings via `app/services/embeddings/backend.py`, plus **pgvector**) to automate end-to-end accounting processes. When designing features, always consider how AI can eliminate manual data entry. Always build an **Active Learning Loop**: if the AI is unsure, surface it to the user, and use that feedback to improve future predictions.
 
 **Core AI Workflows:**
 
@@ -281,7 +281,7 @@ When `requires_human_review is True`, the calling service must:
 
 ### LLM & Embedding Standards
 
-- **LLM calls**: use **`LLMClient`** (`app/clients/llm_client.py`) from nodes or injected test doubles — never instantiate raw **Gemini** / **OpenAI-compatible** SDK clients directly in node files. Shared embedding dimensions and providers are configured via `Settings` (`GEMINI_*`, `LLM_COMPAT_*`, `EMBEDDING_*`).
+- **LLM calls**: use **`LLMClient`** (`app/clients/llm_client.py`) from nodes or injected test doubles — never instantiate raw **Gemini**, **OpenAI**, or **Anthropic** SDK clients directly in node files. Shared embedding dimensions and providers are configured via `Settings` (`GEMINI_*`, `OPENAI_*`, `ANTHROPIC_*`, `EMBEDDING_*`).
 - **Embeddings**: use the shared pgvector retriever in `base.py`. Never create ad-hoc vector stores inside a node.
 - **Prompt templates**: always live in `prompts.py`. Inline f-strings for prompts inside `nodes.py` are forbidden.
 - **Async**: all graph nodes must be `async def`. Use `graph.ainvoke()`, never `graph.invoke()` in FastAPI workers.
@@ -441,7 +441,7 @@ Our frontend must look and feel like a top-tier, modern fintech application (Str
 
 - **Runtime**: Python, managed by `uv` (never `pip install` directly).
 - **Framework**: FastAPI with Uvicorn (async, ASGI).
-- **Agent Orchestration**: LangGraph + pgvector; **LLM**: Gemini API or OpenAI-compatible HTTP (LM Studio); **embeddings**: shared backend (Gemini, optional sentence-transformers, or compatible API). See `backend/.env.example` and `app/services/embeddings/backend.py`.
+- **Agent Orchestration**: LangGraph + pgvector; **LLM**: Gemini, OpenAI, or Anthropic (Claude) via `LLMClient`; **embeddings**: shared backend (Gemini or OpenAI). See `backend/.env.example` and `app/services/embeddings/backend.py`.
 - **Custom ML**: PyTorch — device-agnostic, always `.to(device)` (see `<ai_pytorch>`).
 - **ORM**: SQLAlchemy (AsyncSession) + Alembic migrations.
 - **Database**: PostgreSQL via Supabase (pgvector extension enabled).
@@ -490,7 +490,7 @@ All environment variables are documented in `backend/.env.example`.
 | `CODE_PEPPER`          | ✅ always | Server-side pepper for Argon2id hashing (≥16 chars).                                 |
 | `GOOGLE_CLIENT_ID`     | ✅ always | Google OAuth 2.0 client ID for Google Sign-In.                                       |
 | `GOOGLE_CLIENT_SECRET` | ✅ always | Google OAuth 2.0 client secret (never exposed to the client).                        |
-| `GEMINI_API_KEY` / `LLM_PROVIDER` / `EMBEDDING_*` | optional* | Live agents need a provider; see `backend/.env.example` and `backend/CLAUDE.md` (Gemini vs LM Studio vs demo). |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `LLM_PROVIDER` / `EMBEDDING_*` | optional* | Live agents need a provider; see `backend/.env.example` and `backend/CLAUDE.md` (Gemini, OpenAI, Claude, or demo). |
 | Gmail OAuth / Pub/Sub | optional* | `GOOGLE_GMAIL_REDIRECT_URI`, `GMAIL_TOKEN_ENCRYPTION_KEY`, `GMAIL_PUBSUB_VERIFICATION_AUDIENCE` when using mailbox ingestion. |
 
 ### DEMO_MODE

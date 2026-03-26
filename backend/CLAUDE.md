@@ -27,8 +27,7 @@ agents/          ← LangGraph agent graphs. Called BY services. Never imports f
                    api/, controllers/, or services/. See backend/app/agents/CLAUDE.md.
 
 clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI,
-                   Gmail REST via ``gmail_api_client``, legacy ``gmail_client`` SMTP stub,
-                   Supabase Storage). No business logic. No AsyncSession.
+                   Gmail REST via ``gmail_api_client``, Supabase Storage). No business logic. No AsyncSession.
 
 packages/        ← Internal SDKs (AADE, SaltEdge, Stripe). Fully standalone.
                    Must NEVER import from app/. See backend/packages/CLAUDE.md.
@@ -67,7 +66,7 @@ backend/
     ├── api/routes/              ← includes ``gmail_routes.py`` (Gmail OAuth, sync, preview, Pub/Sub mount)
     ├── controllers/             ← includes ``gmail_controller.py``
     ├── services/
-    │   ├── embeddings/          ← pgvector + ``backend.py`` (Gemini / sentence-transformers / compatible)
+    │   ├── embeddings/          ← pgvector + ``backend.py`` (Gemini or OpenAI embeddings)
     │   ├── gmail_oauth_service.py
     │   └── gmail_sync_service.py
     ├── agents/                  ← LangGraph agents (NOT inside services/)
@@ -75,8 +74,7 @@ backend/
     │   ├── email_client.py
     │   ├── gemi_client.py
     │   ├── gmail_api_client.py ← Gmail OAuth token refresh + REST (httpx)
-    │   ├── gmail_client.py     ← Deprecated SMTP stub (use Brevo; Gmail API send TBD)
-    │   ├── llm_client.py       ← Gemini or OpenAI-compatible (LM Studio)
+    │   ├── llm_client.py       ← Gemini, OpenAI, or Anthropic (Claude)
     │   └── storage_client.py   ← File storage (Supabase Storage / S3)
     ├── models/                  ← includes ``gmail.py`` Pydantic DTOs for Gmail HTTP responses
     ├── db/
@@ -335,15 +333,17 @@ field on `Settings` (required = no default in code; optional = has a default, of
 
 | Variable | Required | Description |
 | -------- | -------- | ----------- |
-| `LLM_PROVIDER` | ✅ | `gemini` or `openai_compatible` (LM Studio / local OpenAI-compatible server). |
+| `LLM_PROVIDER` | ✅ | `gemini`, `openai`, or `anthropic` (Claude). |
 | `GEMINI_API_KEY` | optional* | Google AI key; required when `LLM_PROVIDER=gemini` (non-demo). |
-| `GEMINI_CHAT_MODEL` | optional | Chat model (e.g. `gemini-2.0-flash`). |
-| `GEMINI_EMBEDDING_MODEL` | optional | Embedding model (e.g. `text-embedding-004`). |
-| `LLM_COMPAT_BASE_URL` | optional* | OpenAI-compatible API base URL when `LLM_PROVIDER=openai_compatible`. |
-| `LLM_COMPAT_API_KEY` | optional | API key for compatible server (LM Studio often accepts any string). |
-| `EMBEDDING_PROVIDER` | ✅ | `gemini`, `sentence_transformers`, or `openai_compatible`. |
+| `GEMINI_CHAT_MODEL` | optional | Chat / vision model (e.g. `gemini-2.0-flash`). |
+| `GEMINI_EMBEDDING_MODEL` | optional | Embedding model when `EMBEDDING_PROVIDER=gemini` (e.g. `text-embedding-004`). |
+| `OPENAI_API_KEY` | optional* | Required when `LLM_PROVIDER=openai` or `EMBEDDING_PROVIDER=openai`. |
+| `OPENAI_CHAT_MODEL` | optional | Chat model when `LLM_PROVIDER=openai`. |
+| `OPENAI_EMBEDDING_MODEL` | optional | Embedding model when `EMBEDDING_PROVIDER=openai` (e.g. `text-embedding-3-small`). |
+| `ANTHROPIC_API_KEY` | optional* | Required when `LLM_PROVIDER=anthropic`. |
+| `ANTHROPIC_CHAT_MODEL` | optional | Claude model id when `LLM_PROVIDER=anthropic`. |
+| `EMBEDDING_PROVIDER` | ✅ | `gemini` or `openai`. |
 | `EMBEDDING_DIMENSIONS` | optional | Vector width; must match DB column (default `768`). |
-| `SENTENCE_TRANSFORMER_MODEL` | optional | HF model id when `EMBEDDING_PROVIDER=sentence_transformers` (`uv sync --group local_ml`). |
 
 ### Stripe
 

@@ -35,7 +35,7 @@ that split happens.
 
 Environment variables required by `app.config.Settings` are populated in `conftest.py`
 before importing the application (including **Stripe** keys as empty strings for
-stub behaviour, **Gemini / LLM / embedding / Gmail** placeholders aligned with
+stub behaviour, **Gemini / OpenAI / Anthropic / embedding / Gmail** placeholders aligned with
 `backend/.env.example`).
 
 ## Target fixtures (not in repo yet)
