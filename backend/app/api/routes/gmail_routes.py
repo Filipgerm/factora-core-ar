@@ -24,7 +24,10 @@ MAX_INGESTION_PREVIEW_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB
 
 @router.get(
     "/integrations/gmail/authorize",
-    dependencies=[Depends(require_auth), Depends(require_role(UserRole.OWNER, UserRole.ADMIN))],
+    dependencies=[
+        Depends(require_auth),
+        Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    ],
 )
 async def gmail_authorize(
     user: AuthUser,
@@ -53,7 +56,10 @@ async def gmail_oauth_callback(
 
 @router.post(
     "/integrations/gmail/sync",
-    dependencies=[Depends(require_auth), Depends(require_role(UserRole.OWNER, UserRole.ADMIN))],
+    dependencies=[
+        Depends(require_auth),
+        Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    ],
 )
 async def gmail_sync(
     org_id: CurrentOrgId,
@@ -78,12 +84,17 @@ async def ingestion_preview(
     b64: str | None = None
     mime: str | None = None
     if file is not None and file.filename:
-        data = await file.read()
-        if len(data) > MAX_INGESTION_PREVIEW_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File exceeds maximum size of {MAX_INGESTION_PREVIEW_UPLOAD_BYTES // (1024 * 1024)} MiB.",
-            )
+        chunks = []
+        total_size = 0
+        while chunk := await file.read(64 * 1024):
+            total_size += len(chunk)
+            if total_size > MAX_INGESTION_PREVIEW_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File exceeds maximum size of {MAX_INGESTION_PREVIEW_UPLOAD_BYTES // (1024 * 1024)} MiB.",
+                )
+            chunks.append(chunk)
+        data = b"".join(chunks)
         b64 = base64.b64encode(data).decode("ascii")
         mime = file.content_type or "application/octet-stream"
     return await ctl.preview_ingestion(
