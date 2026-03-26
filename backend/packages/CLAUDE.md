@@ -23,7 +23,9 @@ serialization contract — similar in spirit to AADE/SaltEdge complexity even th
 the wire format is JSON, not XML).
 
 **Does not qualify → `clients/`**: Brevo (standard REST + SDK), GEMI (simple REST
-lookup), Gmail (standard SDK), Supabase Storage (standard SDK).
+lookup), **Gmail** (OAuth + REST via ``app/clients/gmail_api_client.py`` and
+``httpx`` — not a separate published “Gmail SDK” package under ``packages/``),
+Supabase Storage (standard SDK).
 
 When in doubt, start in `clients/`. Promote to a package only when the integration
 outgrows a single file.

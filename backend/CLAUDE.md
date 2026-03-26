@@ -26,7 +26,8 @@ services/        ← ALL business logic + DB access via AsyncSession.
 agents/          ← LangGraph agent graphs. Called BY services. Never imports from
                    api/, controllers/, or services/. See backend/app/agents/CLAUDE.md.
 
-clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI, Gmail,
+clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI,
+                   Gmail REST via ``gmail_api_client``, legacy ``gmail_client`` SMTP stub,
                    Supabase Storage). No business logic. No AsyncSession.
 
 packages/        ← Internal SDKs (AADE, SaltEdge, Stripe). Fully standalone.
@@ -63,18 +64,21 @@ backend/
     ├── main.py
     ├── dependencies.py
     ├── config.py
-    ├── api/routes/
-    ├── controllers/
+    ├── api/routes/              ← includes ``gmail_routes.py`` (Gmail OAuth, sync, preview, Pub/Sub mount)
+    ├── controllers/             ← includes ``gmail_controller.py``
     ├── services/
-    │   └── embeddings/          ← pgvector embedding logic (uses AsyncSession)
+    │   ├── embeddings/          ← pgvector + ``backend.py`` (Gemini / sentence-transformers / compatible)
+    │   ├── gmail_oauth_service.py
+    │   └── gmail_sync_service.py
     ├── agents/                  ← LangGraph agents (NOT inside services/)
     ├── clients/
     │   ├── email_client.py
     │   ├── gemi_client.py
-    │   ├── gmail_client.py
-    │   ├── llm_client.py
+    │   ├── gmail_api_client.py ← Gmail OAuth token refresh + REST (httpx)
+    │   ├── gmail_client.py     ← Deprecated SMTP stub (use Brevo; Gmail API send TBD)
+    │   ├── llm_client.py       ← Gemini or OpenAI-compatible (LM Studio)
     │   └── storage_client.py   ← File storage (Supabase Storage / S3)
-    ├── models/
+    ├── models/                  ← includes ``gmail.py`` Pydantic DTOs for Gmail HTTP responses
     ├── db/
     │   ├── base.py
     │   ├── postgres.py
@@ -83,9 +87,10 @@ backend/
     │       ├── counterparty.py  ← Counterparty, CounterpartyType
     │       ├── banking.py       ← CustomerModel, ConnectionModel, BankAccountModel, Transaction
     │       ├── aade.py          ← AadeDocumentModel, AadeInvoiceModel
-    │       ├── invoices.py      ← Invoice, InvoiceSource (unified manual / AADE / OCR / CSV)
+    │       ├── invoices.py      ← Invoice, InvoiceSource (manual / AADE / OCR / CSV / GMAIL)
+    │       ├── gmail.py         ← GmailMailboxConnection, GmailProcessedMessage
     │       ├── files.py         ← Document (file metadata)
-    │       ├── embeddings.py    ← Vector embedding records
+    │       ├── embeddings.py    ← OrganizationEmbedding (vector 768)
     │       ├── alerts.py        ← Alert, AlertSeverity
     │       └── stripe_billing.py ← Stripe mirror ORM tables
     ├── core/
@@ -94,7 +99,8 @@ backend/
     │   ├── filename_content_disposition.py  ← Content-Disposition filename parsing
     │   ├── security/
     │   │   ├── hashing.py       ← Argon2id and SHA-256
-    │   │   └── jwt.py           ← JWT encode/decode
+    │   │   ├── field_encryption.py ← Fernet for Gmail refresh tokens at rest
+    │   │   └── jwt.py           ← JWT encode/decode; Gmail OAuth ``state`` helpers
     │   └── demo_fixtures/
     │       └── agents/          ← Static agent output fixtures for demo mode
     └── middleware/
@@ -320,11 +326,15 @@ field on `Settings` (required = no default in code; optional = has a default, of
 
 | Variable | Required | Description |
 | -------- | -------- | ----------- |
-| `OPENAI_API_KEY` | optional | OpenAI key; empty disables live chat/embeddings in dev. |
-| `OPENAI_CHAT_MODEL` | optional | Default chat model (default `gpt-4o-mini`). |
-| `OPENAI_EMBEDDING_MODEL` | optional | Embedding model (default `text-embedding-3-small`). |
-| `OPENAI_EMBEDDING_DIMENSIONS` | optional | Vector width; must match DB column (default `1536`). |
-| `ANTHROPIC_API_KEY` | optional | Optional second LLM provider. |
+| `LLM_PROVIDER` | ✅ | `gemini` or `openai_compatible` (LM Studio / local OpenAI-compatible server). |
+| `GEMINI_API_KEY` | optional* | Google AI key; required when `LLM_PROVIDER=gemini` (non-demo). |
+| `GEMINI_CHAT_MODEL` | optional | Chat model (e.g. `gemini-2.0-flash`). |
+| `GEMINI_EMBEDDING_MODEL` | optional | Embedding model (e.g. `text-embedding-004`). |
+| `LLM_COMPAT_BASE_URL` | optional* | OpenAI-compatible API base URL when `LLM_PROVIDER=openai_compatible`. |
+| `LLM_COMPAT_API_KEY` | optional | API key for compatible server (LM Studio often accepts any string). |
+| `EMBEDDING_PROVIDER` | ✅ | `gemini`, `sentence_transformers`, or `openai_compatible`. |
+| `EMBEDDING_DIMENSIONS` | optional | Vector width; must match DB column (default `768`). |
+| `SENTENCE_TRANSFORMER_MODEL` | optional | HF model id when `EMBEDDING_PROVIDER=sentence_transformers` (`uv sync --group local_ml`). |
 
 ### Stripe
 
@@ -334,15 +344,14 @@ field on `Settings` (required = no default in code; optional = has a default, of
 | `STRIPE_WEBHOOK_SECRET` | optional | Webhook signing secret. |
 | `STRIPE_API_VERSION` | optional | Pinned API version string (must match Stripe dashboard). |
 
-### Gmail / SMTP (collections agent)
+### Gmail (OAuth + Pub/Sub) and outbound mail
 
 | Variable | Required | Description |
 | -------- | -------- | ----------- |
-| `GMAIL_SMTP_HOST` | optional | SMTP host. |
-| `GMAIL_SMTP_PORT` | optional | SMTP port (default `587`). |
-| `GMAIL_SMTP_USER` | optional | SMTP username. |
-| `GMAIL_SMTP_PASSWORD` | optional | App password or relay secret. |
-| `GMAIL_FROM_EMAIL` | optional | From address for agent mail. |
+| `GOOGLE_GMAIL_REDIRECT_URI` | optional* | OAuth redirect for **Connect Gmail** (separate consent from Sign-In). |
+| `GMAIL_TOKEN_ENCRYPTION_KEY` | optional* | Fernet key (urlsafe base64) for encrypted refresh tokens at rest. |
+| `GMAIL_PUBSUB_VERIFICATION_AUDIENCE` | optional | Expected OIDC audience for Pub/Sub push JWT verification (prod). |
+| *(collections)* | — | AR collections nudges use **Brevo** (`BREVO_*`); Gmail API send is not used yet. |
 
 ### Security and OAuth
 
