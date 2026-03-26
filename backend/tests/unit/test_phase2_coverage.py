@@ -17,6 +17,7 @@ from app.db.models.identity import Organization, User, UserOrganizationMembershi
 from app.services.ai_service import AIService
 from app.services.membership_service import MembershipService
 from app.services.embeddings.vector_store import VectorStoreService
+from app.services.ingestion_service import IngestionService
 
 
 @pytest.mark.asyncio
@@ -37,6 +38,33 @@ async def test_llm_client_demo_json() -> None:
         client = LLMClient()
         data = await client.chat_completion_json([{"role": "user", "content": "x"}])
         assert data.get("demo") is True
+
+
+@pytest.mark.asyncio
+async def test_llm_client_demo_embedding_for_text() -> None:
+    with patch("app.clients.llm_client.settings") as s:
+        s.demo_mode = True
+        s.OPENAI_API_KEY = ""
+        s.OPENAI_EMBEDDING_DIMENSIONS = 8
+        client = LLMClient()
+        vec = await client.embedding_for_text("hello")
+        assert len(vec) == 8
+        assert vec == [0.0] * 8
+
+
+@pytest.mark.asyncio
+async def test_llm_client_demo_vision_json() -> None:
+    with patch("app.clients.llm_client.settings") as s:
+        s.demo_mode = True
+        s.OPENAI_API_KEY = ""
+        client = LLMClient()
+        data = await client.chat_completion_json_vision(
+            system_message="sys",
+            user_text="u",
+            image_base64="abc",
+            image_mime_type="image/png",
+        )
+        assert data.get("vendor") == "Demo Supplier"
 
 
 @pytest.mark.asyncio
@@ -512,12 +540,19 @@ async def test_ingestion_non_demo_mock_llm() -> None:
     mock_llm = MagicMock()
     mock_llm.chat_completion_json = AsyncMock(
         return_value={
+            "description": "Line",
+            "amount": 99.5,
             "vendor": "V",
-            "total": "1",
+            "category": "software",
+            "is_recurring": False,
+            "confidence": 0.91,
+            "summary": "Invoice from V.",
             "vat_rate": "0",
             "currency": "EUR",
+            "line_items": [],
         }
     )
+    mock_llm.embedding_for_text = AsyncMock(return_value=[0.01, -0.02, 0.03])
 
     with patch("app.agents.ingestion.nodes.settings") as s:
         s.demo_mode = False
@@ -532,7 +567,10 @@ async def test_ingestion_non_demo_mock_llm() -> None:
                 "llm": mock_llm,
             },
         )
-    assert out["result"]["extracted"]["vendor"] == "V"
+    assert out["result"]["vendor"] == "V"
+    assert out["result"]["amount"] == 99.5
+    assert out["result"]["requires_human_review"] is False
+    assert len(out["result"]["embedding"]) == 3
 
 
 @pytest.mark.asyncio
@@ -558,8 +596,12 @@ async def test_ar_collections_agent_demo_empty_alerts() -> None:
 async def test_ingestion_agent_demo_full_path() -> None:
     from app.agents.ingestion import ingestion_graph
 
-    with patch("app.agents.ingestion.nodes.settings") as s:
-        s.demo_mode = True
+    with patch("app.agents.ingestion.nodes.settings") as s1, patch(
+        "app.clients.llm_client.settings"
+    ) as s2:
+        s1.demo_mode = True
+        s2.demo_mode = True
+        s2.OPENAI_EMBEDDING_DIMENSIONS = 4
         db = AsyncMock()
         out = await ingestion_graph.ainvoke(
             {
@@ -569,6 +611,108 @@ async def test_ingestion_agent_demo_full_path() -> None:
             },
         )
     assert out["result"]["extracted"].get("vendor")
+    assert out["result"]["confidence"] >= 0.85
+    assert out["result"]["requires_human_review"] is False
+    assert len(out["result"]["embedding"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_ingestion_flags_human_review_when_low_confidence() -> None:
+    from app.agents.ingestion import ingestion_graph
+
+    mock_vs = MagicMock()
+    mock_vs.similarity_search = AsyncMock(return_value=[])
+    mock_llm = MagicMock()
+    mock_llm.chat_completion_json = AsyncMock(
+        return_value={
+            "description": "Unclear scan",
+            "amount": 10.0,
+            "vendor": "Unknown",
+            "category": "uncategorized",
+            "is_recurring": False,
+            "confidence": 0.4,
+            "summary": "Low confidence.",
+            "currency": "EUR",
+            "vat_rate": "",
+            "line_items": [],
+        }
+    )
+    mock_llm.embedding_for_text = AsyncMock(return_value=[0.0])
+
+    with patch("app.agents.ingestion.nodes.settings") as s:
+        s.demo_mode = False
+        s.OPENAI_API_KEY = "sk"
+        db = AsyncMock()
+        out = await ingestion_graph.ainvoke(
+            {
+                "organization_id": str(uuid.uuid4()),
+                "raw_text": "garbled ocr",
+                "db": db,
+                "vector_store_factory": lambda _db, _oid: mock_vs,
+                "llm": mock_llm,
+            },
+        )
+    assert out["result"]["requires_human_review"] is True
+
+
+@pytest.mark.asyncio
+async def test_ingestion_materialize_rejects_bad_base64() -> None:
+    import base64
+
+    from app.agents.ingestion import ingestion_graph
+
+    db = AsyncMock()
+    with patch("app.agents.ingestion.nodes.settings") as s1, patch(
+        "app.clients.llm_client.settings"
+    ) as s2:
+        s1.demo_mode = True
+        s2.demo_mode = True
+        s2.OPENAI_EMBEDDING_DIMENSIONS = 4
+        out = await ingestion_graph.ainvoke(
+            {
+                "organization_id": str(uuid.uuid4()),
+                "raw_text": "",
+                "db": db,
+                "attachment_base64": "@@@not-valid-base64@@@",
+                "attachment_mime_type": "application/pdf",
+            },
+        )
+        assert out.get("result", {}).get("error") == "invalid_attachment_encoding"
+
+        pdf_bytes = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
+        out2 = await ingestion_graph.ainvoke(
+            {
+                "organization_id": str(uuid.uuid4()),
+                "raw_text": "email body",
+                "db": db,
+                "attachment_base64": base64.b64encode(pdf_bytes).decode("ascii"),
+                "attachment_mime_type": "application/pdf",
+            },
+        )
+    assert "error" not in (out2.get("result") or {})
+    assert out2["result"]["vendor"]
+
+
+@pytest.mark.asyncio
+async def test_ingestion_service_invokes_graph() -> None:
+    from app.services import ingestion_service as mod
+
+    db = AsyncMock()
+    oid = str(uuid.uuid4())
+    with patch.object(mod, "ingestion_graph") as g:
+        g.ainvoke = AsyncMock(
+            return_value={
+                "result": {
+                    "vendor": "Acme",
+                    "amount": 1.0,
+                    "embedding": [],
+                }
+            }
+        )
+        svc = IngestionService(db, oid)
+        r = await svc.run_ingestion(raw_text="x", include_vector_hints=False)
+        assert r["vendor"] == "Acme"
+        g.ainvoke.assert_awaited_once()
 
 
 @pytest.mark.asyncio

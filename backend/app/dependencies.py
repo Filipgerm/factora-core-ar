@@ -42,6 +42,7 @@ from app.services.mydata_service import MyDataService
 from app.services.ai_service import AIService
 from app.services.file_service import FileService
 from app.services.invoice_service import InvoiceService
+from app.services.ingestion_service import IngestionService
 from app.services.stripe_sync_service import StripeSyncService
 from app.services.stripe_webhook_service import StripeWebhookService
 from app.controllers.membership_controller import MembershipController
@@ -340,6 +341,17 @@ MyDataCtrl = Annotated[MyDataController, Depends(get_mydata_controller)]
 # ---------------------------------------------------------------------------
 # File 3-Tier DI chain
 # ---------------------------------------------------------------------------
+
+
+def get_ingestion_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+) -> IngestionService:
+    """Create a request-scoped ``IngestionService`` for Gmail/file ingestion pipelines."""
+    return IngestionService(db, org_id)
+
+
+IngSvc = Annotated[IngestionService, Depends(get_ingestion_service)]
 
 
 def get_file_service(
