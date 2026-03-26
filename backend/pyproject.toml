@@ -41,6 +41,9 @@ dependencies = [
     "pgvector>=0.4.2",
     "stripe>=14.4.1",
     "anthropic>=0.86.0",
+    "google-genai>=1.68.0",
+    "google-auth>=2.49.1",
+    "cryptography>=46.0.5",
 ]
 
 [dependency-groups]
@@ -52,6 +55,9 @@ dev = [
     "pytest-cov",
     "asgi-lifespan",
     "httpx",
+]
+local_ml = [
+    "sentence-transformers>=3.0.0",
 ]
 
 [tool.pytest.ini_options]
