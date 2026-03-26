@@ -27,7 +27,8 @@ type E2EProfile = {
 };
 
 /**
- * Install auth before the app bootstraps. AuthSessionProvider reads this and skips cookie refresh.
+ * Install auth before the app bootstraps. AuthSessionProvider reads `window.__E2E_AUTH__` only when
+ * the E2E bridge is enabled (non-production, or `NEXT_PUBLIC_ENABLE_E2E_AUTH_BRIDGE=true`).
  */
 export async function installE2EAuth(
   page: Page,

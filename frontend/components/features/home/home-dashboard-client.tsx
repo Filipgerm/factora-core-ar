@@ -45,7 +45,10 @@ export function HomeDashboardClient() {
 
   useEffect(() => {
     const errs = [pl.error, seller.error, txs.error].filter(Boolean);
-    if (errs.length === 0) return;
+    if (errs.length === 0) {
+      lastToastKey.current = null;
+      return;
+    }
     const first = errs[0];
     const message = isApiError(first)
       ? first.message

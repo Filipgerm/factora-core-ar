@@ -10,8 +10,8 @@ import {
 test.describe("Dashboard happy path (mocked API)", () => {
   test.beforeEach(async ({ page }) => {
     await installE2EAuth(page);
-    installDashboardHappyPathMocks(page);
-    installCounterpartiesEmptyMock(page);
+    await installDashboardHappyPathMocks(page);
+    await installCounterpartiesEmptyMock(page);
   });
 
   test("loads home, asserts dashboard GETs return 200, shows greeting and KPI content", async ({

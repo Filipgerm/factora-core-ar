@@ -38,43 +38,45 @@ export const MOCK_SALTEDGE_CUSTOMERS = {
   data: [{ customer_id: "demo-customer-1", identifier: "e2e" }],
 };
 
-export function installDashboardHappyPathMocks(page: Page): void {
-  page.route("**/v1/dashboard/seller-metrics**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(MOCK_SELLER_METRICS),
-    });
-  });
-  page.route("**/v1/dashboard/pl-metrics**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(MOCK_PL_METRICS),
-    });
-  });
-  page.route("**/v1/dashboard/transactions**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(MOCK_TRANSACTIONS),
-    });
-  });
-  page.route("**/v1/saltedge/customers**", async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(MOCK_SALTEDGE_CUSTOMERS),
-    });
-  });
+export async function installDashboardHappyPathMocks(page: Page): Promise<void> {
+  await Promise.all([
+    page.route("**/v1/dashboard/seller-metrics**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_SELLER_METRICS),
+      });
+    }),
+    page.route("**/v1/dashboard/pl-metrics**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_PL_METRICS),
+      });
+    }),
+    page.route("**/v1/dashboard/transactions**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_TRANSACTIONS),
+      });
+    }),
+    page.route("**/v1/saltedge/customers**", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_SALTEDGE_CUSTOMERS),
+      });
+    }),
+  ]);
 }
 
-export function installCounterpartiesEmptyMock(page: Page): void {
-  page.route("**/v1/organization/counterparties**", async (route) => {
+export async function installCounterpartiesEmptyMock(page: Page): Promise<void> {
+  await page.route("**/v1/organization/counterparties**", async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;

@@ -60,6 +60,17 @@ function profileFromPublic(res: {
   };
 }
 
+/**
+ * Playwright can inject `window.__E2E_AUTH__` before hydration. That must never run in real
+ * production: block unless explicitly opted in (e.g. `next start` E2E).
+ */
+function isE2EAuthBridgeEnabled(): boolean {
+  if (process.env.NODE_ENV !== "production") {
+    return true;
+  }
+  return process.env.NEXT_PUBLIC_ENABLE_E2E_AUTH_BRIDGE === "true";
+}
+
 async function postRefreshCookie(): Promise<boolean> {
   const res = await fetch(`${getApiOrigin()}/v1/auth/refresh`, {
     method: "POST",
@@ -137,12 +148,8 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (typeof window !== "undefined") {
-        const injected = (
-          window as unknown as {
-            __E2E_AUTH__?: { token: string; profile: StoredAuthProfile };
-          }
-        ).__E2E_AUTH__;
+      if (typeof window !== "undefined" && isE2EAuthBridgeEnabled()) {
+        const injected = window.__E2E_AUTH__;
         if (injected?.token && injected.profile) {
           setSession(injected.token, injected.profile);
           if (!cancelled) setBootstrapDone(true);

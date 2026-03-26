@@ -11,48 +11,50 @@ test.describe("Dashboard sad path (network faults)", () => {
     page,
   }) => {
     await installE2EAuth(page);
-    installCounterpartiesEmptyMock(page);
+    await installCounterpartiesEmptyMock(page);
 
-    page.route("**/v1/dashboard/seller-metrics**", async (route) => {
-      await route.fulfill({
-        status: 500,
-        contentType: "application/json",
-        body: JSON.stringify({ detail: "Internal Server Error", code: "server" }),
-      });
-    });
-    page.route("**/v1/dashboard/pl-metrics**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          net_cash_flow: 0,
-          total_revenue: 0,
-          total_expenses: 0,
-          net_income: 0,
-          balance: 0,
-          currency: "EUR",
-          period_days: 30,
-        }),
-      });
-    });
-    page.route("**/v1/dashboard/transactions**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      });
-    });
-    page.route("**/v1/saltedge/customers**", async (route) => {
-      if (route.request().method() !== "GET") {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ data: [{ customer_id: "c1" }] }),
-      });
-    });
+    await Promise.all([
+      page.route("**/v1/dashboard/seller-metrics**", async (route) => {
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Internal Server Error", code: "server" }),
+        });
+      }),
+      page.route("**/v1/dashboard/pl-metrics**", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            net_cash_flow: 0,
+            total_revenue: 0,
+            total_expenses: 0,
+            net_income: 0,
+            balance: 0,
+            currency: "EUR",
+            period_days: 30,
+          }),
+        });
+      }),
+      page.route("**/v1/dashboard/transactions**", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([]),
+        });
+      }),
+      page.route("**/v1/saltedge/customers**", async (route) => {
+        if (route.request().method() !== "GET") {
+          await route.continue();
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ data: [{ customer_id: "c1" }] }),
+        });
+      }),
+    ]);
 
     await page.goto("/home");
 
@@ -72,40 +74,42 @@ test.describe("Dashboard sad path (network faults)", () => {
     page,
   }) => {
     await installE2EAuth(page);
-    installCounterpartiesEmptyMock(page);
+    await installCounterpartiesEmptyMock(page);
 
-    page.route("**/v1/dashboard/seller-metrics**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ total_counterparties: 0, total_active_alerts: 0 }),
-      });
-    });
-    page.route("**/v1/dashboard/pl-metrics**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ wrong: true }),
-      });
-    });
-    page.route("**/v1/dashboard/transactions**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      });
-    });
-    page.route("**/v1/saltedge/customers**", async (route) => {
-      if (route.request().method() !== "GET") {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ data: [{ customer_id: "c1" }] }),
-      });
-    });
+    await Promise.all([
+      page.route("**/v1/dashboard/seller-metrics**", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ total_counterparties: 0, total_active_alerts: 0 }),
+        });
+      }),
+      page.route("**/v1/dashboard/pl-metrics**", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ wrong: true }),
+        });
+      }),
+      page.route("**/v1/dashboard/transactions**", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([]),
+        });
+      }),
+      page.route("**/v1/saltedge/customers**", async (route) => {
+        if (route.request().method() !== "GET") {
+          await route.continue();
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ data: [{ customer_id: "c1" }] }),
+        });
+      }),
+    ]);
 
     await page.goto("/home");
 
@@ -125,11 +129,11 @@ test.describe("Dashboard sad path (network faults)", () => {
   }) => {
     test.setTimeout(120_000);
     await installE2EAuth(page);
-    installDashboardHappyPathMocks(page);
-    installCounterpartiesEmptyMock(page);
+    await installDashboardHappyPathMocks(page);
+    await installCounterpartiesEmptyMock(page);
 
-    page.unroute("**/v1/dashboard/transactions**");
-    page.route("**/v1/dashboard/transactions**", async (route) => {
+    await page.unroute("**/v1/dashboard/transactions**");
+    await page.route("**/v1/dashboard/transactions**", async (route) => {
       await new Promise((r) => setTimeout(r, 11_000));
       await route.fulfill({
         status: 500,
