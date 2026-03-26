@@ -236,6 +236,15 @@ and retries the original request once with the new access token.
 - `ProxyHeadersMiddleware` with `TRUSTED_PROXIES` set to your nginx CIDR in production.
 - Secrets come exclusively from environment variables.
 
+### Webhook / Pub/Sub push verification
+
+- When a third-party push endpoint is configured to verify callers (e.g. Google Pub/Sub
+  OIDC via `GMAIL_PUBSUB_VERIFICATION_AUDIENCE` / `Authorization: Bearer`), **verification
+  must not be optional**: if the audience (or equivalent) is set, requests **without** a
+  valid `Bearer` token (or wrong scheme) must be **rejected** — never treat “no header” as
+  “skip verify.” Run synchronous token verification off the asyncio event loop (e.g.
+  `run_in_executor`) so the worker stays responsive.
+
 </security_standards>
 
 ---
@@ -481,6 +490,9 @@ Every significant task concludes with:
   any secret — environment variables only.
 - **NEVER** commit `.env` files or any file containing real secrets.
 - **NEVER** query business data without filtering by `organization_id`.
+- **NEVER** skip webhook caller verification when it is configured (e.g. OIDC audience set
+  for Pub/Sub): missing or non-`Bearer` `Authorization` must fail closed with `401`/`403`,
+  not bypass verification.
 
 ### Database
 
