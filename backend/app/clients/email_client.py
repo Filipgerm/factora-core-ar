@@ -1,9 +1,12 @@
-from sib_api_v3_sdk import Configuration, ApiClient
-from sib_api_v3_sdk.api import TransactionalEmailsApi
-from sib_api_v3_sdk.rest import ApiException
-from sib_api_v3_sdk.models import SendSmtpEmail
-from app.config import settings
+import html
 import logging
+
+from sib_api_v3_sdk import ApiClient, Configuration
+from sib_api_v3_sdk.api import TransactionalEmailsApi
+from sib_api_v3_sdk.models import SendSmtpEmail
+from sib_api_v3_sdk.rest import ApiException
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -94,3 +97,8 @@ class BrevoEmailClient:
         except Exception as e:
             logger.error("Unexpected error (template send): %s", e)
             return False
+
+    def send_plain_text(self, to_email: str, subject: str, body: str) -> bool:
+        """Send UTF-8 plain text as a minimal HTML body (collections / system mail)."""
+        safe = f"<pre>{html.escape(body)}</pre>"
+        return self.send_email(to_email, subject, safe)
