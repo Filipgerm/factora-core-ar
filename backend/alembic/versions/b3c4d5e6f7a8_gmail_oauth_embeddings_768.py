@@ -4,6 +4,21 @@ Revision ID: b3c4d5e6f7a8
 Revises: f8e1c2d9b0a4
 Create Date: 2026-03-26
 
+**PostgreSQL enum:** ``ALTER TYPE invoicesource ADD VALUE IF NOT EXISTS 'gmail'`` is
+idempotent (safe if ``gmail`` already exists).
+
+**organization_embeddings.embedding (1536 → 768):**
+
+- This revision uses ``USING subvector(embedding::vector, 1, 768)``, which **truncates**
+  each stored vector to the first 768 dimensions. Semantic meaning of old rows changes;
+  for production you may prefer ``TRUNCATE organization_embeddings`` (or delete-all) and
+  **re-embed** after deploy so neighbors match the new model.
+- **Indexes:** No HNSW/IVFFlat index exists on ``embedding`` in prior migrations—only
+  B-tree indexes on ``organization_id`` and ``(organization_id, created_at)``, so no
+  vector index drop/recreate is required.
+- **Application:** Set ``EMBEDDING_DIMENSIONS=768`` and an embedding provider that outputs
+  768 floats (Gemini ``text-embedding-004``, matching ``all-mpnet-base-v2``, etc.).
+
 """
 from typing import Sequence, Union
 

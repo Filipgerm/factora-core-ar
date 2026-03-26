@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
 
 from fastapi import HTTPException, Request
-
+from google.auth.transport import requests as greq
+from google.oauth2 import id_token
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -105,10 +107,15 @@ class GmailController:
             if not token:
                 raise HTTPException(status_code=401, detail="missing_pubsub_token")
             try:
-                from google.auth.transport import requests as greq
-                from google.oauth2 import id_token
 
-                id_token.verify_oauth2_token(token, greq.Request(), audience=aud)
+                def _verify_pubsub_jwt() -> None:
+                    # Synchronous HTTP to Google certs; run off the asyncio event loop.
+                    id_token.verify_oauth2_token(
+                        token, greq.Request(), audience=aud
+                    )
+
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, _verify_pubsub_jwt)
             except Exception as e:
                 logger.warning("Pub/Sub OIDC verification failed: %s", e)
                 raise HTTPException(

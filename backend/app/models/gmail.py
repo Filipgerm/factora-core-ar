@@ -21,8 +21,8 @@ class GmailOAuthCallbackQuery(BaseModel):
 class GmailSyncResponse(BaseModel):
     """Result of a manual or webhook-triggered sync."""
 
-    ingested: int
-    skipped: int
+    ingested: int = Field(ge=0, description="Number of messages newly ingested as invoices")
+    skipped: int = Field(ge=0, description="Messages skipped (already processed or no attachment)")
     errors: list[str] = Field(default_factory=list)
     mailbox: str
 
