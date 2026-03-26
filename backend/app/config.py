@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Literal
 
+LLMProvider = Literal["gemini", "openai_compatible"]
+EmbeddingProvider = Literal["gemini", "sentence_transformers", "openai_compatible"]
+
 from dotenv import load_dotenv
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings
@@ -46,25 +49,57 @@ class Settings(BaseSettings):
     SALTEDGE_APP_ID: str = Field(..., description="SaltEdge application ID")
     SALTEDGE_SECRET: str = Field(..., description="SaltEdge API secret")
 
-    # --- AI / embeddings (optional in dev; required for live agent flows) ---
-    OPENAI_API_KEY: str = Field(default="", description="OpenAI API key for chat and embeddings")
-    OPENAI_CHAT_MODEL: str = Field(
-        default="gpt-4o-mini",
-        description="Default chat model for LLM client and agents",
+    # --- AI / LLM (Gemini or LM Studio OpenAI-compatible) ---
+    LLM_PROVIDER: LLMProvider = Field(
+        default="gemini",
+        description="gemini = Google Gemini API; openai_compatible = LM Studio / local OpenAI-compatible server",
     )
-    OPENAI_EMBEDDING_MODEL: str = Field(
-        default="text-embedding-3-small",
-        description="Embedding model for pgvector RAG",
+    GEMINI_API_KEY: str = Field(default="", description="Google AI Studio / Gemini API key")
+    GEMINI_CHAT_MODEL: str = Field(
+        default="gemini-2.0-flash",
+        description="Gemini model id for chat, JSON, and vision",
     )
-    OPENAI_EMBEDDING_DIMENSIONS: int = Field(
-        default=1536,
-        ge=256,
-        le=3072,
-        description="Must match the vector column width in organization_embeddings",
+    GEMINI_EMBEDDING_MODEL: str = Field(
+        default="text-embedding-004",
+        description="Gemini embedding model (output dimensionality set via EMBEDDING_DIMENSIONS)",
     )
-    ANTHROPIC_API_KEY: str = Field(
+    LLM_COMPAT_BASE_URL: str = Field(
         default="",
-        description="Optional Anthropic API key (alternative LLM provider)",
+        description="OpenAI-compatible base URL e.g. http://localhost:1234/v1 for LM Studio",
+    )
+    LLM_COMPAT_API_KEY: str = Field(
+        default="lm-studio",
+        description="API key sent to openai_compatible servers (LM Studio often ignores)",
+    )
+
+    # --- Embeddings (must match organization_embeddings.vector width) ---
+    EMBEDDING_PROVIDER: EmbeddingProvider = Field(
+        default="gemini",
+        description="gemini | sentence_transformers | openai_compatible",
+    )
+    EMBEDDING_DIMENSIONS: int = Field(
+        default=768,
+        ge=64,
+        le=3072,
+        description="Vector width; DB column must match (default 768)",
+    )
+    SENTENCE_TRANSFORMER_MODEL: str = Field(
+        default="sentence-transformers/all-mpnet-base-v2",
+        description="HuggingFace id when EMBEDDING_PROVIDER=sentence_transformers (768-dim)",
+    )
+
+    # --- Gmail OAuth + token encryption ---
+    GMAIL_TOKEN_ENCRYPTION_KEY: str = Field(
+        default="",
+        description="Fernet key (urlsafe base64) for encrypting Gmail refresh tokens at rest",
+    )
+    GOOGLE_GMAIL_REDIRECT_URI: str = Field(
+        default="",
+        description="OAuth redirect for Gmail connect e.g. https://api.example.com/v1/integrations/gmail/callback",
+    )
+    GMAIL_PUBSUB_VERIFICATION_AUDIENCE: str = Field(
+        default="",
+        description="Expected audience in OIDC JWT for Pub/Sub push (often push subscription URL)",
     )
 
     # --- Stripe (optional until billing is live) ---
@@ -77,13 +112,6 @@ class Settings(BaseSettings):
         default="2026-02-25.clover",
         description="Pinned Stripe API version (must match webhook/dashboard settings)",
     )
-
-    # --- Gmail / SMTP (optional; collections agent outbound) ---
-    GMAIL_SMTP_HOST: str = Field(default="", description="SMTP host for Gmail or workspace relay")
-    GMAIL_SMTP_PORT: int = Field(default=587, description="SMTP port (587 TLS recommended)")
-    GMAIL_SMTP_USER: str = Field(default="", description="SMTP auth username (often full email)")
-    GMAIL_SMTP_PASSWORD: str = Field(default="", description="SMTP app password or relay secret")
-    GMAIL_FROM_EMAIL: str = Field(default="", description="From address for agent-sent mail")
 
     # --- Security ---
     CODE_PEPPER: str = Field(
