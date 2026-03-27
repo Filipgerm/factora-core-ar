@@ -4,6 +4,12 @@
 the Gemini API or OpenAI embeddings (``text-embedding-3-*`` supports a ``dimensions``
 parameter aligned with the DB column).
 
+**Why not Anthropic here:** ``LLM_PROVIDER=anthropic`` selects Claude for chat/JSON/vision
+only. Anthropic does not ship a first-party text-embedding API for vector search; their
+docs recommend separate embedding providers (e.g. Voyage). So ``EMBEDDING_PROVIDER`` stays
+``gemini`` or ``openai`` even when agents call Claude — keys are ``GEMINI_API_KEY`` /
+``OPENAI_API_KEY``, not ``ANTHROPIC_API_KEY``.
+
 **Contract:** Async functions; raise ``ValidationError`` / ``ExternalServiceError`` from
 ``app.core.exceptions`` on misconfiguration or provider failure.
 """
