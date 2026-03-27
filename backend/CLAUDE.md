@@ -26,8 +26,8 @@ services/        ← ALL business logic + DB access via AsyncSession.
 agents/          ← LangGraph agent graphs. Called BY services. Never imports from
                    api/, controllers/, or services/. See backend/app/agents/CLAUDE.md.
 
-clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI, Gmail,
-                   Supabase Storage). No business logic. No AsyncSession.
+clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI,
+                   Gmail REST via ``gmail_api_client``, Supabase Storage). No business logic. No AsyncSession.
 
 packages/        ← Internal SDKs (AADE, SaltEdge, Stripe). Fully standalone.
                    Must NEVER import from app/. See backend/packages/CLAUDE.md.
@@ -63,18 +63,20 @@ backend/
     ├── main.py
     ├── dependencies.py
     ├── config.py
-    ├── api/routes/
-    ├── controllers/
+    ├── api/routes/              ← includes ``gmail_routes.py`` (Gmail OAuth, sync, preview, Pub/Sub mount)
+    ├── controllers/             ← includes ``gmail_controller.py``
     ├── services/
-    │   └── embeddings/          ← pgvector embedding logic (uses AsyncSession)
+    │   ├── embeddings/          ← pgvector + ``backend.py`` (Gemini or OpenAI embeddings)
+    │   ├── gmail_oauth_service.py
+    │   └── gmail_sync_service.py
     ├── agents/                  ← LangGraph agents (NOT inside services/)
     ├── clients/
     │   ├── email_client.py
     │   ├── gemi_client.py
-    │   ├── gmail_client.py
-    │   ├── llm_client.py
+    │   ├── gmail_api_client.py ← Gmail OAuth token refresh + REST (httpx)
+    │   ├── llm_client.py       ← Gemini, OpenAI, or Anthropic (Claude)
     │   └── storage_client.py   ← File storage (Supabase Storage / S3)
-    ├── models/
+    ├── models/                  ← includes ``gmail.py`` Pydantic DTOs for Gmail HTTP responses
     ├── db/
     │   ├── base.py
     │   ├── postgres.py
@@ -83,9 +85,10 @@ backend/
     │       ├── counterparty.py  ← Counterparty, CounterpartyType
     │       ├── banking.py       ← CustomerModel, ConnectionModel, BankAccountModel, Transaction
     │       ├── aade.py          ← AadeDocumentModel, AadeInvoiceModel
-    │       ├── invoices.py      ← Invoice, InvoiceSource (unified manual / AADE / OCR / CSV)
+    │       ├── invoices.py      ← Invoice, InvoiceSource (manual / AADE / OCR / CSV / GMAIL)
+    │       ├── gmail.py         ← GmailMailboxConnection, GmailProcessedMessage
     │       ├── files.py         ← Document (file metadata)
-    │       ├── embeddings.py    ← Vector embedding records
+    │       ├── embeddings.py    ← OrganizationEmbedding (vector 768)
     │       ├── alerts.py        ← Alert, AlertSeverity
     │       └── stripe_billing.py ← Stripe mirror ORM tables
     ├── core/
@@ -94,7 +97,8 @@ backend/
     │   ├── filename_content_disposition.py  ← Content-Disposition filename parsing
     │   ├── security/
     │   │   ├── hashing.py       ← Argon2id and SHA-256
-    │   │   └── jwt.py           ← JWT encode/decode
+    │   │   ├── field_encryption.py ← Fernet for Gmail refresh tokens at rest
+    │   │   └── jwt.py           ← JWT encode/decode; Gmail OAuth ``state`` helpers
     │   └── demo_fixtures/
     │       └── agents/          ← Static agent output fixtures for demo mode
     └── middleware/
@@ -230,6 +234,15 @@ and retries the original request once with the new access token.
 - `ProxyHeadersMiddleware` with `TRUSTED_PROXIES` set to your nginx CIDR in production.
 - Secrets come exclusively from environment variables.
 
+### Webhook / Pub/Sub push verification
+
+- When a third-party push endpoint is configured to verify callers (e.g. Google Pub/Sub
+  OIDC via `GMAIL_PUBSUB_VERIFICATION_AUDIENCE` / `Authorization: Bearer`), **verification
+  must not be optional**: if the audience (or equivalent) is set, requests **without** a
+  valid `Bearer` token (or wrong scheme) must be **rejected** — never treat “no header” as
+  “skip verify.” Run synchronous token verification off the asyncio event loop (e.g.
+  `run_in_executor`) so the worker stays responsive.
+
 </security_standards>
 
 ---
@@ -320,11 +333,17 @@ field on `Settings` (required = no default in code; optional = has a default, of
 
 | Variable | Required | Description |
 | -------- | -------- | ----------- |
-| `OPENAI_API_KEY` | optional | OpenAI key; empty disables live chat/embeddings in dev. |
-| `OPENAI_CHAT_MODEL` | optional | Default chat model (default `gpt-4o-mini`). |
-| `OPENAI_EMBEDDING_MODEL` | optional | Embedding model (default `text-embedding-3-small`). |
-| `OPENAI_EMBEDDING_DIMENSIONS` | optional | Vector width; must match DB column (default `1536`). |
-| `ANTHROPIC_API_KEY` | optional | Optional second LLM provider. |
+| `LLM_PROVIDER` | ✅ | `gemini`, `openai`, or `anthropic` (Claude). |
+| `GEMINI_API_KEY` | optional* | Google AI key; required when `LLM_PROVIDER=gemini` (non-demo). |
+| `GEMINI_CHAT_MODEL` | optional | Chat / vision model (e.g. `gemini-2.0-flash`). |
+| `GEMINI_EMBEDDING_MODEL` | optional | Embedding model when `EMBEDDING_PROVIDER=gemini` (e.g. `text-embedding-004`). |
+| `OPENAI_API_KEY` | optional* | Required when `LLM_PROVIDER=openai` or `EMBEDDING_PROVIDER=openai`. |
+| `OPENAI_CHAT_MODEL` | optional | Chat model when `LLM_PROVIDER=openai`. |
+| `OPENAI_EMBEDDING_MODEL` | optional | Embedding model when `EMBEDDING_PROVIDER=openai` (e.g. `text-embedding-3-small`). |
+| `ANTHROPIC_API_KEY` | optional* | Required when `LLM_PROVIDER=anthropic`. |
+| `ANTHROPIC_CHAT_MODEL` | optional | Claude model id when `LLM_PROVIDER=anthropic`. |
+| `EMBEDDING_PROVIDER` | ✅ | `gemini` or `openai`. |
+| `EMBEDDING_DIMENSIONS` | optional | Vector width; must match DB column (default `768`). |
 
 ### Stripe
 
@@ -334,15 +353,14 @@ field on `Settings` (required = no default in code; optional = has a default, of
 | `STRIPE_WEBHOOK_SECRET` | optional | Webhook signing secret. |
 | `STRIPE_API_VERSION` | optional | Pinned API version string (must match Stripe dashboard). |
 
-### Gmail / SMTP (collections agent)
+### Gmail (OAuth + Pub/Sub) and outbound mail
 
 | Variable | Required | Description |
 | -------- | -------- | ----------- |
-| `GMAIL_SMTP_HOST` | optional | SMTP host. |
-| `GMAIL_SMTP_PORT` | optional | SMTP port (default `587`). |
-| `GMAIL_SMTP_USER` | optional | SMTP username. |
-| `GMAIL_SMTP_PASSWORD` | optional | App password or relay secret. |
-| `GMAIL_FROM_EMAIL` | optional | From address for agent mail. |
+| `GOOGLE_GMAIL_REDIRECT_URI` | optional* | OAuth redirect for **Connect Gmail** (separate consent from Sign-In). |
+| `GMAIL_TOKEN_ENCRYPTION_KEY` | optional* | Fernet key (urlsafe base64) for encrypted refresh tokens at rest. |
+| `GMAIL_PUBSUB_VERIFICATION_AUDIENCE` | optional | Expected OIDC audience for Pub/Sub push JWT verification (prod). |
+| *(collections)* | — | AR collections nudges use **Brevo** (`BREVO_*`); Gmail API send is not used yet. |
 
 ### Security and OAuth
 
@@ -472,6 +490,9 @@ Every significant task concludes with:
   any secret — environment variables only.
 - **NEVER** commit `.env` files or any file containing real secrets.
 - **NEVER** query business data without filtering by `organization_id`.
+- **NEVER** skip webhook caller verification when it is configured (e.g. OIDC audience set
+  for Pub/Sub): missing or non-`Bearer` `Authorization` must fail closed with `401`/`403`,
+  not bypass verification.
 
 ### Database
 

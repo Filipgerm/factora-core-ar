@@ -59,12 +59,12 @@ are built as Tier 2 from the start.
       tools/
         __init__.py
         invoice.py     ← Overdue invoice queries
-        email.py       ← Gmail SMTP tools
+        email.py       ← Brevo / outbound mail tools (Gmail API send is not wired here)
       nodes/
         __init__.py
         monitor.py     ← Identify overdue invoices, calculate urgency
         drafting.py    ← Draft email content via LLM
-        dispatch.py    ← Send (Act Mode) or queue for review (Review Mode)
+        dispatch.py    ← Send via Brevo (Act Mode) or queue for review (Review Mode)
 
 ### The shared foundation
 
@@ -87,7 +87,7 @@ Use Google-style or short narrative prose. Adjust emphasis by file kind:
 | File | Docstring should cover |
 | ---- | ---------------------- |
 | **graph.py** | End-to-end responsibility of the graph; name of the exported compiled graph; **numbered** high-level flow (which nodes run and in what order); note if wiring-only (no business logic in this file). |
-| **nodes.py** | What each node phase does to state; external calls (LLM, DB, SMTP, vector search); invariants (e.g. tenant scoping). |
+| **nodes.py** | What each node phase does to state; external calls (LLM, DB, Brevo mail, vector search); invariants (e.g. tenant scoping). |
 | **state.py** | Input vs output keys; optional runtime-injected keys (e.g. ``vector_store_factory``) and why they are not in ``constants.py``. |
 | **prompts.py** | Which node consumes each template; tone/constraints (length, language). |
 | **constants.py** | What belongs here vs ``base.py``; how constants are used in nodes (limits, k, placeholders, demo rows). |
@@ -126,7 +126,7 @@ extraction.
   pgvector similarity context. **Ingestion / extraction**, not ledger **transaction
   categorization**.
 - **`reconciliation_graph`** — bank lines vs stub invoices; exact-amount heuristic.
-- **`collections_graph`** — alerts → LLM-drafted emails → SMTP (demo-safe).
+- **`collections_graph`** — alerts → LLM-drafted emails → **Brevo** transactional send (demo-safe logging).
 
 A future **Smart Categorization** agent (transaction → COA category) is product
 vision and is **not** the same as ingestion.
@@ -214,13 +214,14 @@ Do not skip step 3. Without it, the loop does not close and the model does not l
 
 ## LLM & Embedding Standards
 
-- **LLM (Phase 2)** — graphs construct `LLMClient` (or accept an injected instance)
-  for OpenAI/Anthropic calls. A single factory in `base.py` will replace ad-hoc
-  construction in a later refactor; do not add new raw `ChatOpenAI` usage in
-  nodes.
-- **Embeddings** — ingestion may use a service-injected vector store factory;
-  shared pgvector helpers belong in `app/services/embeddings/`, not duplicated
-  per node.
+- **LLM (Phase 2)** — graphs construct **`LLMClient`** (or accept an injected instance
+  in tests). Runtime provider is **`LLM_PROVIDER`**: **`gemini`** (Google GenAI),
+  **`openai`** (OpenAI API), or **`anthropic`** (Claude). Do not add new raw
+  provider SDK construction inside nodes beyond what `LLMClient` already wraps.
+- **Embeddings** — dimensions are **`EMBEDDING_DIMENSIONS`** (DB **768**). Batch/single
+  embedding calls go through **`app/services/embeddings/backend.py`** (**Gemini** or
+  **OpenAI** embeddings). Ingestion may use a service-injected vector store factory;
+  pgvector I/O stays in `app/services/embeddings/`, not duplicated per node.
 - **Prompts** — all prompt templates live in `prompts.py`. Inline f-strings for
   **template text** inside `nodes.py` are forbidden (formatting user content via
   small helpers that call `prompts.py` is fine).

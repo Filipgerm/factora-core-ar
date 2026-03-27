@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.clients.gmail_client import GmailSmtpClient
+from app.clients.email_client import BrevoEmailClient
 from app.clients.llm_client import LLMClient
 from app.controllers.ai_controller import AIController
 from app.core.exceptions import ExternalServiceError, ForbiddenError, ValidationError
@@ -24,7 +24,6 @@ from app.services.ingestion_service import IngestionService
 async def test_llm_client_demo_chat_completion() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = True
-        s.OPENAI_API_KEY = ""
         client = LLMClient()
         text = await client.chat_completion([{"role": "user", "content": "hi"}])
         assert "demo" in text.lower()
@@ -34,7 +33,6 @@ async def test_llm_client_demo_chat_completion() -> None:
 async def test_llm_client_demo_json() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = True
-        s.OPENAI_API_KEY = ""
         client = LLMClient()
         data = await client.chat_completion_json([{"role": "user", "content": "x"}])
         assert data.get("demo") is True
@@ -44,8 +42,7 @@ async def test_llm_client_demo_json() -> None:
 async def test_llm_client_demo_embedding_for_text() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = True
-        s.OPENAI_API_KEY = ""
-        s.OPENAI_EMBEDDING_DIMENSIONS = 8
+        s.EMBEDDING_DIMENSIONS = 8
         client = LLMClient()
         vec = await client.embedding_for_text("hello")
         assert len(vec) == 8
@@ -56,7 +53,6 @@ async def test_llm_client_demo_embedding_for_text() -> None:
 async def test_llm_client_demo_vision_json() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = True
-        s.OPENAI_API_KEY = ""
         client = LLMClient()
         data = await client.chat_completion_json_vision(
             system_message="sys",
@@ -71,20 +67,11 @@ async def test_llm_client_demo_vision_json() -> None:
 async def test_llm_client_demo_stream() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = True
-        s.OPENAI_API_KEY = ""
         client = LLMClient()
         chunks = []
         async for c in client.stream_chat_completion([{"role": "user", "content": "x"}]):
             chunks.append(c)
         assert chunks
-
-
-@pytest.mark.asyncio
-async def test_gmail_client_demo() -> None:
-    with patch("app.clients.gmail_client.settings") as s:
-        s.demo_mode = True
-        c = GmailSmtpClient()
-        await c.send_plain_text(to_email="a@b.com", subject="s", body="b")
 
 
 @pytest.mark.asyncio
@@ -168,6 +155,7 @@ async def test_membership_service_switch() -> None:
 async def test_llm_openai_chat_mocked() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = False
+        s.LLM_PROVIDER = "openai"
         s.OPENAI_API_KEY = "sk-test"
         s.OPENAI_CHAT_MODEL = "gpt-4o-mini"
         with patch("app.clients.llm_client.AsyncOpenAI") as ao:
@@ -183,9 +171,26 @@ async def test_llm_openai_chat_mocked() -> None:
 
 
 @pytest.mark.asyncio
+async def test_llm_anthropic_chat_mocked() -> None:
+    with patch("app.clients.llm_client.settings") as s:
+        s.demo_mode = False
+        s.LLM_PROVIDER = "anthropic"
+        s.ANTHROPIC_API_KEY = "sk-ant-test"
+        s.ANTHROPIC_CHAT_MODEL = "claude-sonnet-4-20250514"
+        with patch("app.clients.llm_client.AsyncAnthropic") as aa:
+            inst = aa.return_value
+            block = MagicMock(type="text", text="anthropic-ok")
+            inst.messages.create = AsyncMock(return_value=MagicMock(content=[block]))
+            client = LLMClient()
+            text = await client.chat_completion([{"role": "user", "content": "x"}])
+            assert text == "anthropic-ok"
+
+
+@pytest.mark.asyncio
 async def test_llm_openai_json_mocked() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = False
+        s.LLM_PROVIDER = "openai"
         s.OPENAI_API_KEY = "sk-test"
         s.OPENAI_CHAT_MODEL = "gpt-4o-mini"
         with patch("app.clients.llm_client.AsyncOpenAI") as ao:
@@ -200,31 +205,21 @@ async def test_llm_openai_json_mocked() -> None:
             assert data == {"a": 1}
 
 
-@pytest.mark.asyncio
-async def test_gmail_smtp_send_mocked() -> None:
-    with patch("app.clients.gmail_client.settings") as s:
-        s.demo_mode = False
-        s.GMAIL_SMTP_HOST = "smtp.example.com"
-        s.GMAIL_SMTP_PORT = 587
-        s.GMAIL_SMTP_USER = "u"
-        s.GMAIL_SMTP_PASSWORD = "p"
-        s.GMAIL_FROM_EMAIL = "from@example.com"
-        mock_cls = MagicMock()
-        mock_inst = MagicMock()
-        mock_cls.return_value.__enter__.return_value = mock_inst
-        mock_cls.return_value.__exit__.return_value = None
-        with patch("app.clients.gmail_client.smtplib.SMTP", mock_cls):
-            c = GmailSmtpClient()
-            await c.send_plain_text(to_email="to@example.com", subject="s", body="b")
-        mock_inst.starttls.assert_called_once()
-        mock_inst.login.assert_called_once()
-        mock_inst.send_message.assert_called_once()
+def test_brevo_send_plain_text_delegates_to_html() -> None:
+    c = BrevoEmailClient()
+    with patch.object(c, "send_email", return_value=True) as se:
+        ok = c.send_plain_text("a@b.com", "sub", "body & <tag>")
+        assert ok is True
+    se.assert_called_once()
+    args = se.call_args[0]
+    assert "<pre>" in args[2]
 
 
 @pytest.mark.asyncio
 async def test_llm_openai_stream_mocked() -> None:
     with patch("app.clients.llm_client.settings") as s:
         s.demo_mode = False
+        s.LLM_PROVIDER = "openai"
         s.OPENAI_API_KEY = "sk-test"
         s.OPENAI_CHAT_MODEL = "gpt-4o-mini"
         with patch("app.clients.llm_client.AsyncOpenAI") as ao:
@@ -305,28 +300,19 @@ async def test_membership_switch_forbidden() -> None:
 async def test_vector_store_embed_and_search_mocked() -> None:
     db = AsyncMock()
     oid = str(uuid.uuid4())
-    vec = [0.01] * 1536
+    vec = [0.01] * 768
 
-    fake_emb = MagicMock()
-    fake_emb.data = [MagicMock(embedding=vec)]
-
-    with (
-        patch("app.services.embeddings.vector_store.settings") as st,
-        patch("app.services.embeddings.vector_store.AsyncOpenAI") as ao,
+    with patch(
+        "app.services.embeddings.vector_store.backend_embed_texts",
+        AsyncMock(return_value=[vec]),
     ):
-        st.OPENAI_API_KEY = "sk-test"
-        st.OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
-        st.OPENAI_EMBEDDING_DIMENSIONS = 1536
-        inst = ao.return_value
-        inst.embeddings.create = AsyncMock(return_value=fake_emb)
-
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
         db.rollback = AsyncMock()
 
         vs = VectorStoreService(db, oid)
         out = await vs.embed_texts(["hello"])
-        assert len(out[0]) == 1536
+        assert len(out[0]) == 768
 
         search_result = MagicMock()
         search_result.mappings.return_value.all.return_value = [
@@ -345,18 +331,11 @@ async def test_vector_store_upsert_memory_mocked() -> None:
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
     oid = str(uuid.uuid4())
-    vec = [0.02] * 1536
-    fake_emb = MagicMock()
-    fake_emb.data = [MagicMock(embedding=vec)]
-    with (
-        patch("app.services.embeddings.vector_store.settings") as st,
-        patch("app.services.embeddings.vector_store.AsyncOpenAI") as ao,
+    vec = [0.02] * 768
+    with patch(
+        "app.services.embeddings.vector_store.backend_embed_texts",
+        AsyncMock(return_value=[vec]),
     ):
-        st.OPENAI_API_KEY = "sk-test"
-        st.OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
-        st.OPENAI_EMBEDDING_DIMENSIONS = 1536
-        inst = ao.return_value
-        inst.embeddings.create = AsyncMock(return_value=fake_emb)
         vs = VectorStoreService(db, oid)
         row = await vs.upsert_memory(content_text="line", source="invoice", embedding_metadata={"k": "v"})
         assert row.organization_id == oid
@@ -367,11 +346,7 @@ async def test_vector_store_upsert_memory_mocked() -> None:
 async def test_vector_store_similarity_invalid_k() -> None:
     db = AsyncMock()
     vs = VectorStoreService(db, str(uuid.uuid4()))
-    with (
-        patch("app.services.embeddings.vector_store.settings") as st,
-        patch.object(vs, "embed_texts", AsyncMock(return_value=[[0.0] * 1536])),
-    ):
-        st.OPENAI_API_KEY = "x"
+    with patch.object(vs, "embed_texts", AsyncMock(return_value=[[0.0] * 768])):
         with pytest.raises(ValidationError):
             await vs.similarity_search("q", k=0)
 
@@ -380,13 +355,10 @@ async def test_vector_store_similarity_invalid_k() -> None:
 async def test_vector_store_embed_openai_error() -> None:
     db = AsyncMock()
     vs = VectorStoreService(db, str(uuid.uuid4()))
-    with (
-        patch("app.services.embeddings.vector_store.settings") as st,
-        patch("app.services.embeddings.vector_store.AsyncOpenAI") as ao,
+    with patch(
+        "app.services.embeddings.vector_store.backend_embed_texts",
+        AsyncMock(side_effect=RuntimeError("api down")),
     ):
-        st.OPENAI_API_KEY = "sk"
-        inst = ao.return_value
-        inst.embeddings.create = AsyncMock(side_effect=RuntimeError("api down"))
         with pytest.raises(ExternalServiceError):
             await vs.embed_texts(["a"])
 
@@ -399,18 +371,11 @@ async def test_vector_store_upsert_db_error() -> None:
     db.rollback = AsyncMock()
     db.refresh = AsyncMock()
     oid = str(uuid.uuid4())
-    vec = [0.03] * 1536
-    fake_emb = MagicMock()
-    fake_emb.data = [MagicMock(embedding=vec)]
-    with (
-        patch("app.services.embeddings.vector_store.settings") as st,
-        patch("app.services.embeddings.vector_store.AsyncOpenAI") as ao,
+    vec = [0.03] * 768
+    with patch(
+        "app.services.embeddings.vector_store.backend_embed_texts",
+        AsyncMock(return_value=[vec]),
     ):
-        st.OPENAI_API_KEY = "sk"
-        st.OPENAI_EMBEDDING_MODEL = "m"
-        st.OPENAI_EMBEDDING_DIMENSIONS = 1536
-        inst = ao.return_value
-        inst.embeddings.create = AsyncMock(return_value=fake_emb)
         vs = VectorStoreService(db, oid)
         with pytest.raises(ExternalServiceError):
             await vs.upsert_memory(content_text="c", source="s")
@@ -421,11 +386,7 @@ async def test_vector_store_search_db_error() -> None:
     db = AsyncMock()
     db.execute = AsyncMock(side_effect=SQLAlchemyError("fail"))
     vs = VectorStoreService(db, str(uuid.uuid4()))
-    with (
-        patch("app.services.embeddings.vector_store.settings") as st,
-        patch.object(vs, "embed_texts", AsyncMock(return_value=[[0.0] * 1536])),
-    ):
-        st.OPENAI_API_KEY = "sk"
+    with patch.object(vs, "embed_texts", AsyncMock(return_value=[[0.0] * 768])):
         with pytest.raises(ExternalServiceError):
             await vs.similarity_search("q", k=2)
 
@@ -556,7 +517,6 @@ async def test_ingestion_non_demo_mock_llm() -> None:
 
     with patch("app.agents.ingestion.nodes.settings") as s:
         s.demo_mode = False
-        s.OPENAI_API_KEY = "sk"
         db = AsyncMock()
         out = await ingestion_graph.ainvoke(
             {
@@ -601,7 +561,7 @@ async def test_ingestion_agent_demo_full_path() -> None:
     ) as s2:
         s1.demo_mode = True
         s2.demo_mode = True
-        s2.OPENAI_EMBEDDING_DIMENSIONS = 4
+        s2.EMBEDDING_DIMENSIONS = 4
         db = AsyncMock()
         out = await ingestion_graph.ainvoke(
             {
@@ -641,7 +601,6 @@ async def test_ingestion_flags_human_review_when_low_confidence() -> None:
 
     with patch("app.agents.ingestion.nodes.settings") as s:
         s.demo_mode = False
-        s.OPENAI_API_KEY = "sk"
         db = AsyncMock()
         out = await ingestion_graph.ainvoke(
             {
@@ -667,7 +626,7 @@ async def test_ingestion_materialize_rejects_bad_base64() -> None:
     ) as s2:
         s1.demo_mode = True
         s2.demo_mode = True
-        s2.OPENAI_EMBEDDING_DIMENSIONS = 4
+        s2.EMBEDDING_DIMENSIONS = 4
         out = await ingestion_graph.ainvoke(
             {
                 "organization_id": str(uuid.uuid4()),

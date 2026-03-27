@@ -1,7 +1,7 @@
 """VectorStoreService — pgvector-backed semantic memory per organization.
 
 Scope:
-    Generate OpenAI embeddings for arbitrary text, persist rows in
+    Generate embeddings (Gemini or OpenAI) for arbitrary text, persist rows in
     ``organization_embeddings``, and run similarity search **always filtered by**
     ``organization_id`` so tenants never leak context across org boundaries.
 
@@ -27,8 +27,8 @@ End-to-end example (invoice categorization):
 Architectural notes:
     - Uses raw SQL with the ``<=>`` cosine-distance operator for predictable
       behaviour across SQLAlchemy versions.
-    - Embedding width must match the DB column (default 1536 for
-      ``text-embedding-3-small``); configure via ``OPENAI_EMBEDDING_DIMENSIONS``.
+    - Embedding width must match the DB column; configure ``EMBEDDING_DIMENSIONS``
+      and ``EMBEDDING_PROVIDER`` (``gemini`` or ``openai``).
 """
 from __future__ import annotations
 
@@ -36,13 +36,12 @@ import logging
 import uuid
 from typing import Any, Sequence
 
-from openai import AsyncOpenAI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.core.exceptions import ExternalServiceError, ValidationError
 from app.db.models.embeddings import OrganizationEmbedding
+from app.services.embeddings.backend import embed_texts as backend_embed_texts
 
 logger = logging.getLogger(__name__)
 
@@ -58,33 +57,20 @@ class VectorStoreService:
         self.db = db
         self.organization_id = organization_id
 
-    def _client(self) -> AsyncOpenAI:
-        if not settings.OPENAI_API_KEY:
-            raise ValidationError(
-                "OpenAI API key is not configured.",
-                code="config.openai_missing",
-                fields={"OPENAI_API_KEY": "Required for embeddings"},
-            )
-        return AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """Return embedding vectors for each input string (single OpenAI call)."""
+        """Return embedding vectors for each input string via shared backend."""
         if not texts:
             return []
-        client = self._client()
         try:
-            resp = await client.embeddings.create(
-                model=settings.OPENAI_EMBEDDING_MODEL,
-                input=texts,
-                dimensions=settings.OPENAI_EMBEDDING_DIMENSIONS,
-            )
+            return await backend_embed_texts(texts)
+        except ValidationError:
+            raise
         except Exception as e:
-            logger.error("OpenAI embedding failed: %s", e)
+            logger.error("Embedding backend failed: %s", e)
             raise ExternalServiceError(
                 "Failed to generate embeddings.",
-                code="external.openai_embedding",
+                code="external.embedding",
             ) from e
-        return [list(d.embedding) for d in resp.data]
 
     async def upsert_memory(
         self,

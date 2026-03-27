@@ -24,6 +24,7 @@ class InvoiceSource(str, enum.Enum):
     AADE = "aade"
     OCR_PDF = "ocr_pdf"
     CSV_IMPORT = "csv_import"
+    GMAIL = "gmail"
 
 
 class Invoice(Base):

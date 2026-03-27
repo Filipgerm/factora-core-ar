@@ -43,6 +43,9 @@ from app.services.ai_service import AIService
 from app.services.file_service import FileService
 from app.services.invoice_service import InvoiceService
 from app.services.ingestion_service import IngestionService
+from app.services.gmail_oauth_service import GmailOAuthService
+from app.services.gmail_sync_service import GmailSyncService
+from app.controllers.gmail_controller import GmailController
 from app.services.stripe_sync_service import StripeSyncService
 from app.services.stripe_webhook_service import StripeWebhookService
 from app.controllers.membership_controller import MembershipController
@@ -352,6 +355,25 @@ def get_ingestion_service(
 
 
 IngSvc = Annotated[IngestionService, Depends(get_ingestion_service)]
+
+
+def get_gmail_oauth_service(db: DB) -> GmailOAuthService:
+    return GmailOAuthService(db)
+
+
+def get_gmail_sync_service(db: DB) -> GmailSyncService:
+    return GmailSyncService(db)
+
+
+def get_gmail_controller(
+    db: DB,
+    oauth: Annotated[GmailOAuthService, Depends(get_gmail_oauth_service)],
+    sync: Annotated[GmailSyncService, Depends(get_gmail_sync_service)],
+) -> GmailController:
+    return GmailController(oauth_service=oauth, sync_service=sync, db=db)
+
+
+GmailCtrl = Annotated[GmailController, Depends(get_gmail_controller)]
 
 
 def get_file_service(

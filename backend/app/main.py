@@ -40,6 +40,8 @@ from app.api.routes.organization_routes import router as organization_router
 from app.api.routes.organizations_routes import router as organizations_router
 from app.api.routes.saltedge_routes import router as saltedge_router
 from app.api.routes.stripe_routes import router as stripe_router
+from app.api.routes.gmail_routes import pubsub_router as gmail_pubsub_router
+from app.api.routes.gmail_routes import router as gmail_router
 from app.config import settings
 from app.core.exceptions import AppError, ValidationError
 from app.db.postgres import close_database_connection, connect_to_database
@@ -194,6 +196,8 @@ app.include_router(aade_router, prefix=f"{_V1}/aade", tags=["AADE"])
 app.include_router(dashboard_router, prefix=f"{_V1}/dashboard", tags=["Dashboard"])
 app.include_router(ai_router, prefix=f"{_V1}/ai", tags=["AI"])
 app.include_router(stripe_router, prefix=f"{_V1}/stripe", tags=["Stripe"])
+app.include_router(gmail_router, prefix=_V1, tags=["Gmail"])
+app.include_router(gmail_pubsub_router, prefix=_V1, tags=["Webhooks"])
 
 
 # ---------------------------------------------------------------------------

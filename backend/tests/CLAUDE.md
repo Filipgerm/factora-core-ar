@@ -35,7 +35,8 @@ that split happens.
 
 Environment variables required by `app.config.Settings` are populated in `conftest.py`
 before importing the application (including **Stripe** keys as empty strings for
-stub behaviour).
+stub behaviour, **Gemini / OpenAI / Anthropic / embedding / Gmail** placeholders aligned with
+`backend/.env.example`).
 
 ## Target fixtures (not in repo yet)
 
@@ -75,10 +76,10 @@ tests with `backend/app/agents/CLAUDE.md` **partial compliance** note.
 
 - **Isolation** — every test must be runnable independently. No test may depend on
   state created by another test.
-- **No real external calls** — mock `clients/` (Brevo, GEMI, SaltEdge, Gmail),
-  **`packages.stripe`** / Stripe entrypoints (e.g. `get_stripe_client` in
-  `app.dependencies` when used), and all LLM calls (`pytest-mock`, `unittest.mock`).
-  Never hit a real third-party API in CI.
+- **No real external calls** — mock `clients/` (Brevo, GEMI, SaltEdge, **Gmail API** /
+  httpx, **LLM**), **`packages.stripe`** / Stripe entrypoints (e.g. `get_stripe_client` in
+  `app.dependencies` when used), and embedding backends as needed (`embed_texts`,
+  `LLMClient`, or `google.genai`). Never hit a real third-party API in CI.
 - **Async tests** — `tool.pytest.ini_options.asyncio_mode = "auto"` is set in
   `pyproject.toml`. Still mark async tests with `@pytest.mark.asyncio` for clarity
   and to match project convention.
@@ -100,8 +101,8 @@ tests with `backend/app/agents/CLAUDE.md` **partial compliance** note.
 ## Testing NEVER List
 
 - **NEVER** let one test depend on state created by another test.
-- **NEVER** hit a real third-party API (Brevo, GEMI, SaltEdge, OpenAI, Anthropic,
-  **Stripe**) in any test — mock `clients/`, `packages.stripe`, and LLM calls.
+- **NEVER** hit a real third-party API (Brevo, GEMI, SaltEdge, **Google Gemini / Gmail**,
+  **Stripe**) in any test — mock `clients/`, `packages.stripe`, and LLM/embedding calls.
 - **NEVER** skip the multi-tenancy isolation test for a new service method that
   queries business data.
 - **NEVER** add `pytest` or test tooling to `[project.dependencies]` — use

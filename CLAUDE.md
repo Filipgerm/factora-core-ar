@@ -26,14 +26,14 @@ Factora is an **AI-native ERP and financial platform**, built to be the "Rillet 
 
 ### The AI-Native Mandate (The "Agentic Swarm")
 
-Factora does not just use AI; it is built _around_ AI. We use a multi-agent architecture (LangGraph + OpenAI default chat/embeddings, Anthropic optional, pgvector) to automate end-to-end accounting processes. When designing features, always consider how AI can eliminate manual data entry. Always build an **Active Learning Loop**: if the AI is unsure, surface it to the user, and use that feedback to improve future predictions.
+Factora does not just use AI; it is built _around_ AI. We use a multi-agent architecture (**LangGraph** + **Google Gemini**, **OpenAI**, or **Anthropic Claude** for chat, and **Gemini** or **OpenAI** embeddings via `app/services/embeddings/backend.py`, plus **pgvector**) to automate end-to-end accounting processes. When designing features, always consider how AI can eliminate manual data entry. Always build an **Active Learning Loop**: if the AI is unsure, surface it to the user, and use that feedback to improve future predictions.
 
 **Core AI Workflows:**
 
-- **Data Ingestion & OCR:** Gmail SDK extracts invoices from email bodies/PDF attachments using Vision models. Google Sheets two-way sync. Manual CSV/XLSX uploads for legacy ERP records and bank statements. The backend **ingestion** LangGraph (`ingestion_graph`) turns document text into structured invoice hints and optional vector context; it is **not** the same as transaction ledger categorization.
+- **Data Ingestion & OCR:** **Gmail API** (per-tenant OAuth) and optional Pub/Sub drive ingestion of email bodies/PDF attachments; vision/chat models extract structured fields. Google Sheets two-way sync. Manual CSV/XLSX uploads for legacy ERP records and bank statements. The backend **ingestion** LangGraph (`ingestion_graph`) turns document text into structured invoice hints and optional vector context; it is **not** the same as transaction ledger categorization.
 - **Smart Categorization Agent:** *(Product vision / future.)* Automatically categorizes transactions (COGS, utilities, software, loan origination, shareholder transfers, etc.) based on industry context, historical embeddings, and web scraping.
 - **Reconciliation Agent:** Auto-matches bank statement lines to AR/AP invoices, handling partial payments and exact matches autonomously, flagging low-confidence matches for human review.
-- **AR Collections Agent:** Monitors overdue invoices and connects to Gmail via SMTP to autonomously draft and (if toggled to "Act Mode") send follow-up nudges to customers.
+- **AR Collections Agent:** Monitors overdue invoices, drafts nudges via LLM, and sends outbound mail through **Brevo** (transactional). Per-user **Gmail API send** is not the default path today.
 - **General Ledger & Journal Entries:** Automatically drafts standard journal entries from categorized data.
 
 </domain_context>
@@ -51,7 +51,7 @@ api/routes/      ← FastAPI route declarations, Pydantic validation, DI only. Z
 controllers/     ← Orchestration: calls services, maps domain exceptions → HTTPException, translates internal models into external *Response DTOs.
 services/        ← ALL business logic + DB access via AsyncSession. Returns Domain Models, ORM instances, or internal DTOs. NEVER return HTTP types or external DTOs.
 agents/          ← LangGraph agent graphs, state machines, nodes, tools, prompts. Called BY services. NEVER import from api/, controllers/, or services/.
-clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI). No business logic.
+clients/         ← Thin wrappers over external HTTP APIs (Brevo, GEMI, Gmail API via httpx, Supabase Storage). No business logic.
 packages/        ← Internal SDKs (AADE, SaltEdge, Stripe). Standalone — must NEVER import from app/.
 db/models/       ← SQLAlchemy ORM models only (split by domain: identity, counterparty, banking, aade, alerts).
 models/          ← Pydantic *Request / *Response schemas only. No ORM logic.
@@ -99,7 +99,9 @@ ORM models live in `app/db/models/` split by domain:
 - `counterparty.py` → `Counterparty`, `CounterpartyType`
 - `banking.py` → `CustomerModel`, `ConnectionModel`, `BankAccountModel`, `Transaction`
 - `aade.py` → `AadeDocumentModel`, `AadeInvoiceModel`
-- `invoices.py` → `Invoice`, `InvoiceSource` (unified manual / AADE / OCR / CSV)
+- `invoices.py` → `Invoice`, `InvoiceSource` (unified manual / AADE / OCR / CSV / **GMAIL**)
+- `gmail.py` → `GmailMailboxConnection`, `GmailProcessedMessage` (OAuth + idempotency)
+- `embeddings.py` → `OrganizationEmbedding` (**pgvector width 768**; must match `EMBEDDING_DIMENSIONS`)
 - `alerts.py` → `Alert`, `AlertSeverity`
 
 `app/db/database_models.py` has been removed. Never recreate it.
@@ -192,6 +194,10 @@ Then in `<never_list>` → Frontend section, add:
 - **Timestamps**: use `utcnow()` from `app.db.models._utils` (wraps `datetime.now(timezone.utc)`). NEVER use `datetime.utcnow()` (deprecated).
 - **Soft deletes**: prefer `deleted_at` nullable timestamp columns over hard deletes for audit trails (e.g. `Counterparty.deleted_at`).
 - **Indexes**: add explicit indexes on all FK columns and columns used in `WHERE` / `ORDER BY` clauses.
+- **ORM index definitions**: do not combine `index=True` on a `mapped_column` with a separate
+  `Index(..., "same_column")` in `__table_args__` for the same column — that creates duplicate
+  indexes in metadata (wasted storage, slower writes). Use **either** the column flag **or** one
+  named `Index`, not both.
 - **Multi-tenancy**: every business table must carry `organization_id UUID FK → organizations`. All service queries must filter by `organization_id` obtained from the authenticated user's JWT.
 
 </database_rules>
@@ -275,7 +281,7 @@ When `requires_human_review is True`, the calling service must:
 
 ### LLM & Embedding Standards
 
-- **LLM calls**: always use the factory in `app/agents/base.py` — never instantiate `ChatAnthropic` or `ChatOpenAI` directly in node files.
+- **LLM calls**: use **`LLMClient`** (`app/clients/llm_client.py`) from nodes or injected test doubles — never instantiate raw **Gemini**, **OpenAI**, or **Anthropic** SDK clients directly in node files. Shared embedding dimensions and providers are configured via `Settings` (`GEMINI_*`, `OPENAI_*`, `ANTHROPIC_*`, `EMBEDDING_*`).
 - **Embeddings**: use the shared pgvector retriever in `base.py`. Never create ad-hoc vector stores inside a node.
 - **Prompt templates**: always live in `prompts.py`. Inline f-strings for prompts inside `nodes.py` are forbidden.
 - **Async**: all graph nodes must be `async def`. Use `graph.ainvoke()`, never `graph.invoke()` in FastAPI workers.
@@ -435,7 +441,7 @@ Our frontend must look and feel like a top-tier, modern fintech application (Str
 
 - **Runtime**: Python, managed by `uv` (never `pip install` directly).
 - **Framework**: FastAPI with Uvicorn (async, ASGI).
-- **Agent Orchestration**: LangGraph + pgvector (see `<agents_architecture>`).
+- **Agent Orchestration**: LangGraph + pgvector; **LLM**: Gemini, OpenAI, or Anthropic (Claude) via `LLMClient`; **embeddings**: shared backend (Gemini or OpenAI). See `backend/.env.example` and `app/services/embeddings/backend.py`.
 - **Custom ML**: PyTorch — device-agnostic, always `.to(device)` (see `<ai_pytorch>`).
 - **ORM**: SQLAlchemy (AsyncSession) + Alembic migrations.
 - **Database**: PostgreSQL via Supabase (pgvector extension enabled).
@@ -457,7 +463,7 @@ Our frontend must look and feel like a top-tier, modern fintech application (Str
 - **Stripe**: Billing — mirror Pydantic models and webhook verification in `packages/stripe`.
 - **Brevo** (formerly Sendinblue): Email and SMS via `sib_api_v3_sdk`.
 - **GEMI**: Greek Business Registry — company document lookup.
-- **Google OAuth**: Sign-in via Google ID token (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`).
+- **Google OAuth**: Sign-in via Google ID token; **Gmail connect** reuses the same client with additional scopes — refresh tokens encrypted at rest (`GMAIL_TOKEN_ENCRYPTION_KEY`), sync via `GmailSyncService`, optional **Pub/Sub** push to `/v1/webhooks/gmail/pubsub`.
 
 </tech_stack>
 
@@ -484,6 +490,8 @@ All environment variables are documented in `backend/.env.example`.
 | `CODE_PEPPER`          | ✅ always | Server-side pepper for Argon2id hashing (≥16 chars).                                 |
 | `GOOGLE_CLIENT_ID`     | ✅ always | Google OAuth 2.0 client ID for Google Sign-In.                                       |
 | `GOOGLE_CLIENT_SECRET` | ✅ always | Google OAuth 2.0 client secret (never exposed to the client).                        |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `LLM_PROVIDER` / `EMBEDDING_*` | optional* | Live agents need a provider; see `backend/.env.example` and `backend/CLAUDE.md` (Gemini, OpenAI, Claude, or demo). |
+| Gmail OAuth / Pub/Sub | optional* | `GOOGLE_GMAIL_REDIRECT_URI`, `GMAIL_TOKEN_ENCRYPTION_KEY`, `GMAIL_PUBSUB_VERIFICATION_AUDIENCE` when using mailbox ingestion. |
 
 ### DEMO_MODE
 
@@ -696,6 +704,7 @@ Every significant task must conclude with:
 
 - **NEVER** use `datetime.utcnow()` (deprecated) — use `datetime.now(timezone.utc)`.
 - **NEVER** run `alembic upgrade` against the original V1 database instance — V2 migrations target a new Supabase project.
+- **NEVER** declare the same column index twice in SQLAlchemy ORM metadata (e.g. `index=True` on the column **and** an explicit `Index` on that column) — pick one approach per column.
 
 ### Python Tooling
 
