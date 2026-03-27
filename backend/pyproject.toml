@@ -44,6 +44,7 @@ dependencies = [
     "google-genai>=1.68.0",
     "google-auth>=2.49.1",
     "cryptography>=46.0.5",
+    "sentry-sdk[fastapi]>=2.56.0",
 ]
 
 [dependency-groups]

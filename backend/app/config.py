@@ -196,6 +196,15 @@ class Settings(BaseSettings):
         """True when ENVIRONMENT=development."""
         return self.ENVIRONMENT == "development"
 
+    # --- Observability ---
+    SENTRY_DSN: str = Field(
+        default="",
+        description=(
+            "Sentry DSN for error tracking. Leave empty to disable. "
+            "Obtain from: https://sentry.io → Project Settings → Client Keys"
+        ),
+    )
+
     # --- CORS and Proxy Configuration ---
     CORS_ORIGINS: str = Field(
         default="",

@@ -22,6 +22,8 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+import sentry_sdk
+
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +51,23 @@ from app.middleware.demo import DemoModeMiddleware
 from app.middleware.request_id import RequestIDMiddleware
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Sentry — initialise before the app object so all exceptions are captured.
+# Disabled when SENTRY_DSN is empty (local dev default).
+# ---------------------------------------------------------------------------
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        # Full traces in dev; 10 % sampling in production to control volume.
+        traces_sample_rate=1.0 if settings.is_development else 0.1,
+        # Profile 10 % of sampled transactions to catch slow code paths.
+        profiles_sample_rate=0.1,
+        # Never attach PII (email addresses, IPs) to events.
+        send_default_pii=False,
+    )
+    logger.info("Sentry initialised (environment=%s)", settings.ENVIRONMENT)
 
 
 # ---------------------------------------------------------------------------
