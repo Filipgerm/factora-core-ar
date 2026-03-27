@@ -74,6 +74,14 @@ def _walk_parts(
         _walk_parts(sub, out_files, text_chunks)
 
 
+def _subject_from_payload(payload: dict[str, Any]) -> str:
+    """Return Subject header from a Gmail API message payload."""
+    for h in payload.get("headers") or []:
+        if (h.get("name") or "").lower() == "subject":
+            return (h.get("value") or "").strip()
+    return ""
+
+
 class GmailSyncService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
@@ -117,6 +125,9 @@ class GmailSyncService:
         """Poll Gmail and ingest new messages (manual sync / dev)."""
         conn = await self._connection(organization_id, google_email)
         access = await self._access_token(conn)
+        # Snapshot before commits: AsyncSession expires ORM rows on commit; reading
+        # conn.google_email after the loop would lazy-load outside async greenlet.
+        mailbox_email = conn.google_email
 
         message_ids: list[str] = []
         if conn.history_id:
@@ -163,9 +174,8 @@ class GmailSyncService:
 
             try:
                 msg = await self._gmail.get_message(access_token=access, message_id=mid)
-                body_text, _, _, subject = _extract_from_message(msg)
-
                 payload = msg.get("payload") or {}
+                subject = _subject_from_payload(payload)
                 text_chunks: list[str] = []
                 files: list[tuple[str, str, str]] = []
                 _walk_parts(payload, files, text_chunks)
@@ -267,7 +277,7 @@ class GmailSyncService:
             "ingested": ingested,
             "skipped": skipped,
             "errors": errors,
-            "mailbox": conn.google_email,
+            "mailbox": mailbox_email,
         }
 
     async def sync_for_email_address(
