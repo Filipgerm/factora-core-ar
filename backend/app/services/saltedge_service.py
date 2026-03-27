@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Iterator, Optional, Dict, Any
+from typing import Any, Callable, Dict, Iterator, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select
 from datetime import datetime, date, timezone
@@ -58,6 +58,13 @@ class SaltEdgeService:
         self._client: SaltEdgeClient = SaltEdgeClient(app_settings)
         self._api: API = API(self._client)
 
+    async def _run_saltedge_sync(
+        self, fn: Callable[..., Any], /, *args: Any, **kwargs: Any
+    ) -> Any:
+        """Run blocking Salt Edge SDK (sync httpx) calls off the asyncio event loop."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
+
     # ---------- Accounts ----------
     async def list_accounts(
         self,
@@ -68,7 +75,8 @@ class SaltEdgeService:
         from_id: str | None = None,
     ) -> AccountsResponse:
         # Fetch from SaltEdge API
-        response = await self._api.accounts.list(
+        response = await self._run_saltedge_sync(
+            self._api.accounts.list,
             customer_id=customer_id,
             connection_id=connection_id,
             per_page=per_page,
@@ -91,8 +99,11 @@ class SaltEdgeService:
         from_id: Optional[str] = None,
     ) -> ConnectionsResponse:
         # Fetch from SaltEdge API
-        response = await self._api.connections.list(
-            customer_id=customer_id, per_page=per_page, from_id=from_id
+        response = await self._run_saltedge_sync(
+            self._api.connections.list,
+            customer_id=customer_id,
+            per_page=per_page,
+            from_id=from_id,
         )
 
         # Store/update connections in database
@@ -105,13 +116,17 @@ class SaltEdgeService:
     async def iterate_connections(
         self, *, customer_id: str, per_page: Optional[int] = None
     ) -> Iterator[ConnectionsResponse]:
-        return await self._api.connections.iterate(
-            customer_id=customer_id, per_page=per_page
+        return await self._run_saltedge_sync(
+            self._api.connections.iterate,
+            customer_id=customer_id,
+            per_page=per_page,
         )
 
     async def get_connection(self, *, connection_id: str) -> Connection:
         # Fetch from SaltEdge API
-        response = await self._api.connections.get(connection_id)
+        response = await self._run_saltedge_sync(
+            self._api.connections.get, connection_id
+        )
 
         # Store/update connection in database
         await self._store_or_update_connection(response)
@@ -161,7 +176,8 @@ class SaltEdgeService:
         from_id: str | None = None,
     ) -> ConsentsResponse:
         # Fetch from SaltEdge API
-        response = await self._api.consents.list(
+        response = await self._run_saltedge_sync(
+            self._api.consents.list,
             customer_id=customer_id,
             connection_id=connection_id,
             per_page=per_page,
@@ -183,8 +199,11 @@ class SaltEdgeService:
         customer_id: str | None = None,
     ):
         # Fetch from SaltEdge API
-        response = await self._api.consents.get(
-            consent_id, connection_id=connection_id, customer_id=customer_id
+        response = await self._run_saltedge_sync(
+            self._api.consents.get,
+            consent_id,
+            connection_id=connection_id,
+            customer_id=customer_id,
         )
 
         # Store/update consent in database
@@ -193,18 +212,22 @@ class SaltEdgeService:
         return response
 
     async def revoke_consent(self, *, consent_id: str) -> ConsentResponse:
-        return await self._api.consents.revoke(consent_id=consent_id)
+        return await self._run_saltedge_sync(
+            self._api.consents.revoke, consent_id=consent_id
+        )
 
     # ---------- Rates ----------
     async def get_rates(self, *, date: str | None = None) -> RatesResponse:
-        return await self._api.rates.get_rates(date=date)
+        return await self._run_saltedge_sync(self._api.rates.get_rates, date=date)
 
     # ---------- Customers ----------
     async def create_customer(
         self, *, payload: dict
     ) -> CreatedClientCustomerResponse | CreatedPartnerCustomerResponse | dict:
         # Create in SaltEdge API
-        response = await self._api.customers.create(payload=payload)
+        response = await self._run_saltedge_sync(
+            self._api.customers.create, payload=payload
+        )
 
         # Store customer in database if creation was successful
         if hasattr(response, "data") and response.data:
@@ -219,7 +242,9 @@ class SaltEdgeService:
         from_id: str | None = None,
     ) -> CustomersResponse:
         # Fetch from SaltEdge API
-        response = await self._api.customers.list(from_id=from_id, per_page=per_page)
+        response = await self._run_saltedge_sync(
+            self._api.customers.list, from_id=from_id, per_page=per_page
+        )
 
         # Store/update customers in database
         if response.data:
@@ -230,7 +255,9 @@ class SaltEdgeService:
 
     async def get_customer(self, *, customer_id: str) -> CustomerResponse:
         # Fetch from SaltEdge API
-        response = await self._api.customers.get(customer_id=customer_id)
+        response = await self._run_saltedge_sync(
+            self._api.customers.get, customer_id=customer_id
+        )
 
         # Store/update customer in database
         await self._store_or_update_customer(response.data)
@@ -277,7 +304,8 @@ class SaltEdgeService:
         per_page: int | None = None,
     ) -> TransactionsResponse:
         # Fetch from SaltEdge API
-        response = await self._api.transactions.list(
+        response = await self._run_saltedge_sync(
+            self._api.transactions.list,
             connection_id=connection_id,
             account_id=account_id,
             pending=pending,
@@ -296,7 +324,9 @@ class SaltEdgeService:
     async def update_transactions(
         self, *, payload: UpdateTransactionsRequestBody
     ) -> UpdateTransactionsResponse:
-        return await self._api.transactions.update(payload=payload)
+        return await self._run_saltedge_sync(
+            self._api.transactions.update, payload=payload
+        )
 
     # ---------- Providers ----------
     async def list_providers(
@@ -314,7 +344,8 @@ class SaltEdgeService:
         per_page: Optional[int] = None,
     ) -> ProvidersResponse:
         # Fetch from SaltEdge API
-        response = await self._api.providers.list(
+        response = await self._run_saltedge_sync(
+            self._api.providers.list,
             include_sandboxes=include_sandboxes,
             country_code=country_code,
             include_ais_fields=include_ais_fields,
@@ -343,7 +374,8 @@ class SaltEdgeService:
         include_credentials_fields: Optional[bool] = None,
     ) -> ProviderResponse:
         # Fetch from SaltEdge API
-        response = await self._api.providers.show(
+        response = await self._run_saltedge_sync(
+            self._api.providers.show,
             provider_code=provider_code,
             include_ais_fields=include_ais_fields,
             include_pis_fields=include_pis_fields,
@@ -359,7 +391,9 @@ class SaltEdgeService:
     async def create_payment(
         self, *, payload: CreatePaymentRequestBody
     ) -> PaymentCreateResponse:
-        return await self._api.payments.create(payload=payload)
+        return await self._run_saltedge_sync(
+            self._api.payments.create, payload=payload
+        )
 
     async def list_payments(
         self,
@@ -368,16 +402,23 @@ class SaltEdgeService:
         from_id: Optional[str] = None,
         per_page: Optional[int] = None,
     ) -> PaymentsListResponse:
-        return await self._api.payments.list(
-            customer_id=customer_id, from_id=from_id, per_page=per_page
+        return await self._run_saltedge_sync(
+            self._api.payments.list,
+            customer_id=customer_id,
+            from_id=from_id,
+            per_page=per_page,
         )
 
     async def show_payment(self, *, payment_id: str) -> PaymentResponse:
-        return await self._api.payments.show(payment_id=payment_id)
+        return await self._run_saltedge_sync(
+            self._api.payments.show, payment_id=payment_id
+        )
 
     async def refresh_payment(self, *, payment_id: str) -> UpdatePaymentResponse:
         # Refresh payment status from SaltEdge API
-        response = await self._api.payments.refresh(payment_id=payment_id)
+        response = await self._run_saltedge_sync(
+            self._api.payments.refresh, payment_id=payment_id
+        )
 
         # Note: Payment data storage would depend on your payment model structure
         # For now, just return the response
