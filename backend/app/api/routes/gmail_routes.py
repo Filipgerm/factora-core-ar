@@ -78,6 +78,10 @@ async def ingestion_preview(
     org_id: CurrentOrgId,
     ctl: GmailCtrl,
     raw_text: str = Form(""),
+    text: str = Form(
+        "",
+        description="Alias for raw_text (e.g. curl -F 'text=...').",
+    ),
     file: UploadFile | None = File(None),
 ):
     """Run ingestion agent on text and/or uploaded file; does not create an invoice."""
@@ -97,9 +101,10 @@ async def ingestion_preview(
         data = b"".join(chunks)
         b64 = base64.b64encode(data).decode("ascii")
         mime = file.content_type or "application/octet-stream"
+    body = (raw_text.strip() or text.strip())
     return await ctl.preview_ingestion(
         organization_id=org_id,
-        raw_text=raw_text or "",
+        raw_text=body,
         attachment_base64=b64,
         attachment_mime_type=mime,
     )
