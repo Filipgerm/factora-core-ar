@@ -21,8 +21,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationError
-from app.db.models.invoices import Invoice, InvoiceSource
-from app.models.invoices import InvoiceCreateRequest, InvoiceSourceEnum
+from app.db.models.invoices import Invoice, InvoiceSource, InvoiceStatus
+from app.models.invoices import InvoiceCreateRequest, InvoiceSourceEnum, InvoiceStatusEnum
 
 
 class InvoiceService:
@@ -32,6 +32,9 @@ class InvoiceService:
 
     def _to_orm_source(self, src: InvoiceSourceEnum) -> InvoiceSource:
         return InvoiceSource(src.value)
+
+    def _to_orm_status(self, status: InvoiceStatusEnum) -> InvoiceStatus:
+        return InvoiceStatus(status.value)
 
     async def create(self, body: InvoiceCreateRequest) -> Invoice:
         orm_source = self._to_orm_source(body.source)
@@ -62,7 +65,9 @@ class InvoiceService:
             currency=body.currency.upper(),
             issue_date=body.issue_date,
             due_date=body.due_date,
-            status=body.status,
+            status=self._to_orm_status(body.status),
+            confidence=body.confidence,
+            requires_human_review=body.requires_human_review,
         )
         self.db.add(inv)
         await self.db.commit()

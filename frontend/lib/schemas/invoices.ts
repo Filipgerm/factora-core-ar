@@ -10,6 +10,15 @@ export const invoiceSourceSchema = z.enum([
 
 export type InvoiceSource = z.infer<typeof invoiceSourceSchema>;
 
+export const invoiceStatusSchema = z.enum([
+  "draft",
+  "pending_review",
+  "finalized",
+  "synced",
+]);
+
+export type InvoiceStatus = z.infer<typeof invoiceStatusSchema>;
+
 export const invoiceResponseSchema = z.object({
   id: z.string(),
   organization_id: z.string(),
@@ -21,7 +30,9 @@ export const invoiceResponseSchema = z.object({
   currency: z.string(),
   issue_date: z.string(),
   due_date: z.string().nullable(),
-  status: z.string(),
+  status: invoiceStatusSchema,
+  confidence: z.number().min(0).max(1).nullable(),
+  requires_human_review: z.boolean(),
 });
 
 export type InvoiceResponse = z.infer<typeof invoiceResponseSchema>;
@@ -36,7 +47,9 @@ export const invoiceCreateSchema = z.object({
   currency: z.string().length(3).default("EUR"),
   issue_date: z.string().min(1),
   due_date: z.string().nullable().optional(),
-  status: z.string().max(32).default("draft"),
+  status: invoiceStatusSchema.default("draft"),
+  confidence: z.number().min(0).max(1).nullable().optional(),
+  requires_human_review: z.boolean().optional().default(false),
 });
 
 export type InvoiceCreate = z.infer<typeof invoiceCreateSchema>;

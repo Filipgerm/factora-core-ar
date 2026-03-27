@@ -19,6 +19,15 @@ class InvoiceSourceEnum(str, Enum):
     GMAIL = "gmail"
 
 
+class InvoiceStatusEnum(str, Enum):
+    """Wire format matches ``InvoiceStatus`` ORM enum values."""
+
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    FINALIZED = "finalized"
+    SYNCED = "synced"
+
+
 class InvoiceCreateRequest(BaseModel):
     """Create an invoice row (dashboard manual entry by default)."""
 
@@ -35,7 +44,9 @@ class InvoiceCreateRequest(BaseModel):
     currency: str = Field(default="EUR", min_length=3, max_length=3)
     issue_date: date
     due_date: date | None = None
-    status: str = Field(default="draft", max_length=32)
+    status: InvoiceStatusEnum = InvoiceStatusEnum.DRAFT
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    requires_human_review: bool = False
 
     @model_validator(mode="after")
     def _manual_requires_label(self) -> InvoiceCreateRequest:
@@ -72,4 +83,6 @@ class InvoiceResponse(BaseModel):
     currency: str
     issue_date: date
     due_date: date | None
-    status: str
+    status: InvoiceStatusEnum
+    confidence: float | None
+    requires_human_review: bool

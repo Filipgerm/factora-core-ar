@@ -26,7 +26,11 @@ from app.core.exceptions import NotFoundError, ValidationError as AppValidationE
 from app.core.security.field_encryption import decrypt_secret
 from app.db.models.gmail import GmailMailboxConnection, GmailProcessedMessage
 from app.models.gmail import GmailSyncMessageDetail
-from app.models.invoices import InvoiceCreateRequest, InvoiceSourceEnum
+from app.models.invoices import (
+    InvoiceCreateRequest,
+    InvoiceSourceEnum,
+    InvoiceStatusEnum,
+)
 from app.services.embeddings.vector_store import VectorStoreService
 from app.services.ingestion_service import IngestionService
 from app.services.invoice_service import InvoiceService
@@ -287,7 +291,11 @@ class GmailSyncService:
                 if len(currency) != 3:
                     currency = "EUR"
 
-                status = "pending_review" if result.get("requires_human_review") else "draft"
+                inv_status = (
+                    InvoiceStatusEnum.PENDING_REVIEW
+                    if result.get("requires_human_review")
+                    else InvoiceStatusEnum.DRAFT
+                )
 
                 issue_d = _parse_iso_date(result.get("issue_date")) or _date_from_gmail_internal(
                     msg.get("internalDate")
@@ -312,7 +320,9 @@ class GmailSyncService:
                             currency=currency,
                             issue_date=issue_d,
                             due_date=due_d,
-                            status=status,
+                            status=inv_status,
+                            confidence=conf_f,
+                            requires_human_review=bool(result.get("requires_human_review")),
                         )
                     )
                 except AppValidationError as ve:
@@ -391,6 +401,13 @@ class GmailSyncService:
                     )
                 )
 
+        logger.info(
+            "gmail sync complete: mailbox=%s ingested=%d skipped=%d errors=%d",
+            mailbox_email,
+            ingested,
+            skipped,
+            len(errors),
+        )
         return {
             "ingested": ingested,
             "skipped": skipped,

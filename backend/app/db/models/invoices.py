@@ -11,7 +11,18 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Index, Numeric, String, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +36,13 @@ class InvoiceSource(str, enum.Enum):
     OCR_PDF = "ocr_pdf"
     CSV_IMPORT = "csv_import"
     GMAIL = "gmail"
+
+
+class InvoiceStatus(str, enum.Enum):
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    FINALIZED = "finalized"
+    SYNCED = "synced"
 
 
 class Invoice(Base):
@@ -67,7 +85,23 @@ class Invoice(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
     issue_date: Mapped[date] = mapped_column(Date, nullable=False)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    status: Mapped[InvoiceStatus] = mapped_column(
+        Enum(
+            InvoiceStatus,
+            name="invoicestatus",
+            create_type=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=InvoiceStatus.DRAFT,
+    )
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    requires_human_review: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
 
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
@@ -95,5 +129,12 @@ class Invoice(Base):
             "ix_invoices_org_active",
             "organization_id",
             postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index("ix_invoices_status", "status"),
+        Index(
+            "ix_invoices_pending_review",
+            "organization_id",
+            "status",
+            postgresql_where=text("status = 'pending_review' AND deleted_at IS NULL"),
         ),
     )
