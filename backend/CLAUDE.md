@@ -41,70 +41,16 @@ core/            ← Cross-cutting utilities: security/, exceptions.py, config.p
 middleware/      ← Starlette middleware: request_id, demo. Custom additions go here.
 ```
 
-### Project Structure
+### Non-obvious file locations
 
-```
-backend/
-├── pyproject.toml
-├── uv.lock
-├── Dockerfile
-├── .env.example
-├── alembic.ini                  ← At project root, not inside app/
-├── alembic/
-│   ├── env.py
-│   └── versions/
-├── scripts/                     ← CLI utilities and one-off scripts
-├── tests/                       ← Single test root. See backend/tests/CLAUDE.md.
-├── packages/
-│   ├── aade/
-│   ├── saltedge/
-│   └── stripe/
-└── app/
-    ├── main.py
-    ├── dependencies.py
-    ├── config.py
-    ├── api/routes/              ← includes ``gmail_routes.py`` (Gmail OAuth, sync, preview, Pub/Sub mount)
-    ├── controllers/             ← includes ``gmail_controller.py``
-    ├── services/
-    │   ├── embeddings/          ← pgvector + ``backend.py`` (Gemini or OpenAI embeddings)
-    │   ├── gmail_oauth_service.py
-    │   └── gmail_sync_service.py
-    ├── agents/                  ← LangGraph agents (NOT inside services/)
-    ├── clients/
-    │   ├── email_client.py
-    │   ├── gemi_client.py
-    │   ├── gmail_api_client.py ← Gmail OAuth token refresh + REST (httpx)
-    │   ├── llm_client.py       ← Gemini, OpenAI, or Anthropic (Claude)
-    │   └── storage_client.py   ← File storage (Supabase Storage / S3)
-    ├── models/                  ← includes ``gmail.py`` Pydantic DTOs for Gmail HTTP responses
-    ├── db/
-    │   ├── base.py
-    │   ├── postgres.py
-    │   └── models/
-    │       ├── identity.py      ← Organization, User, UserRole, UserSession
-    │       ├── counterparty.py  ← Counterparty, CounterpartyType
-    │       ├── banking.py       ← CustomerModel, ConnectionModel, BankAccountModel, Transaction
-    │       ├── aade.py          ← AadeDocumentModel, AadeInvoiceModel
-    │       ├── invoices.py      ← Invoice, InvoiceSource (manual / AADE / OCR / CSV / GMAIL)
-    │       ├── gmail.py         ← GmailMailboxConnection, GmailProcessedMessage
-    │       ├── files.py         ← Document (file metadata)
-    │       ├── embeddings.py    ← OrganizationEmbedding (vector 768)
-    │       ├── alerts.py        ← Alert, AlertSeverity
-    │       └── stripe_billing.py ← Stripe mirror ORM tables
-    ├── core/
-    │   ├── exceptions.py
-    │   ├── demo.py
-    │   ├── filename_content_disposition.py  ← Content-Disposition filename parsing
-    │   ├── security/
-    │   │   ├── hashing.py       ← Argon2id and SHA-256
-    │   │   ├── field_encryption.py ← Fernet for Gmail refresh tokens at rest
-    │   │   └── jwt.py           ← JWT encode/decode; Gmail OAuth ``state`` helpers
-    │   └── demo_fixtures/
-    │       └── agents/          ← Static agent output fixtures for demo mode
-    └── middleware/
-        ├── demo.py
-        └── request_id.py
-```
+- `alembic.ini` — lives at `backend/` root, **not** inside `app/`; Alembic commands must be run from `backend/`
+- `app/clients/gmail_api_client.py` — Gmail OAuth token refresh + REST wrapper (httpx); this is a `clients/` file, not a `packages/` SDK
+- `app/clients/llm_client.py` — single instantiation point for Gemini / OpenAI / Anthropic; never import provider SDKs elsewhere
+- `app/clients/storage_client.py` — Supabase Storage / S3 file operations; storage logic never goes in `services/`
+- `app/services/embeddings/backend.py` — pgvector embedding provider (Gemini or OpenAI); all embedding calls go through here
+- `app/core/security/field_encryption.py` — Fernet encryption for Gmail refresh tokens at rest
+- `app/core/security/jwt.py` — JWT encode/decode **and** Gmail OAuth `state` CSRF helpers
+- `app/core/demo_fixtures/agents/` — static JSON fixtures returned by `@demo_fixture` in demo mode
 
 **`app/db/database_models.py` has been removed. Never recreate it.**
 
@@ -124,9 +70,9 @@ When adding a new domain (e.g., `Invoices`), update `dependencies.py` in this ex
    `InvCtrl = Annotated[InvoiceController, Depends(get_invoice_controller)]`
 4. Routers import the `Ctrl` alias and use it as their sole business-logic dependency.
 
-**Invoices vs dashboard:** Persisted AR/AP-style invoices live in ``InvoiceService`` and the
-unified ``invoices`` table (``source`` + ``external_id`` for idempotent ingest from AADE,
-OCR, CSV, or manual UI). ``DashboardService`` stays a **read aggregator** for KPIs,
+**Invoices vs dashboard:** Persisted AR/AP-style invoices live in `InvoiceService` and the
+unified `invoices` table (`source` + `external_id` for idempotent ingest from AADE,
+OCR, CSV, or manual UI). `DashboardService` stays a **read aggregator** for KPIs,
 SaltEdge transactions, and **AADE document snapshots**—not the system of record for
 invoice rows. Keeping invoice writes out of the dashboard service avoids a god-object
 service and matches how reconciliation and future agents will reference invoice IDs.
@@ -306,85 +252,85 @@ field on `Settings` (required = no default in code; optional = has a default, of
 
 ### Database and storage
 
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `SUPABASE_URI` | ✅ | Async PostgreSQL DSN (`postgresql+asyncpg://...`, port 5432). |
-| `SUPABASE_URI_SHARED_POOLER` | ✅ | Pooled async DSN (port 6543). |
-| `SUPABASE_URL` | ✅ | Supabase project URL. |
-| `SUPABASE_SECRET_KEY` | ✅ | Supabase service-role key. |
-| `ALEMBIC_DATABASE_URL` | ✅ | Sync DSN for Alembic (`postgresql+psycopg://...`). |
-| `SUPABASE_BUCKET` | ✅ | Default storage bucket name. |
+| Variable                     | Required | Description                                                   |
+| ---------------------------- | -------- | ------------------------------------------------------------- |
+| `SUPABASE_URI`               | ✅       | Async PostgreSQL DSN (`postgresql+asyncpg://...`, port 5432). |
+| `SUPABASE_URI_SHARED_POOLER` | ✅       | Pooled async DSN (port 6543).                                 |
+| `SUPABASE_URL`               | ✅       | Supabase project URL.                                         |
+| `SUPABASE_SECRET_KEY`        | ✅       | Supabase service-role key.                                    |
+| `ALEMBIC_DATABASE_URL`       | ✅       | Sync DSN for Alembic (`postgresql+psycopg://...`).            |
+| `SUPABASE_BUCKET`            | ✅       | Default storage bucket name.                                  |
 
 ### External integrations (non-AI)
 
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `GEMH_API_KEY` | ✅ | GEMI / Greek Business Registry API key. |
-| `BREVO_API_KEY` | ✅ | Brevo REST API key. |
-| `BREVO_SMTP_KEY` | ✅ | Brevo SMTP relay key. |
-| `BREVO_SENDER_EMAIL` | ✅ | Verified sender email. |
-| `BREVO_SENDER_NAME` | ✅ | Display name for outbound mail/SMS. |
-| `AADE_USERNAME` | ✅ | AADE / myDATA username. |
-| `AADE_SUBSCRIPTION_KEY` | ✅ | AADE / myDATA subscription key. |
-| `SALTEDGE_APP_ID` | ✅ | Salt Edge application ID. |
-| `SALTEDGE_SECRET` | ✅ | Salt Edge secret. |
+| Variable                | Required | Description                             |
+| ----------------------- | -------- | --------------------------------------- |
+| `GEMH_API_KEY`          | ✅       | GEMI / Greek Business Registry API key. |
+| `BREVO_API_KEY`         | ✅       | Brevo REST API key.                     |
+| `BREVO_SMTP_KEY`        | ✅       | Brevo SMTP relay key.                   |
+| `BREVO_SENDER_EMAIL`    | ✅       | Verified sender email.                  |
+| `BREVO_SENDER_NAME`     | ✅       | Display name for outbound mail/SMS.     |
+| `AADE_USERNAME`         | ✅       | AADE / myDATA username.                 |
+| `AADE_SUBSCRIPTION_KEY` | ✅       | AADE / myDATA subscription key.         |
+| `SALTEDGE_APP_ID`       | ✅       | Salt Edge application ID.               |
+| `SALTEDGE_SECRET`       | ✅       | Salt Edge secret.                       |
 
 ### AI and embeddings
 
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `LLM_PROVIDER` | ✅ | `gemini`, `openai`, or `anthropic` (Claude). |
-| `GEMINI_API_KEY` | optional* | Google AI key; required when `LLM_PROVIDER=gemini` (non-demo). |
-| `GEMINI_CHAT_MODEL` | optional | Chat / vision model (e.g. `gemini-2.0-flash`). |
-| `GEMINI_EMBEDDING_MODEL` | optional | Embedding model when `EMBEDDING_PROVIDER=gemini` (e.g. `text-embedding-004`). |
-| `OPENAI_API_KEY` | optional* | Required when `LLM_PROVIDER=openai` or `EMBEDDING_PROVIDER=openai`. |
-| `OPENAI_CHAT_MODEL` | optional | Chat model when `LLM_PROVIDER=openai`. |
-| `OPENAI_EMBEDDING_MODEL` | optional | Embedding model when `EMBEDDING_PROVIDER=openai` (e.g. `text-embedding-3-small`). |
-| `ANTHROPIC_API_KEY` | optional* | Required when `LLM_PROVIDER=anthropic`. |
-| `ANTHROPIC_CHAT_MODEL` | optional | Claude model id when `LLM_PROVIDER=anthropic`. |
-| `EMBEDDING_PROVIDER` | ✅ | `gemini` or `openai`. |
-| `EMBEDDING_DIMENSIONS` | optional | Vector width; must match DB column (default `768`). |
+| Variable                 | Required   | Description                                                                       |
+| ------------------------ | ---------- | --------------------------------------------------------------------------------- |
+| `LLM_PROVIDER`           | ✅         | `gemini`, `openai`, or `anthropic` (Claude).                                      |
+| `GEMINI_API_KEY`         | optional\* | Google AI key; required when `LLM_PROVIDER=gemini` (non-demo).                    |
+| `GEMINI_CHAT_MODEL`      | optional   | Chat / vision model (e.g. `gemini-2.5-flash`).                                    |
+| `GEMINI_EMBEDDING_MODEL` | optional   | Embedding model when `EMBEDDING_PROVIDER=gemini` (e.g. `text-embedding-004`).     |
+| `OPENAI_API_KEY`         | optional\* | Required when `LLM_PROVIDER=openai` or `EMBEDDING_PROVIDER=openai`.               |
+| `OPENAI_CHAT_MODEL`      | optional   | Chat model when `LLM_PROVIDER=openai`.                                            |
+| `OPENAI_EMBEDDING_MODEL` | optional   | Embedding model when `EMBEDDING_PROVIDER=openai` (e.g. `text-embedding-3-small`). |
+| `ANTHROPIC_API_KEY`      | optional\* | Required when `LLM_PROVIDER=anthropic`.                                           |
+| `ANTHROPIC_CHAT_MODEL`   | optional   | Claude model id when `LLM_PROVIDER=anthropic`.                                    |
+| `EMBEDDING_PROVIDER`     | ✅         | `gemini` or `openai`.                                                             |
+| `EMBEDDING_DIMENSIONS`   | optional   | Vector width; must match DB column (default `768`).                               |
 
 ### Stripe
 
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `STRIPE_SECRET_KEY` | optional | Secret key; empty uses stub behaviour where implemented. |
-| `STRIPE_WEBHOOK_SECRET` | optional | Webhook signing secret. |
-| `STRIPE_API_VERSION` | optional | Pinned API version string (must match Stripe dashboard). |
+| Variable                | Required | Description                                              |
+| ----------------------- | -------- | -------------------------------------------------------- |
+| `STRIPE_SECRET_KEY`     | optional | Secret key; empty uses stub behaviour where implemented. |
+| `STRIPE_WEBHOOK_SECRET` | optional | Webhook signing secret.                                  |
+| `STRIPE_API_VERSION`    | optional | Pinned API version string (must match Stripe dashboard). |
 
 ### Gmail (OAuth + Pub/Sub) and outbound mail
 
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `GOOGLE_GMAIL_REDIRECT_URI` | optional* | OAuth redirect for **Connect Gmail** (separate consent from Sign-In). |
-| `GMAIL_TOKEN_ENCRYPTION_KEY` | optional* | Fernet key (urlsafe base64) for encrypted refresh tokens at rest. |
-| `GMAIL_PUBSUB_VERIFICATION_AUDIENCE` | optional | Expected OIDC audience for Pub/Sub push JWT verification (prod). |
-| *(collections)* | — | AR collections nudges use **Brevo** (`BREVO_*`); Gmail API send is not used yet. |
+| Variable                             | Required   | Description                                                                      |
+| ------------------------------------ | ---------- | -------------------------------------------------------------------------------- |
+| `GOOGLE_GMAIL_REDIRECT_URI`          | optional\* | OAuth redirect for **Connect Gmail** (separate consent from Sign-In).            |
+| `GMAIL_TOKEN_ENCRYPTION_KEY`         | optional\* | Fernet key (urlsafe base64) for encrypted refresh tokens at rest.                |
+| `GMAIL_PUBSUB_VERIFICATION_AUDIENCE` | optional   | Expected OIDC audience for Pub/Sub push JWT verification (prod).                 |
+| _(collections)_                      | —          | AR collections nudges use **Brevo** (`BREVO_*`); Gmail API send is not used yet. |
 
 ### Security and OAuth
 
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `CODE_PEPPER` | ✅ | Server pepper for Argon2 (≥16 chars). |
-| `JWT_SECRET_KEY` | ✅ | HS256 signing key (≥32 random bytes). |
-| `GOOGLE_CLIENT_ID` | optional* | Google OAuth client ID. *Required to enable Google Sign-In. |
-| `GOOGLE_CLIENT_SECRET` | optional* | Google OAuth secret; never expose to clients. |
+| Variable               | Required   | Description                                                  |
+| ---------------------- | ---------- | ------------------------------------------------------------ |
+| `CODE_PEPPER`          | ✅         | Server pepper for Argon2 (≥16 chars).                        |
+| `JWT_SECRET_KEY`       | ✅         | HS256 signing key (≥32 random bytes).                        |
+| `GOOGLE_CLIENT_ID`     | optional\* | Google OAuth client ID. \*Required to enable Google Sign-In. |
+| `GOOGLE_CLIENT_SECRET` | optional\* | Google OAuth secret; never expose to clients.                |
 
 ### URLs and environment
 
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `FRONTEND_BASE_URL` | ✅ | Canonical frontend origin for email links. |
-| `ENVIRONMENT` | optional | `production` (default) \| `development` \| `demo`. |
+| Variable            | Required | Description                                        |
+| ------------------- | -------- | -------------------------------------------------- |
+| `FRONTEND_BASE_URL` | ✅       | Canonical frontend origin for email links.         |
+| `ENVIRONMENT`       | optional | `production` (default) \| `development` \| `demo`. |
 
 ### HTTP middleware
 
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `CORS_ORIGINS` | optional | Comma-separated origins; empty denies CORS in production. |
-| `TRUSTED_PROXIES` | optional | Proxy CIDRs for `ProxyHeadersMiddleware` (default `*`). |
-| `ALLOWED_HOSTS` | optional | Host allowlist for `TrustedHostMiddleware` (default `*`). |
+| Variable          | Required | Description                                               |
+| ----------------- | -------- | --------------------------------------------------------- |
+| `CORS_ORIGINS`    | optional | Comma-separated origins; empty denies CORS in production. |
+| `TRUSTED_PROXIES` | optional | Proxy CIDRs for `ProxyHeadersMiddleware` (default `*`).   |
+| `ALLOWED_HOSTS`   | optional | Host allowlist for `TrustedHostMiddleware` (default `*`). |
 
 Computed on `settings`: `demo_mode`, `is_production`, `is_development` (derived from `ENVIRONMENT`).
 

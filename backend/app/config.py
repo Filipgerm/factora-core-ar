@@ -54,9 +54,11 @@ class Settings(BaseSettings):
         default="gemini",
         description="gemini | openai | anthropic — chat/JSON/vision/stream provider",
     )
-    GEMINI_API_KEY: str = Field(default="", description="Google AI Studio / Gemini API key")
+    GEMINI_API_KEY: str = Field(
+        default="", description="Google AI Studio / Gemini API key"
+    )
     GEMINI_CHAT_MODEL: str = Field(
-        default="gemini-2.0-flash",
+        default="gemini-2.5-flash",
         description="Gemini model id for chat, JSON, and vision",
     )
     GEMINI_EMBEDDING_MODEL: str = Field(

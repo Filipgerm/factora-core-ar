@@ -3,6 +3,13 @@
 You are a lead engineer capable of taking a feature from concept to a production-ready Pull Request.
 You embody the Architect, Security Specialist, QA Engineer, and Frontend Lead.
 
+> **Subdirectory rules** (loaded automatically when working in those paths):
+> - `backend/CLAUDE.md` — FastAPI layers, env config, PyTorch, version control, output requirements
+> - `backend/app/agents/CLAUDE.md` — LangGraph agent architecture
+> - `backend/tests/CLAUDE.md` — testing standards and fixtures
+> - `backend/packages/CLAUDE.md` — standalone SDK packages
+> - `frontend/CLAUDE.md` — Next.js architecture, UI/UX aesthetic
+
 ---
 
 <domain_context>
@@ -126,7 +133,7 @@ ORM models live in `app/db/models/` split by domain:
 | Token type              | Format           | Storage (DB)     | TTL    | Transport                            |
 | ----------------------- | ---------------- | ---------------- | ------ | ------------------------------------ |
 | Access token            | JWT HS256        | **Never stored** | 30 min | `Authorization: Bearer` header       |
-| Refresh token           | Opaque (48-byte) | SHA-256 hash     | 7 days | httpOnly cookie or secure body field |
+| Refresh token           | Opaque (48-byte) | SHA-256 hash     | 7 days | httpOnly cookie                      |
 | Password reset token    | Opaque           | SHA-256 hash     | 1 hour | Email link                           |
 | OTP / verification code | Numeric          | SHA-256+pepper   | 10 min | SMS / Email                          |
 
@@ -144,24 +151,16 @@ ORM models live in `app/db/models/` split by domain:
 - The `require_auth` dependency in `app/dependencies.py` validates Bearer JWTs on protected routes.
 - The `require_role(*roles)` dependency factory enforces RBAC (Owner, Admin, External_Accountant, Viewer).
 
-### Frontend Token Storage
+### Token Storage Contract
 
-| Token         | Storage                                           | Reasoning                                                                                                                                                                   |
-| ------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Access token  | **In-memory only** (React context / state)        | Short-lived (30 min). Lost on page refresh — the refresh flow silently issues a new one. Never written to `localStorage` or any persistent storage. Invisible to XSS.       |
-| Refresh token | **`httpOnly` + `Secure` + `SameSite=Lax` cookie** | Long-lived (7 days). Survives page refresh. JavaScript cannot read it under any circumstance, including XSS. The browser sends it automatically on requests to the backend. |
+| Token         | Storage                                           | Rule                                                                                      |
+| ------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Access token  | **In-memory React context only**                  | Never written to `localStorage`. Lost on refresh — silently renewed by refresh flow.      |
+| Refresh token | **`httpOnly` + `Secure` + `SameSite=Lax` cookie** | Set by backend via `response.set_cookie`. JS cannot read it under any circumstance.       |
 
-**Backend contract**: login, refresh, and Google auth set the refresh token exclusively via `response.set_cookie(key="refresh_token", httponly=True, secure=True, samesite="lax", path="/v1/auth")` so the cookie is sent to `/v1/auth/login`, `/v1/auth/refresh`, and `/v1/auth/logout`. It must never return the refresh token in the JSON response body.
+**Backend**: login, refresh, and Google auth set the refresh token exclusively via `response.set_cookie(key="refresh_token", httponly=True, secure=True, samesite="lax", path="/v1/auth")`. Never return the refresh token in the JSON response body.
 
-**Frontend contract**: `lib/api/client.ts` stores the access token in a React context (never `localStorage`). On a `401` response, it calls `/v1/auth/refresh` — the browser sends the `httpOnly` cookie automatically — and retries the original request with the new access token. The client code never reads or writes the refresh token directly.
-
-```
-
-Then in `<never_list>` → Frontend section, add:
-```
-
-- **NEVER** store the access token in `localStorage` or `sessionStorage` — keep it in React context (in-memory only).
-- **NEVER** return the refresh token in a JSON response body — set it exclusively as an `httpOnly` cookie.
+**Frontend**: `lib/api/client.ts` stores the access token in React context. On a `401`, it calls `/v1/auth/refresh` (browser sends the cookie automatically) and retries once with the new access token.
 
 ### RBAC Roles
 
@@ -176,7 +175,7 @@ Then in `<never_list>` → Frontend section, add:
 
 - Input validation via Pydantic (backend) and Zod (frontend) on **every** external input.
 - Parameterised queries only — SQLAlchemy ORM prevents raw SQL injection.
-- CORS: `allow_origins=["*"]` combined with `allow_credentials=True` is forbidden (see `<never_list>`). `allow_origins=["*"]` without credentials is acceptable in `ENVIRONMENT=development` only.
+- CORS: `allow_origins=["*"]` combined with `allow_credentials=True` is forbidden. `allow_origins=["*"]` without credentials is acceptable in `ENVIRONMENT=development` only.
 - Host header injection prevention via `TrustedHostMiddleware` (set `ALLOWED_HOSTS` in prod).
 - Real client IP via `ProxyHeadersMiddleware` (set `TRUSTED_PROXIES` to your nginx CIDR in prod).
 - Secrets via environment variables only — never in source code or committed `.env` files.
@@ -194,242 +193,10 @@ Then in `<never_list>` → Frontend section, add:
 - **Timestamps**: use `utcnow()` from `app.db.models._utils` (wraps `datetime.now(timezone.utc)`). NEVER use `datetime.utcnow()` (deprecated).
 - **Soft deletes**: prefer `deleted_at` nullable timestamp columns over hard deletes for audit trails (e.g. `Counterparty.deleted_at`).
 - **Indexes**: add explicit indexes on all FK columns and columns used in `WHERE` / `ORDER BY` clauses.
-- **ORM index definitions**: do not combine `index=True` on a `mapped_column` with a separate
-  `Index(..., "same_column")` in `__table_args__` for the same column — that creates duplicate
-  indexes in metadata (wasted storage, slower writes). Use **either** the column flag **or** one
-  named `Index`, not both.
+- **ORM index definitions**: do not combine `index=True` on a `mapped_column` with a separate `Index(..., "same_column")` in `__table_args__` for the same column — pick one approach per column.
 - **Multi-tenancy**: every business table must carry `organization_id UUID FK → organizations`. All service queries must filter by `organization_id` obtained from the authenticated user's JWT.
 
 </database_rules>
-
----
-
-<agents_architecture>
-
-## Agents Architecture (LangGraph)
-
-### Directory Structure
-
-Agents live under `app/agents/`, entirely separate from `app/services/`. Services **call** agents; agents never import from `api/`, `controllers/`, or `services/`. The call direction is strictly one-way: `services → agents`.
-
-```
-app/agents/
-  base.py                    ← Shared: LLM factory, pgvector retriever, CONFIDENCE_THRESHOLD constants
-  categorization/
-    graph.py                 ← LangGraph StateGraph definition (compiled graph)
-    state.py                 ← TypedDict state schema for this agent
-    nodes.py                 ← Individual node functions (pure: state_in → state_out)
-    tools.py                 ← LangChain tools used by this agent
-    prompts.py               ← All prompt templates — no inline strings in nodes.py
-  reconciliation/
-    graph.py
-    state.py
-    nodes.py
-    tools.py
-    prompts.py
-  collections/
-    graph.py
-    state.py
-    nodes.py
-    tools.py
-    prompts.py
-```
-
-### Invocation Pattern
-
-Agents are always invoked **from a service method**, never from a controller or route. The service prepares inputs, invokes the graph, and persists the output.
-
-```python
-# ✅ CORRECT — service calls agent
-class TransactionService:
-    async def categorize(self, txn: Transaction) -> Transaction:
-        result = await categorization_graph.ainvoke({
-            "transaction": txn,
-            "org_id": txn.organization_id,
-        })
-        txn.category = result["category"]
-        txn.confidence = result["confidence"]
-        txn.requires_human_review = result["requires_human_review"]
-        await self.db.commit()
-        return txn
-```
-
-### State Schema Convention
-
-Every agent's `state.py` must define a `TypedDict` with:
-
-- `input` fields — immutable after graph entry.
-- `output` fields — written only by terminal nodes.
-- `confidence: float` — mandatory on every agent output (0.0–1.0).
-- `requires_human_review: bool` — set `True` when `confidence < CONFIDENCE_THRESHOLD` (defined in `base.py`).
-
-### The Active Learning Loop
-
-When `requires_human_review is True`, the calling service must:
-
-1. Persist the agent's best-guess output with a `PENDING_REVIEW` status.
-2. Create an `Alert` record (via `AlertService`) to surface the item in the UI.
-3. When the user confirms or corrects the suggestion, write the feedback back to the pgvector embeddings store to improve future predictions.
-
-### Confidence Thresholds (defined in `app/agents/base.py`)
-
-| Agent          | Auto-apply threshold                                              | Human review threshold |
-| -------------- | ----------------------------------------------------------------- | ---------------------- |
-| Categorization | ≥ 0.85                                                            | < 0.85                 |
-| Reconciliation | ≥ 0.90                                                            | < 0.90                 |
-| Collections    | Always human-gated in "Review Mode"; auto-send only in "Act Mode" |
-
-### LLM & Embedding Standards
-
-- **LLM calls**: use **`LLMClient`** (`app/clients/llm_client.py`) from nodes or injected test doubles — never instantiate raw **Gemini**, **OpenAI**, or **Anthropic** SDK clients directly in node files. Shared embedding dimensions and providers are configured via `Settings` (`GEMINI_*`, `OPENAI_*`, `ANTHROPIC_*`, `EMBEDDING_*`).
-- **Embeddings**: use the shared pgvector retriever in `base.py`. Never create ad-hoc vector stores inside a node.
-- **Prompt templates**: always live in `prompts.py`. Inline f-strings for prompts inside `nodes.py` are forbidden.
-- **Async**: all graph nodes must be `async def`. Use `graph.ainvoke()`, never `graph.invoke()` in FastAPI workers.
-
-### Demo Mode (agents)
-
-Agent graphs may use `@demo_fixture(...)` on `ainvoke` paths so `ENVIRONMENT=demo` returns static JSON from `app/core/demo_fixtures/agents/` without LLM calls. See `app/agents/CLAUDE.md`.
-
-</agents_architecture>
-
----
-
-<frontend_rules>
-
-## Frontend Architecture Rules
-
-### Technology Decisions
-
-| Concern                      | Solution                           | Rule                                                    |
-| ---------------------------- | ---------------------------------- | ------------------------------------------------------- |
-| Server state / data fetching | TanStack Query (React Query v5)    | No `useEffect` + `fetch` patterns for server data       |
-| API communication            | Custom typed client (`lib/api/`)   | Never call `fetch` directly in components or hooks      |
-| Forms                        | React Hook Form + Zod resolver     | No `useState` for form fields                           |
-| Validation schemas           | Zod (`lib/schemas/`)               | Always export both schema and inferred type             |
-| UI components                | Shadcn/UI (core) + Tremor (charts) | Customize Shadcn; never override Tremor chart internals |
-| Icons                        | Lucide-React                       | No other icon library permitted                         |
-
-### Component Placement Rules
-
-| Component type                        | Location                        | Directive                          |
-| ------------------------------------- | ------------------------------- | ---------------------------------- |
-| Page (route entry point)              | `app/(group)/route/page.tsx`    | Server Component (default)         |
-| Layout                                | `app/(group)/layout.tsx`        | Server Component                   |
-| Interactive UI (clicks, forms, state) | `components/`                   | `"use client"` required            |
-| Financial charts / KPI widgets        | `components/`                   | `"use client"` required (Tremor)   |
-| Pure display (no interactivity)       | Either; prefer Server Component | No `"use client"` unless necessary |
-
-**Rule**: Do not add `"use client"` unless the component uses browser APIs, React state/effects, or event handlers. Keep the client boundary as small as possible.
-
-### Route Structure
-
-```
-frontend/
-  app/
-    layout.tsx               ← Root layout (fonts, global CSS only)
-    page.tsx                 ← Landing: redirects to /login or /home
-    providers.tsx            ← ReactQueryProvider, ThemeProvider, AuthProvider
-    (auth)/
-      layout.tsx             ← Unauthenticated layout (centered card, no sidebar)
-      login/page.tsx
-      signup/page.tsx
-    (dashboard)/
-      layout.tsx             ← Authenticated layout (sidebar, topbar, auth guard)
-      home/page.tsx
-      accounts-receivable/
-        layout.tsx           ← Optional nested layout for AR sub-navigation
-        products/page.tsx
-        invoices/page.tsx
-        customers/page.tsx
-        credit-memos/page.tsx
-        contracts/page.tsx
-      accounts-payable/
-        vendors/page.tsx
-        reimbursements/page.tsx
-        charges/page.tsx
-        bills/page.tsx
-      ar-collections/page.tsx
-      reporting/
-        vat-return/page.tsx
-        income-statement/page.tsx
-        executive-metrics/page.tsx
-        cash-flow/page.tsx
-        balance-sheet/page.tsx
-      reconciliation/page.tsx
-      integrations/page.tsx
-  components/                ← All shared and "use client" components
-  lib/
-    api/
-      client.ts              ← Base API client (auth headers, token refresh, error parsing)
-      invoices.ts            ← Domain-specific typed request functions
-      counterparties.ts
-      (one file per backend domain)
-    schemas/                 ← All Zod schemas (one file per domain, mirrors lib/api/)
-    utils/                   ← Pure utility functions (formatCurrency, formatDate, etc.)
-  hooks/                     ← Custom React hooks; wrap TanStack Query calls
-  e2e/                       ← Playwright end-to-end tests
-```
-
-### API Client Convention
-
-The base client (`lib/api/client.ts`) is responsible for:
-
-1. Automatic `Authorization: Bearer <token>` header injection from the auth store.
-2. Silent token refresh on `401` before retrying the original request once.
-3. Throwing a typed `ApiError` (with `status`, `code`, `message`) on all non-2xx responses.
-
-Domain files (`lib/api/invoices.ts`) export plain `async` functions — not classes. These are the **only** place `apiClient` is called.
-
-```typescript
-// ✅ CORRECT — domain API file pattern
-export async function getInvoices(orgId: string): Promise<Invoice[]> {
-  return apiClient.get(`/v1/invoices`, { params: { org_id: orgId } });
-}
-```
-
-These functions are consumed exclusively by TanStack Query hooks in `hooks/`. Components never call `lib/api/` directly.
-
-### Zod Schema Convention
-
-- One schema file per domain, mirroring `lib/api/` (e.g., `lib/schemas/invoices.ts`).
-- Always export both the Zod schema **and** the inferred TypeScript type from the same file.
-- API response types are derived from Zod schemas — never manually written `interface` or `type` definitions for API shapes.
-
-```typescript
-// ✅ CORRECT
-export const InvoiceSchema = z.object({ ... });
-export type Invoice = z.infer<typeof InvoiceSchema>;
-```
-
-</frontend_rules>
-
----
-
-<frontend_aesthetic>
-
-## UI/UX & Aesthetic Standards (The "Stripe / Rillet" Standard)
-
-Our frontend must look and feel like a top-tier, modern fintech application (Stripe, Rillet, DualEntry).
-
-### Principles
-
-- **Density & Cleanliness:** Data tables and ledgers must be data-dense but use ample whitespace, subtle borders (`border-slate-200`), and clean typography (Inter/Geist font).
-- **Micro-interactions:** Buttons, table rows, and dropdowns must have subtle hover states and transitions (`transition-all duration-200`).
-- **Empty States:** Never leave a blank screen. Empty states must have a subtle dashed border, an aesthetic Lucide icon, a brief explainer text, and a primary CTA (e.g., "Upload your first invoice").
-- **AI Presence:** AI elements must be visually distinct but not overwhelming. Use subtle purple/blue gradients or sparkle icons to indicate "AI-Suggested" actions. Low-confidence matches must surface as interactive prompts requiring human confirmation — never as resolved state.
-- **Components:** Shadcn/UI for core UI, customized to look premium. Tremor exclusively for all financial charts, metrics, and KPIs.
-
-### Aesthetic Enforcement Rules
-
-- **NEVER** use hardcoded hex color values — use only Tailwind palette tokens (`slate-*`, `zinc-*`, `purple-*`, `blue-*`).
-- **NEVER** ship a data table or list view with an empty state that has no Lucide icon, no explanatory text, and no CTA.
-- **NEVER** use a raw spinner (`animate-spin` on a bare `div`) as the sole loading state for a data-heavy view — use a skeleton that mirrors the layout of the loaded content.
-- **NEVER** apply `transition` or `hover` effects without an explicit duration — always use at minimum `transition-all duration-200`.
-- **NEVER** render AI-suggested content without a visual distinction (purple/blue gradient badge or sparkle icon).
-- **NEVER** display a low-confidence AI match as resolved — it must surface as an interactive inline dropdown or confirmation prompt.
-- **NEVER** add a financial chart or KPI widget using anything other than Tremor.
-
-</frontend_aesthetic>
 
 ---
 
@@ -441,8 +208,7 @@ Our frontend must look and feel like a top-tier, modern fintech application (Str
 
 - **Runtime**: Python, managed by `uv` (never `pip install` directly).
 - **Framework**: FastAPI with Uvicorn (async, ASGI).
-- **Agent Orchestration**: LangGraph + pgvector; **LLM**: Gemini, OpenAI, or Anthropic (Claude) via `LLMClient`; **embeddings**: shared backend (Gemini or OpenAI). See `backend/.env.example` and `app/services/embeddings/backend.py`.
-- **Custom ML**: PyTorch — device-agnostic, always `.to(device)` (see `<ai_pytorch>`).
+- **Agent Orchestration**: LangGraph + pgvector; **LLM**: Gemini, OpenAI, or Anthropic (Claude) via `LLMClient`; **embeddings**: shared backend (Gemini or OpenAI).
 - **ORM**: SQLAlchemy (AsyncSession) + Alembic migrations.
 - **Database**: PostgreSQL via Supabase (pgvector extension enabled).
 
@@ -452,8 +218,6 @@ Our frontend must look and feel like a top-tier, modern fintech application (Str
 - **Styling**: Tailwind CSS + Shadcn/UI + Tremor.
 - **Server State**: TanStack Query (React Query v5).
 - **Forms**: React Hook Form + Zod resolver.
-- **Validation**: Zod — all form inputs and API response shapes.
-- **Routing / Images**: `next/link` / `next/image` exclusively.
 - **Icons**: Lucide-React.
 
 ### Core External Integrations
@@ -466,119 +230,6 @@ Our frontend must look and feel like a top-tier, modern fintech application (Str
 - **Google OAuth**: Sign-in via Google ID token; **Gmail connect** reuses the same client with additional scopes — refresh tokens encrypted at rest (`GMAIL_TOKEN_ENCRYPTION_KEY`), sync via `GmailSyncService`, optional **Pub/Sub** push to `/v1/webhooks/gmail/pubsub`.
 
 </tech_stack>
-
----
-
-<environment_config>
-
-## Environment Configuration
-
-The canonical config class is `app.config.Settings` (also importable from `app.core.config`).
-All environment variables are documented in `backend/.env.example`.
-
-### Key Variables
-
-| Variable               | Required  | Description                                                                          |
-| ---------------------- | --------- | ------------------------------------------------------------------------------------ |
-| `SUPABASE_URI`         | ✅ always | Async PostgreSQL DSN (`postgresql+asyncpg://...`).                                   |
-| `JWT_SECRET_KEY`       | ✅ always | ≥32 random bytes. Rotate to invalidate all sessions.                                 |
-| `FRONTEND_BASE_URL`    | ✅ always | Canonical frontend origin (e.g. `https://app.factora.eu`). Used in email links.      |
-| `CORS_ORIGINS`         | ✅ prod   | Comma-separated allowed origins. `*` is acceptable in local dev without credentials. |
-| `ALLOWED_HOSTS`        | ✅ prod   | Comma-separated hostnames for `TrustedHostMiddleware`.                               |
-| `TRUSTED_PROXIES`      | ✅ prod   | Nginx CIDR(s) for `ProxyHeadersMiddleware` (e.g. `172.18.0.0/16`).                   |
-| `ENVIRONMENT`          | ✅ always | `production` \| `development` \| `demo`.                                             |
-| `CODE_PEPPER`          | ✅ always | Server-side pepper for Argon2id hashing (≥16 chars).                                 |
-| `GOOGLE_CLIENT_ID`     | ✅ always | Google OAuth 2.0 client ID for Google Sign-In.                                       |
-| `GOOGLE_CLIENT_SECRET` | ✅ always | Google OAuth 2.0 client secret (never exposed to the client).                        |
-| `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `LLM_PROVIDER` / `EMBEDDING_*` | optional* | Live agents need a provider; see `backend/.env.example` and `backend/CLAUDE.md` (Gemini, OpenAI, Claude, or demo). |
-| Gmail OAuth / Pub/Sub | optional* | `GOOGLE_GMAIL_REDIRECT_URI`, `GMAIL_TOKEN_ENCRYPTION_KEY`, `GMAIL_PUBSUB_VERIFICATION_AUDIENCE` when using mailbox ingestion. |
-
-### DEMO_MODE
-
-`settings.demo_mode` is `True` when `ENVIRONMENT=demo`.
-
-When demo mode is active:
-
-- **Business data** is read from PostgreSQL. Populate the canonical demo tenant with `backend/scripts/seed_demo_db.py` (requires `ENVIRONMENT=demo` or `ALLOW_DEMO_SEED=1` on disposable databases only).
-- **External HTTP only** — fixtures replace real calls for AADE RequestDocs / RequestTransmittedDocs (`packages/aade/api/docs.py`), Salt Edge (`packages/saltedge/http.py`), and GEMI (`app/clients/gemi_client.py`). JSON lives under `app/core/demo_fixtures/`. Do not short-circuit internal services or controllers with demo fixtures for domain data.
-- **Agents** may use `@demo_fixture` and `app/core/demo_fixtures/agents/` per `app/agents/CLAUDE.md`.
-- **Notification service** (Brevo email/SMS) logs messages instead of dispatching.
-- Every HTTP response carries an `X-Demo-Mode: true` header (via `DemoModeMiddleware`).
-
-Fixture keys for `get_demo_payload` / `@demo_fixture` match filenames in `app/core/demo_fixtures/` (without `.json`). New third-party APIs should use a thin client with demo-mode interception and a matching JSON fixture — not service-layer decorators for DB-backed reads.
-
-</environment_config>
-
----
-
-<testing_standards>
-
-## Testing Standards
-
-### Directory Structure
-
-```
-backend/
-  tests/
-    conftest.py              ← Shared fixtures: DB engine, AsyncClient, auth tokens, org_id
-    unit/                    ← Pure logic; no DB, no HTTP, no external calls
-      services/              ← Service method tests with mocked DB sessions
-      agents/                ← Agent node tests with mocked LLM responses
-      utils/                 ← Core utility and security function tests
-    integration/             ← Tests against a real test DB (isolated per test via rollback)
-      api/                   ← Full HTTP stack via httpx.AsyncClient
-      services/              ← Service tests with real AsyncSession
-```
-
-### Core Fixtures (`conftest.py`)
-
-Always provide these project-level fixtures:
-
-1. **`test_db`** — yields an `AsyncSession` connected to a test-only PostgreSQL DB. Each test runs inside a transaction that is rolled back after completion (never commits to the DB).
-2. **`client`** — yields an `httpx.AsyncClient` pointed at the FastAPI app. Scope: `function`.
-3. **`auth_headers`** — yields `{"Authorization": "Bearer <test_jwt>"}` for a test user with a known, fixed `organization_id`.
-4. **`org_id`** — the fixed UUID of the test organization. Used consistently across all fixtures to enable multi-tenancy assertions.
-
-### Rules
-
-- **Isolation**: every test must be independently runnable. No test may depend on state created by another test.
-- **No real external calls**: all `clients/` (Brevo, GEMI, SaltEdge) and all agent LLM calls must be mocked using `pytest-mock` (`mocker.patch`). Never hit a real third-party API in tests.
-- **Multi-tenancy is mandatory**: for every new service method that queries business data, write at least one test asserting that the same query with a different `organization_id` returns no results or raises `NotFoundError`.
-- **Coverage floor per endpoint**: every new API endpoint requires tests for: (1) success / happy path, (2) unauthenticated → `401`, (3) at least one domain-specific edge case (missing resource → `404`, duplicate → `409`, etc.).
-- **Agent node tests**: test each node function in isolation with a mocked LLM response. Assert that `requires_human_review=True` is set when confidence is below the defined threshold.
-- **Be explicit**: always use `@pytest.mark.asyncio` on async tests. Do not rely on `asyncio_mode = auto`.
-- **Test dependencies**: `pytest`, `pytest-asyncio`, `pytest-mock`, and `httpx` belong in `[dependency-groups.test]` in `pyproject.toml`. Never add them to `[project.dependencies]`.
-
-### Frontend Testing
-
-- **Component tests**: Vitest + React Testing Library for component logic and hook behavior.
-- **E2E tests**: Playwright for critical user flows — signup, login, invoice creation, bank reconciliation confirmation.
-- Playwright tests live under `frontend/e2e/`.
-- Never assert on styling or visual details in unit tests — that is Playwright territory.
-
-</testing_standards>
-
----
-
-<ai_pytorch>
-
-## AI & PyTorch Best Practices
-
-PyTorch is used for custom ML models (e.g., document classification, OCR post-processing). For LLM orchestration, see `<agents_architecture>`.
-
-- **Device Agnostic**:
-  ```python
-  device = torch.device(
-      "cuda" if torch.cuda.is_available()
-      else "mps" if torch.backends.mps.is_available()
-      else "cpu"
-  )
-  ```
-- **Inference**: always wrap with `with torch.no_grad():` to prevent memory leaks in FastAPI workers.
-- **Type Checking**: use `jaxtyping` for tensor shape validation in docstrings.
-- **Model Loading**: load PyTorch models once at app startup via a FastAPI lifespan event into a module-level variable. Never reload a model per-request.
-
-</ai_pytorch>
 
 ---
 
@@ -682,50 +333,25 @@ Every significant task must conclude with:
 
 ## The "NEVER" List
 
-### Architecture
+### Architecture (cross-cutting)
 
 - **NEVER** put business logic in route files (`api/routes/`) — routes declare endpoints only.
 - **NEVER** return `HTTPException` or status codes from a service — raise `AppError` subclasses instead.
-- **NEVER** return external API `*Response` DTOs from a service — return strongly-typed Domain Models, ORM instances, or internal DTOs. Controllers translate these into `*Response` DTOs.
-- **NEVER** wrap service returns in generic "Result" or "ServiceResponse" objects — rely on domain exceptions for failures.
+- **NEVER** return external API `*Response` DTOs from a service — return strongly-typed Domain Models, ORM instances, or internal DTOs.
 - **NEVER** skip the `/v1/` prefix when adding a new router to `main.py`.
-- **NEVER** add new ORM models to a backwards-compat shim — add them to the appropriate domain file under `db/models/`.
 - **NEVER** let agents import from `api/`, `controllers/`, or `services/` — the call direction is services → agents only.
 
-### Security
+### Security (cross-cutting)
 
 - **NEVER** store any token or password in plaintext — always hash before writing to the DB.
-- **NEVER** use `allow_origins=["*"]` together with `allow_credentials=True` — this violates the CORS spec and silently breaks browser auth. (`allow_origins=["*"]` without credentials is acceptable in `ENVIRONMENT=development` only.)
+- **NEVER** use `allow_origins=["*"]` together with `allow_credentials=True`.
 - **NEVER** hardcode `FRONTEND_BASE_URL`, `JWT_SECRET_KEY`, `CODE_PEPPER`, `GOOGLE_CLIENT_SECRET`, or any secret — all must come from environment variables.
 - **NEVER** commit `.env` files or any file containing real secrets.
 - **NEVER** query the database without filtering by `organization_id` in multi-tenant contexts.
+- **NEVER** store the access token in `localStorage` or `sessionStorage` — keep it in React context (in-memory only).
+- **NEVER** return the refresh token in a JSON response body — set it exclusively as an `httpOnly` cookie.
 
-### Database
-
-- **NEVER** use `datetime.utcnow()` (deprecated) — use `datetime.now(timezone.utc)`.
-- **NEVER** run `alembic upgrade` against the original V1 database instance — V2 migrations target a new Supabase project.
-- **NEVER** declare the same column index twice in SQLAlchemy ORM metadata (e.g. `index=True` on the column **and** an explicit `Index` on that column) — pick one approach per column.
-
-### Python Tooling
-
-- **NEVER** call `AppSettings()` or `Settings()` directly — use the shared `settings` singleton from `app.config` or `app.core.config`.
-- **NEVER** use `pip install` — always use `uv add` for backend dependencies.
-- **NEVER** add `pytest` or other test tools to `[project.dependencies]` — use `[dependency-groups]` in `pyproject.toml`.
-
-### Frontend
-
-- **NEVER** call `fetch` directly in a component or hook — always go through `lib/api/`.
-- **NEVER** call a `lib/api/` domain function directly from a component — wrap it in a TanStack Query hook in `hooks/` first.
-- **NEVER** add `"use client"` without a specific reason (browser API, React state/effects, event handler).
-- **NEVER** use `useState` to manage form fields — use React Hook Form.
-- **NEVER** write a Zod schema without exporting the inferred TypeScript type alongside it.
-- **NEVER** use `<img>` tags — always `next/image`.
-- **NEVER** use `<a>` tags for internal navigation — always `next/link`.
-- **NEVER** use any icon library other than Lucide-React.
-- **NEVER** use hardcoded hex color values — use Tailwind palette tokens only.
-- **NEVER** ship a list or table view with an empty state that has no icon, no explanatory text, and no CTA.
-- **NEVER** add a financial chart or KPI widget using anything other than Tremor.
-- **NEVER** render AI-suggested content without a visual distinction (purple/blue gradient badge or sparkle icon).
-- **NEVER** display a low-confidence AI match as a resolved state — it must surface as an interactive confirmation prompt.
+> For backend-specific, frontend-specific, agent-specific, and testing-specific never rules,
+> see the respective subdirectory `CLAUDE.md` files.
 
 </never_list>

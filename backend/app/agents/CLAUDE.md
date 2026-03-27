@@ -50,21 +50,7 @@ are built as Tier 2 from the start.
         scoring.py     ← Confidence calculation and threshold evaluation
         decision.py    ← Route to auto-reconcile or PENDING_REVIEW + Alert
 
-    agents/collections/
-      __init__.py      ← Exports only: ``collections_graph``
-      graph.py
-      state.py
-      constants.py
-      prompts.py
-      tools/
-        __init__.py
-        invoice.py     ← Overdue invoice queries
-        email.py       ← Brevo / outbound mail tools (Gmail API send is not wired here)
-      nodes/
-        __init__.py
-        monitor.py     ← Identify overdue invoices, calculate urgency
-        drafting.py    ← Draft email content via LLM
-        dispatch.py    ← Send via Brevo (Act Mode) or queue for review (Review Mode)
+    agents/collections/   ← Tier-2 layout identical to reconciliation/ above
 
 ### The shared foundation
 

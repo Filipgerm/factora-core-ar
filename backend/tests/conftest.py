@@ -4,6 +4,7 @@ All tests use mocked SQLAlchemy AsyncSession objects to avoid any real
 database dependency.  Environment variables are populated with dummy values
 before any app module is imported.
 """
+
 from __future__ import annotations
 
 import os
@@ -33,7 +34,7 @@ _TEST_ENV = {
     "ALLOWED_HOSTS": "*",
     "LLM_PROVIDER": "gemini",
     "GEMINI_API_KEY": "",
-    "GEMINI_CHAT_MODEL": "gemini-2.0-flash",
+    "GEMINI_CHAT_MODEL": "gemini-2.5-flash",
     "GEMINI_EMBEDDING_MODEL": "text-embedding-004",
     "OPENAI_API_KEY": "",
     "OPENAI_CHAT_MODEL": "gpt-4o-mini",
@@ -86,4 +87,5 @@ def db() -> AsyncMock:
 def auth_service(db: AsyncMock):
     """Provide an AuthService wired to a mocked database session."""
     from app.services.auth_service import AuthService
+
     return AuthService(db=db, code_pepper=PEPPER)
