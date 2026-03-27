@@ -39,6 +39,7 @@ from typing import Any, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.exceptions import ExternalServiceError, ValidationError
 from app.db.models.embeddings import OrganizationEmbedding
 from app.services.embeddings.backend import embed_texts as backend_embed_texts
@@ -97,6 +98,52 @@ class VectorStoreService:
         except Exception as e:
             await self.db.rollback()
             logger.error("Failed to persist embedding: %s", e)
+            raise ExternalServiceError(
+                "Failed to store embedding.",
+                code="db.error",
+            ) from e
+        return row
+
+    async def persist_precomputed_vector(
+        self,
+        *,
+        content_text: str,
+        source: str,
+        vector: Sequence[float],
+        embedding_metadata: dict[str, Any] | None = None,
+    ) -> OrganizationEmbedding | None:
+        """Insert a row using an already-computed embedding (e.g. from ingestion graph).
+
+        Skips persist when the vector length does not match ``EMBEDDING_DIMENSIONS``.
+        """
+        if not vector:
+            return None
+        dim = max(1, int(settings.EMBEDDING_DIMENSIONS))
+        if len(vector) != dim:
+            logger.warning(
+                "Skipping embedding persist: got length %s, expected %s",
+                len(vector),
+                dim,
+            )
+            return None
+        trimmed = (content_text or "").strip()
+        if not trimmed:
+            trimmed = "(empty)"
+        row = OrganizationEmbedding(
+            id=str(uuid.uuid4()),
+            organization_id=self.organization_id,
+            source=source[:64],
+            content_text=trimmed[:16_000],
+            embedding=[float(x) for x in vector],
+            embedding_metadata=embedding_metadata or {},
+        )
+        self.db.add(row)
+        try:
+            await self.db.commit()
+            await self.db.refresh(row)
+        except Exception as e:
+            await self.db.rollback()
+            logger.error("Failed to persist precomputed embedding: %s", e)
             raise ExternalServiceError(
                 "Failed to store embedding.",
                 code="db.error",

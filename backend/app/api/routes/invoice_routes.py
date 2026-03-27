@@ -31,7 +31,7 @@ async def list_invoices(
     ctl: InvoiceCtrl,
     source: str | None = Query(
         None,
-        description="Filter by source: manual, aade, ocr_pdf, csv_import",
+        description="Filter by source: manual, aade, ocr_pdf, csv_import, gmail",
     ),
 ):
     return await ctl.list_invoices(source=source)

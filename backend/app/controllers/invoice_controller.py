@@ -31,7 +31,9 @@ class InvoiceController:
                     f"Invalid invoice source: {source}",
                     code="validation.invalid_enum",
                     fields={
-                        "source": "Expected one of: manual, aade, ocr_pdf, csv_import",
+                        "source": (
+                            "Expected one of: manual, aade, ocr_pdf, csv_import, gmail"
+                        ),
                     },
                 ) from exc
         rows = await self.service.list_for_org(source=filter_src)

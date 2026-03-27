@@ -138,7 +138,7 @@ class IngestionNodes:
         has_vision = bool(state.get("vision_image_base64"))
         if not has_text and not has_vision:
             return {**state, "result": {"error": "empty_text"}}
-        return state
+        return  
 
     async def extract(self, state: IngestionState) -> IngestionState:
         if "result" in state:
@@ -173,6 +173,8 @@ class IngestionNodes:
                 "currency": "EUR",
                 "vat_rate": "24",
                 "line_items": ["Platform fee — €120.00"],
+                "issue_date": "",
+                "due_date": "",
             }
             return {**state, "extracted": extracted}
 
@@ -251,6 +253,8 @@ class IngestionNodes:
             "currency": ext.get("currency") or "",
             "vat_rate": ext.get("vat_rate") or "",
             "line_items": ext.get("line_items") if isinstance(ext.get("line_items"), list) else [],
+            "issue_date": (str(ext.get("issue_date") or "")).strip(),
+            "due_date": (str(ext.get("due_date") or "")).strip(),
         }
 
         return {
