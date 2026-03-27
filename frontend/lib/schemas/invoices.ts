@@ -5,6 +5,7 @@ export const invoiceSourceSchema = z.enum([
   "aade",
   "ocr_pdf",
   "csv_import",
+  "gmail",
 ]);
 
 export type InvoiceSource = z.infer<typeof invoiceSourceSchema>;

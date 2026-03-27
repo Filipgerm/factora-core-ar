@@ -58,7 +58,7 @@ export function aadeDocumentsToArInvoiceRows(
 
 function pipelineFromUnifiedStatus(status: string): ArInvoicePipeline {
   const s = status.toLowerCase();
-  if (s === "draft") return "draft";
+  if (s === "draft" || s === "pending_review") return "draft";
   if (s === "paid") return "paid";
   if (s === "overdue") return "overdue";
   if (s === "partially_paid" || s === "partial") return "partially_paid";
@@ -66,7 +66,12 @@ function pipelineFromUnifiedStatus(status: string): ArInvoicePipeline {
   return "sent";
 }
 
-/** Map unified ``invoices`` rows (e.g. source=manual) into AR table rows. */
+function mydataStatusForUnifiedSource(source: InvoiceResponse["source"]): ArInvoiceRow["mydataStatus"] {
+  if (source === "aade") return "pending";
+  return "not_applicable";
+}
+
+/** Map unified ``invoices`` rows (manual, Gmail, OCR, CSV) into AR table rows. */
 export function manualInvoicesToArInvoiceRows(
   items: InvoiceResponse[]
 ): ArInvoiceRow[] {
@@ -77,15 +82,22 @@ export function manualInvoicesToArInvoiceRows(
         ? "Manual"
         : inv.source === "aade"
           ? "AADE"
-          : inv.source.toUpperCase(),
+          : inv.source === "gmail"
+            ? "Gmail"
+            : inv.source.toUpperCase(),
     customerName: inv.counterparty_display_name ?? "—",
     customerTaxLabel: `${inv.source} · ${inv.status}`,
     amount: Number(inv.amount),
     dueDate: inv.due_date,
     issueDate: inv.issue_date,
     pipeline: pipelineFromUnifiedStatus(inv.status),
-    mydataStatus: inv.source === "aade" ? "pending" : "pending",
-    mydataMark: inv.external_id,
+    mydataStatus: mydataStatusForUnifiedSource(inv.source),
+    mydataMark:
+      inv.source === "aade"
+        ? inv.external_id
+        : inv.external_id
+          ? `Ref: ${inv.external_id.slice(0, 12)}…`
+          : null,
     paidAt: null,
   }));
 }

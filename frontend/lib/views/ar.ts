@@ -7,7 +7,11 @@ export type ArInvoicePipeline =
   | "paid"
   | "overdue";
 
-export type ArMydataTransmission = "transmitted" | "pending" | "error";
+export type ArMydataTransmission =
+  | "transmitted"
+  | "pending"
+  | "error"
+  | "not_applicable";
 
 export type ArCountry = "GR" | "DE" | "NL" | "FR" | "IE";
 

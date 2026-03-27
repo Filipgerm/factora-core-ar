@@ -51,6 +51,11 @@ export function useManualInvoicesQuery() {
   return useInvoicesQuery({ source: "manual" });
 }
 
+/** All unified invoice sources (manual, Gmail, OCR, CSV) for AR list — not AADE-only. */
+export function useUnifiedInvoicesForArQuery() {
+  return useInvoicesQuery();
+}
+
 export function useCreateInvoiceMutation() {
   const qc = useQueryClient();
   return useMutation({

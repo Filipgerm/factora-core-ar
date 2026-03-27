@@ -17,7 +17,7 @@ import {
   manualInvoicesToArInvoiceRows,
 } from "@/lib/dashboard/map-aade-invoices";
 import { useDashboardAadeDocumentsQuery } from "@/lib/hooks/api/use-dashboard";
-import { useManualInvoicesQuery } from "@/lib/hooks/api/use-invoices";
+import { useUnifiedInvoicesForArQuery } from "@/lib/hooks/api/use-invoices";
 import type { ArInvoicePipeline, ArInvoiceRow } from "@/lib/views/ar";
 import { cn } from "@/lib/utils";
 
@@ -127,6 +127,13 @@ function dueCell(row: ArInvoiceRow) {
 }
 
 function mydataCell(row: ArInvoiceRow) {
+  if (row.mydataStatus === "not_applicable") {
+    return (
+      <span className="text-sm text-muted-foreground" title="Not a myDATA document">
+        —
+      </span>
+    );
+  }
   if (row.mydataStatus === "transmitted" && row.mydataMark) {
     return (
       <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
@@ -153,17 +160,17 @@ function mydataCell(row: ArInvoiceRow) {
 export function ArInvoicesView() {
   const [createOpen, setCreateOpen] = useState(false);
   const aade = useDashboardAadeDocumentsQuery({ limit: 200, offset: 0 });
-  const manual = useManualInvoicesQuery();
+  const unified = useUnifiedInvoicesForArQuery();
 
   const rows = useMemo(() => {
-    const manualRows = manualInvoicesToArInvoiceRows(manual.data ?? []);
+    const manualRows = manualInvoicesToArInvoiceRows(unified.data ?? []);
     const aadeRows = aade.data ? aadeDocumentsToArInvoiceRows(aade.data) : [];
     return [...manualRows, ...aadeRows].sort((x, y) => {
       const dx = x.issueDate ? parseISO(x.issueDate).getTime() : 0;
       const dy = y.issueDate ? parseISO(y.issueDate).getTime() : 0;
       return dy - dx;
     });
-  }, [aade.data, manual.data]);
+  }, [aade.data, unified.data]);
   const kpis = useMemo(() => arInvoiceKpisFromRows(rows), [rows]);
 
   const columns: ColumnDef<ArInvoiceRow>[] = useMemo(
@@ -243,7 +250,7 @@ export function ArInvoicesView() {
     []
   );
 
-  if (aade.isLoading || manual.isLoading) {
+  if (aade.isLoading || unified.isLoading) {
     return (
       <div className="space-y-6 pb-24">
         <div className="flex justify-end">
@@ -262,10 +269,10 @@ export function ArInvoicesView() {
   return (
     <div className="space-y-6 pb-24">
       <p className="text-xs leading-relaxed text-muted-foreground">
-        List source:{" "}
-        <span className="font-medium text-foreground">AADE myDATA documents</span>{" "}
-        from your organization. Native AR invoices will replace this view when the
-        invoice API ships.
+        Includes{" "}
+        <span className="font-medium text-foreground">AADE myDATA</span> documents
+        and <span className="font-medium text-foreground">unified invoices</span>{" "}
+        (manual, Gmail ingest, OCR, CSV) for your organization.
       </p>
       <div className="flex justify-end">
         <Button
