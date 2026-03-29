@@ -66,6 +66,7 @@ def _parse_date(value: str | date | None) -> date | None:
 
 
 async def _clear_demo_org(session: AsyncSession, org_id: str) -> None:
+    from app.core.demo_constants import DEMO_SALTEDGE_CUSTOMER_ID
     from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel
     from app.db.models.alerts import Alert
     from app.db.models.banking import (
@@ -78,6 +79,27 @@ async def _clear_demo_org(session: AsyncSession, org_id: str) -> None:
     from app.db.models.counterparty import Counterparty
     from app.db.models.identity import Organization, UserOrganizationMembership
     from app.db.models.invoices import Invoice
+
+    # Tear down the fixed demo SaltEdge customer graph by primary key, regardless of
+    # organization_id. Otherwise a stale row (e.g. leftover from a different org)
+    # survives org-scoped deletes and the next seed hits pk_customers duplicate key.
+    demo_conn_subq = select(ConnectionModel.id).where(
+        ConnectionModel.customer_id == DEMO_SALTEDGE_CUSTOMER_ID
+    )
+    demo_acc_subq = select(BankAccountModel.id).where(
+        BankAccountModel.connection_id.in_(demo_conn_subq)
+    )
+    await session.execute(delete(Transaction).where(Transaction.account_id.in_(demo_acc_subq)))
+    await session.execute(
+        delete(BankAccountModel).where(BankAccountModel.connection_id.in_(demo_conn_subq))
+    )
+    await session.execute(
+        delete(ConsentModel).where(ConsentModel.connection_id.in_(demo_conn_subq))
+    )
+    await session.execute(
+        delete(ConnectionModel).where(ConnectionModel.customer_id == DEMO_SALTEDGE_CUSTOMER_ID)
+    )
+    await session.execute(delete(CustomerModel).where(CustomerModel.id == DEMO_SALTEDGE_CUSTOMER_ID))
 
     cust_subq = select(CustomerModel.id).where(CustomerModel.organization_id == org_id)
     conn_subq = select(ConnectionModel.id).where(ConnectionModel.customer_id.in_(cust_subq))
@@ -364,10 +386,18 @@ async def run_seed() -> None:
 
     from app.db.postgres import AsyncSessionLocal
 
+    # Two transactions: clearing and re-seeding the same organization id in a single
+    # session/transaction can leave the ORM unit-of-work in a state where the new
+    # ``Organization`` row is not flushed before child inserts, causing FK errors
+    # (e.g. ``aade_documents.organization_id`` → ``organizations``).
     async with AsyncSessionLocal() as session:
         async with session.begin():
             await _clear_demo_org(session, DEMO_ORG_ID)
+
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
             await _insert_demo_org(session, DEMO_ORG_ID)
+            await session.flush()
             await _insert_counterparties(session, DEMO_ORG_ID)
             await _insert_banking(session, DEMO_ORG_ID)
             await _insert_aade(session, DEMO_ORG_ID)
