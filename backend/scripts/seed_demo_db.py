@@ -9,6 +9,11 @@ Or with a non-demo env (use only on disposable databases)::
     ALLOW_DEMO_SEED=1 uv run python scripts/seed_demo_db.py
 
 Requires ``SUPABASE_URI`` (or pooler URL) in the environment — same as the API.
+
+Schema must match the ORM (including ``invoices.confidence`` / ``invoicestatus``).
+Apply migrations first::
+
+    uv run alembic upgrade head
 """
 from __future__ import annotations
 
@@ -337,6 +342,24 @@ async def _insert_aade(session: AsyncSession, org_id: str) -> None:
     logger.info("Inserted %d AADE documents and %d invoices", len(doc_ids), len(invoices))
 
 
+def _demo_invoice_status(raw: str | None):
+    """Map demo JSON status strings to :class:`InvoiceStatus` (PostgreSQL enum)."""
+    from app.db.models.invoices import InvoiceStatus
+
+    key = str(raw or "draft").strip().lower()
+    legacy = {
+        "sent": InvoiceStatus.FINALIZED,
+        "paid": InvoiceStatus.FINALIZED,
+        "open": InvoiceStatus.DRAFT,
+    }
+    if key in legacy:
+        return legacy[key]
+    try:
+        return InvoiceStatus(key)
+    except ValueError:
+        return InvoiceStatus.DRAFT
+
+
 async def _insert_invoices(session: AsyncSession, org_id: str) -> None:
     from app.core.demo import get_demo_payload
     from app.db.models.invoices import Invoice, InvoiceSource
@@ -354,7 +377,7 @@ async def _insert_invoices(session: AsyncSession, org_id: str) -> None:
                 currency=str(inv.get("currency") or "EUR").upper(),
                 issue_date=_parse_date(inv["issue_date"]),
                 due_date=_parse_date(inv.get("due_date")),
-                status=str(inv.get("status") or "draft"),
+                status=_demo_invoice_status(inv.get("status")),
             )
         )
     logger.info("Inserted unified invoices from demo_invoices.json")

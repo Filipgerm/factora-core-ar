@@ -9,7 +9,7 @@
       "currency": "EUR",
       "issue_date": "2025-01-10",
       "due_date": "2025-02-10",
-      "status": "sent",
+      "status": "finalized",
       "source": "manual",
       "external_id": "demo-inv-001"
     },
