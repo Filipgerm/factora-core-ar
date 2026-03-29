@@ -47,7 +47,7 @@ export function IncomeStatementReport() {
         <FeatureEmptyState
           icon={BarChart3}
           title="Banking data required"
-          description="Connect Salt Edge and resolve a customer to load revenue, expenses, and net income for the selected period."
+          description="Connect open banking and resolve a customer to load revenue, expenses, and net income for the selected period."
           ctaHref="/integrations"
           ctaLabel="Open integrations"
         />

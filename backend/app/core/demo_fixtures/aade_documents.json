@@ -5,7 +5,7 @@
     "bookDetails": [
       {
         "vatNumber": "123456789",
-        "entityName": "DEMO ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ",
+        "entityName": "A.C.M.E. ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ",
         "issueYear": 2024,
         "countryCode": "GR",
         "mark": 400001001234,
@@ -28,7 +28,7 @@
       },
       {
         "vatNumber": "123456789",
-        "entityName": "DEMO ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ",
+        "entityName": "A.C.M.E. ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ",
         "issueYear": 2024,
         "countryCode": "GR",
         "mark": 400001001235,

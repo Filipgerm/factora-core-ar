@@ -30,7 +30,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -82,6 +82,21 @@ def _parse_date(value: str | date | None) -> date | None:
     if isinstance(value, date):
         return value
     return date.fromisoformat(str(value))
+
+
+def _dashboard_seed_transaction_dates(n: int, today: date) -> list[date]:
+    """Spread ``n`` rows across the last 27 days so P&L (default 30-day window) includes them."""
+    if n <= 0:
+        return []
+    if n == 1:
+        return [today - timedelta(days=5)]
+    oldest = today - timedelta(days=27)
+    span = 26
+    out: list[date] = []
+    for idx in range(n):
+        off = int(round(idx * span / (n - 1)))
+        out.append(oldest + timedelta(days=off))
+    return out
 
 
 async def _clear_demo_org(session: AsyncSession, org_id: str) -> None:
@@ -221,6 +236,7 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
 
     conn_rows = get_demo_payload("saltedge_connections")["data"]
     for c in conn_rows:
+        consent_id = str(c.get("last_consent_id") or f"demo-consent-{c['id']}")
         session.add(
             ConnectionModel(
                 id=c["id"],
@@ -234,23 +250,22 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
                 status=str(c["status"]),
                 categorization="none",
                 automatic_refresh=bool(c.get("automatic_refresh", True)),
-                last_consent_id=str(c.get("last_consent_id") or "demo-consent-001"),
+                last_consent_id=consent_id,
                 created_at=_parse_dt(c.get("created_at")) or datetime.now(timezone.utc),
                 updated_at=_parse_dt(c.get("updated_at")) or datetime.now(timezone.utc),
             )
         )
-
-    session.add(
-        ConsentModel(
-            id="demo-consent-001",
-            external_id="demo-consent-001",
-            external_customer_id=DEMO_SALTEDGE_CUSTOMER_ID,
-            external_connection_id=conn_rows[0]["id"],
-            connection_id=conn_rows[0]["id"],
-            status="active",
-            scopes=["account_information"],
+        session.add(
+            ConsentModel(
+                id=consent_id,
+                external_id=consent_id,
+                external_customer_id=c["customer_id"],
+                external_connection_id=c["id"],
+                connection_id=c["id"],
+                status="active",
+                scopes=["account_information"],
+            )
         )
-    )
 
     for acc in get_demo_payload("saltedge_accounts")["data"]:
         cid = acc["connection_id"]
@@ -269,11 +284,15 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
             )
         )
 
-    for tx in get_demo_payload("dashboard_transactions")["transactions"]:
+    tx_rows = get_demo_payload("dashboard_transactions")["transactions"]
+    today = datetime.now(timezone.utc).date()
+    made_on_dates = _dashboard_seed_transaction_dates(len(tx_rows), today)
+    for idx, tx in enumerate(tx_rows):
         st = TransactionStatus(str(tx["status"]))
+        made_on = made_on_dates[idx]
         extra: dict = {}
-        if tx.get("posted_date"):
-            extra["posting_date"] = str(tx["posted_date"])
+        if st == TransactionStatus.posted:
+            extra["posting_date"] = made_on.isoformat()
         if tx.get("merchant_id") is not None:
             extra["merchant_id"] = tx["merchant_id"]
         if tx.get("mcc") is not None:
@@ -288,7 +307,7 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
                 status=st,
                 mode=TransactionMode.normal,
                 duplicated=False,
-                made_on=_parse_date(tx["made_on"]),
+                made_on=made_on,
                 amount=Decimal(str(tx["amount"])),
                 currency_code=str(tx["currency_code"]).upper(),
                 category=tx.get("category"),
@@ -298,8 +317,11 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
         )
 
     logger.info(
-        "Inserted banking: 1 customer, %d connections, 1 consent, accounts, transactions",
+        "Inserted banking: 1 customer, %d connections, %d consents, %d accounts, %d transactions (dates aligned to last-30d P&L window)",
         len(conn_rows),
+        len(conn_rows),
+        len(get_demo_payload("saltedge_accounts")["data"]),
+        len(tx_rows),
     )
 
 

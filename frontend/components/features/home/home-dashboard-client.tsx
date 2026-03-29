@@ -84,7 +84,7 @@ export function HomeDashboardClient() {
         <FeatureEmptyState
           icon={BarChart3}
           title="Connect banking for P&amp;L metrics"
-          description="Link open banking (Salt Edge) and resolve a customer id to load revenue, expenses, and net income for the dashboard period."
+          description="Link open banking and resolve a customer id to load revenue, expenses, and net income for the dashboard period."
           ctaHref="/integrations"
           ctaLabel="Open integrations"
         />
@@ -111,7 +111,7 @@ export function HomeDashboardClient() {
       <FeatureEmptyState
         icon={BarChart3}
         title="Could not load metrics"
-        description="Check your connection and try again. If the problem persists, verify Salt Edge customer and account linkage."
+        description="Check your connection and try again. If the problem persists, verify banking customer and account linkage."
         ctaHref="/integrations"
         ctaLabel="Integrations"
       />
