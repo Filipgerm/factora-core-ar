@@ -338,7 +338,7 @@ Computed on `settings`: `demo_mode`, `is_production`, `is_development` (derived 
 
 `settings.demo_mode` is `True` when `ENVIRONMENT=demo`.
 
-- **Domain data** → PostgreSQL; seed with `scripts/seed_demo_db.py` (`ENVIRONMENT=demo` or `ALLOW_DEMO_SEED=1`). The seed creates a password user for `demo.dashboard@factora-seed.invalid` tied to the demo org so JWT `organization_id` matches seeded dashboard data (see script docstring).
+- **Domain data** → PostgreSQL; seed with `scripts/seed_demo_db.py` (`ENVIRONMENT=demo` or `ALLOW_DEMO_SEED=1`). The seed creates a password user for `demo-dashboard@example.org` tied to the demo org so JWT `organization_id` matches seeded dashboard data (see script docstring).
 - **AADE / SaltEdge / GEMI HTTP** → static JSON from `core/demo_fixtures/` inside the respective clients (`packages/aade/api/docs.py`, `packages/saltedge/http.py`, `app/clients/gemi_client.py`).
 - **Agents** → optional `@demo_fixture` + `core/demo_fixtures/agents/`
 - Brevo email/SMS → logged, not dispatched

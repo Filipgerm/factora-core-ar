@@ -18,7 +18,8 @@ Apply migrations first::
 Creates a **demo login** tied to the seeded org so the dashboard JWT carries
 ``organization_id`` matching seeded data. After seeding, sign in at ``/login`` with:
 
-- **Email:** ``demo.dashboard@factora-seed.invalid``
+- **Email:** ``demo-dashboard@example.org`` (must pass Pydantic ``EmailStr`` / email-validator;
+  reserved TLDs such as ``.invalid`` are rejected and cause HTTP 422 on login.)
 - **Password:** ``DEMO_SEED_PASSWORD`` if set, otherwise dev default ``FactoraDemo2026!``
 
 Invalidate any previous refresh sessions for that user on each seed run.
@@ -46,7 +47,7 @@ logger = logging.getLogger("seed_demo_db")
 DEMO_ORG_ID = "00000000-0000-0000-0000-000000000001"
 # Stable UUIDs (aligned with frontend E2E fixtures where useful)
 DEMO_USER_ID = "00000000-0000-4000-8000-000000000002"
-DEMO_USER_EMAIL = "demo.dashboard@factora-seed.invalid"
+DEMO_USER_EMAIL = "demo-dashboard@example.org"
 DEMO_USER_USERNAME = "Demo Dashboard"
 _DEFAULT_DEMO_PASSWORD = "FactoraDemo2026!"
 

@@ -4,7 +4,7 @@ When ``ENVIRONMENT=demo`` (``settings.demo_mode``):
 
   - **Business data** (dashboard, counterparties, banking rows, etc.) is read from
     PostgreSQL. Populate demo databases with ``scripts/seed_demo_db.py`` (creates a
-    demo password user tied to the seeded org — see that script's docstring for login).
+    demo password user (``demo-dashboard@example.org``) — see that script's docstring for login).
   - **External HTTP clients** (AADE/myDATA, SaltEdge, GEMI) return pre-canned JSON
     from ``core/demo_fixtures/*.json`` instead of calling the real APIs.
   - **Agents** may still use ``@demo_fixture`` so ``ainvoke`` returns static JSON
