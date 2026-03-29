@@ -31,7 +31,7 @@ import logging
 import os
 import sys
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +50,19 @@ DEMO_USER_ID = "00000000-0000-4000-8000-000000000002"
 DEMO_USER_EMAIL = "demo-dashboard@example.org"
 DEMO_USER_USERNAME = "Demo Dashboard"
 _DEFAULT_DEMO_PASSWORD = "FactoraDemo2026!"
+
+# Scale banking fixtures so the 30d P&L window shows ~€7.85M revenue (fixture ratios preserved).
+_DEMO_BASE_PERIOD_REVENUE = Decimal("35700")  # sum of positive posted txs in dashboard_transactions.json
+_DEMO_TARGET_PERIOD_REVENUE = Decimal("7850000")
+DEMO_BANK_TX_AMOUNT_SCALE = (
+    _DEMO_TARGET_PERIOD_REVENUE / _DEMO_BASE_PERIOD_REVENUE
+).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+
+_DEMO_BASE_TOTAL_BALANCE = Decimal("18450.85") + Decimal("45200.0") + Decimal("12880.0")
+_DEMO_TARGET_TOTAL_BALANCE = Decimal("11250000")
+DEMO_BANK_BALANCE_SCALE = (
+    _DEMO_TARGET_TOTAL_BALANCE / _DEMO_BASE_TOTAL_BALANCE
+).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 
 
 def _require_safe_to_run() -> None:
@@ -278,7 +291,9 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
                 connection_id=cid,
                 name=acc["name"],
                 nature=str(acc.get("nature") or "account"),
-                balance=Decimal(str(acc["balance"])),
+                balance=(
+                    Decimal(str(acc["balance"])) * DEMO_BANK_BALANCE_SCALE
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
                 currency_code=str(acc["currency_code"]).upper(),
                 extra=acc.get("extra") or {},
             )
@@ -308,7 +323,9 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
                 mode=TransactionMode.normal,
                 duplicated=False,
                 made_on=made_on,
-                amount=Decimal(str(tx["amount"])),
+                amount=(
+                    Decimal(str(tx["amount"])) * DEMO_BANK_TX_AMOUNT_SCALE
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
                 currency_code=str(tx["currency_code"]).upper(),
                 category=tx.get("category"),
                 description=tx.get("description"),
