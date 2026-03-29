@@ -14,6 +14,14 @@ Schema must match the ORM (including ``invoices.confidence`` / ``invoicestatus``
 Apply migrations first::
 
     uv run alembic upgrade head
+
+Creates a **demo login** tied to the seeded org so the dashboard JWT carries
+``organization_id`` matching seeded data. After seeding, sign in at ``/login`` with:
+
+- **Email:** ``demo.dashboard@factora-seed.invalid``
+- **Password:** ``DEMO_SEED_PASSWORD`` if set, otherwise dev default ``FactoraDemo2026!``
+
+Invalidate any previous refresh sessions for that user on each seed run.
 """
 from __future__ import annotations
 
@@ -36,6 +44,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("seed_demo_db")
 
 DEMO_ORG_ID = "00000000-0000-0000-0000-000000000001"
+# Stable UUIDs (aligned with frontend E2E fixtures where useful)
+DEMO_USER_ID = "00000000-0000-4000-8000-000000000002"
+DEMO_USER_EMAIL = "demo.dashboard@factora-seed.invalid"
+DEMO_USER_USERNAME = "Demo Dashboard"
+_DEFAULT_DEMO_PASSWORD = "FactoraDemo2026!"
 
 
 def _require_safe_to_run() -> None:
@@ -400,6 +413,79 @@ async def _insert_alerts(session: AsyncSession, org_id: str) -> None:
     logger.info("Inserted 4 active alerts")
 
 
+async def _upsert_demo_user(session: AsyncSession, org_id: str) -> None:
+    """Ensure a password user exists with JWT ``organization_id`` = seeded demo org."""
+    import uuid
+
+    from app.config import settings
+    from app.core.security.hashing import hash_password
+    from app.db.models.identity import (
+        User,
+        UserOrganizationMembership,
+        UserRole,
+        UserSession,
+    )
+
+    password = os.environ.get("DEMO_SEED_PASSWORD", _DEFAULT_DEMO_PASSWORD)
+    pw_hash = hash_password(password, pepper=settings.CODE_PEPPER)
+
+    await session.execute(delete(UserSession).where(UserSession.user_id == DEMO_USER_ID))
+
+    r = await session.execute(select(User).where(User.id == DEMO_USER_ID))
+    user = r.scalar_one_or_none()
+    if user:
+        user.username = DEMO_USER_USERNAME
+        user.email = DEMO_USER_EMAIL
+        user.password_hash = pw_hash
+        user.organization_id = org_id
+        user.role = UserRole.OWNER
+        user.email_verified = True
+        user.is_active = True
+    else:
+        taken = await session.execute(select(User.id).where(User.email == DEMO_USER_EMAIL))
+        other_id = taken.scalar_one_or_none()
+        if other_id and str(other_id) != DEMO_USER_ID:
+            raise RuntimeError(
+                f"Cannot seed demo user: email {DEMO_USER_EMAIL} is already used by user {other_id}"
+            )
+        session.add(
+            User(
+                id=DEMO_USER_ID,
+                username=DEMO_USER_USERNAME,
+                email=DEMO_USER_EMAIL,
+                password_hash=pw_hash,
+                role=UserRole.OWNER,
+                organization_id=org_id,
+                email_verified=True,
+                phone_verified=False,
+                is_active=True,
+            )
+        )
+
+    await session.flush()
+
+    mr = await session.execute(
+        select(UserOrganizationMembership).where(
+            UserOrganizationMembership.user_id == DEMO_USER_ID,
+            UserOrganizationMembership.organization_id == org_id,
+        )
+    )
+    if mr.scalar_one_or_none() is None:
+        session.add(
+            UserOrganizationMembership(
+                id=str(uuid.uuid4()),
+                user_id=DEMO_USER_ID,
+                organization_id=org_id,
+                role=UserRole.OWNER,
+            )
+        )
+
+    logger.info(
+        "Demo login: %s (use DEMO_SEED_PASSWORD env or default dev password from module docstring)",
+        DEMO_USER_EMAIL,
+    )
+
+
 async def run_seed() -> None:
     _require_safe_to_run()
     from app.core.demo import get_demo_payload
@@ -426,6 +512,7 @@ async def run_seed() -> None:
             await _insert_aade(session, DEMO_ORG_ID)
             await _insert_invoices(session, DEMO_ORG_ID)
             await _insert_alerts(session, DEMO_ORG_ID)
+            await _upsert_demo_user(session, DEMO_ORG_ID)
 
     logger.info("Demo DB seed completed for org %s", DEMO_ORG_ID)
 
