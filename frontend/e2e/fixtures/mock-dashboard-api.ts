@@ -7,17 +7,29 @@ export const MOCK_SELLER_METRICS = {
 };
 
 export const MOCK_PL_METRICS = {
-  net_cash_flow: 12500.5,
-  total_revenue: 88000,
-  total_expenses: 42000,
-  net_income: 46000,
-  average_margin: 0.42,
-  balance: 320000,
+  net_cash_flow: 4_023_000,
+  total_revenue: 7_850_000,
+  total_expenses: 3_828_800,
+  net_income: 4_021_200,
+  average_margin: null,
+  balance: 11_250_000,
   currency: "EUR",
   period_days: 30,
-  monthly_revenue: [],
-  monthly_expenses: [],
-  monthly_net_income: [],
+  monthly_revenue: [
+    { month: "2025-11", value: 2_400_000 },
+    { month: "2025-12", value: 2_550_000 },
+    { month: "2026-01", value: 2_900_000 },
+  ],
+  monthly_expenses: [
+    { month: "2025-11", value: 1_200_000 },
+    { month: "2025-12", value: 1_280_000 },
+    { month: "2026-01", value: 1_348_800 },
+  ],
+  monthly_net_income: [
+    { month: "2025-11", value: 1_200_000 },
+    { month: "2025-12", value: 1_270_000 },
+    { month: "2026-01", value: 1_551_200 },
+  ],
   monthly_margin: [],
 };
 

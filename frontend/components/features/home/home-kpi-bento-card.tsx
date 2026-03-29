@@ -4,10 +4,13 @@ import { motion } from "framer-motion";
 
 import { AnimatedMetricValue } from "@/components/features/home/animated-metric-value";
 import { KpiArrAreaChart } from "@/components/features/home/kpi-arr-area-chart";
+import { KpiMiniBarChart } from "@/components/features/home/kpi-mini-bar-chart";
 import type { HomeKpiMetric } from "@/lib/views/home";
 import { cn } from "@/lib/utils";
 
 const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
+
+const NET_INCOME_METRIC_ID = "kpi-oar";
 
 function formatDelta(pct: number): string {
   const sign = pct > 0 ? "+" : "";
@@ -102,11 +105,19 @@ export function HomeKpiBentoCard({
           </div>
         </div>
         <div className="h-[112px] w-full shrink-0 lg:h-[132px] lg:w-[45%] lg:max-w-[220px]">
-          <KpiArrAreaChart
-            data={metric.sparkline}
-            trendPositive={positive}
-            className="h-full"
-          />
+          {metric.id === NET_INCOME_METRIC_ID ? (
+            <KpiMiniBarChart
+              data={metric.sparkline}
+              trendPositive={positive}
+              className="h-full"
+            />
+          ) : (
+            <KpiArrAreaChart
+              data={metric.sparkline}
+              trendPositive={positive}
+              className="h-full"
+            />
+          )}
         </div>
       </div>
     </motion.article>
