@@ -43,6 +43,8 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
+    # VARCHAR default ('draft') cannot be cast to invoicestatus automatically; drop first.
+    op.execute(sa.text("ALTER TABLE invoices ALTER COLUMN status DROP DEFAULT"))
     op.execute(
         sa.text(
             """
@@ -58,6 +60,11 @@ def upgrade() -> None:
                 END
             );
             """
+        )
+    )
+    op.execute(
+        sa.text(
+            "ALTER TABLE invoices ALTER COLUMN status SET DEFAULT 'draft'::invoicestatus"
         )
     )
     op.create_index("ix_invoices_status", "invoices", ["status"], unique=False)
@@ -83,7 +90,9 @@ def downgrade() -> None:
     op.drop_index("ix_invoices_status", table_name="invoices")
     op.drop_column("invoices", "requires_human_review")
     op.drop_column("invoices", "confidence")
+    op.execute(sa.text("ALTER TABLE invoices ALTER COLUMN status DROP DEFAULT"))
     op.execute(
         sa.text("ALTER TABLE invoices ALTER COLUMN status TYPE VARCHAR(32) USING status::text;")
     )
+    op.execute(sa.text("ALTER TABLE invoices ALTER COLUMN status SET DEFAULT 'draft'"))
     op.execute(sa.text("DROP TYPE IF EXISTS invoicestatus;"))
