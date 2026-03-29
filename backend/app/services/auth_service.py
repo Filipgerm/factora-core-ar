@@ -55,6 +55,7 @@ from app.core.security.jwt import (
     get_token_expires_at,
     hash_jti,
 )
+from app.db.models.banking import CustomerModel
 from app.db.models.identity import User, UserRole, UserSession
 from app.models.auth import (
     AuthResponse,
@@ -75,24 +76,6 @@ logger = logging.getLogger(__name__)
 _GOOGLE_TOKEN_INFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 
 
-def _build_auth_response(user: User, access_token: str, raw_refresh: str) -> AuthResponse:
-    """Build a full AuthResponse from a User ORM object and issued tokens."""
-    expires_at = get_token_expires_at(access_token)
-    return AuthResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_at=expires_at,
-        refresh_token=raw_refresh,
-        user_id=uuid.UUID(user.id),
-        username=user.username,
-        email=user.email,
-        role=user.role.value if hasattr(user.role, "value") else str(user.role),
-        organization_id=uuid.UUID(user.organization_id) if user.organization_id else None,
-        email_verified=user.email_verified,
-        phone_verified=user.phone_verified,
-    )
-
-
 class AuthService:
     """Handles user authentication, token management, and identity verification."""
 
@@ -100,6 +83,43 @@ class AuthService:
         self.db = db
         self.code_pepper = code_pepper
         self.notification_service = NotificationService()
+
+    async def _primary_saltedge_customer_id_for_org(
+        self, organization_id: str | None
+    ) -> str | None:
+        """Oldest ``customers`` row for the org (matches org profile / P&L resolution)."""
+        if not organization_id:
+            return None
+        result = await self.db.execute(
+            select(CustomerModel.id)
+            .where(CustomerModel.organization_id == organization_id)
+            .order_by(CustomerModel.created_at.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _build_auth_response(
+        self, user: User, access_token: str, raw_refresh: str
+    ) -> AuthResponse:
+        """Build a full AuthResponse from a User ORM object and issued tokens."""
+        expires_at = get_token_expires_at(access_token)
+        saltedge_customer_id = await self._primary_saltedge_customer_id_for_org(
+            user.organization_id
+        )
+        return AuthResponse(
+            access_token=access_token,
+            token_type="bearer",
+            expires_at=expires_at,
+            refresh_token=raw_refresh,
+            user_id=uuid.UUID(user.id),
+            username=user.username,
+            email=user.email,
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
+            organization_id=uuid.UUID(user.organization_id) if user.organization_id else None,
+            email_verified=user.email_verified,
+            phone_verified=user.phone_verified,
+            saltedge_customer_id=saltedge_customer_id,
+        )
 
     # ------------------------------------------------------------------
     # Sign-up / Sign-in
@@ -148,6 +168,7 @@ class AuthService:
                 organization_id=None,
                 email_verified=False,
                 phone_verified=False,
+                saltedge_customer_id=None,
             )
 
         except IntegrityError:
@@ -207,7 +228,7 @@ class AuthService:
             await self.db.commit()
             await self.db.refresh(user)
 
-            return _build_auth_response(user, access_token, raw_refresh)
+            return await self._build_auth_response(user, access_token, raw_refresh)
 
         except (AuthError, ConflictError, ValidationError):
             raise
@@ -307,7 +328,7 @@ class AuthService:
             await self.db.commit()
             await self.db.refresh(user)
 
-            return _build_auth_response(user, access_token, raw_refresh)
+            return await self._build_auth_response(user, access_token, raw_refresh)
 
         except (AuthError,):
             raise
@@ -320,7 +341,7 @@ class AuthService:
     # Token management
     # ------------------------------------------------------------------
 
-    def build_switch_organization_response(self, user: User) -> "SwitchOrganizationResponse":
+    async def build_switch_organization_response(self, user: User) -> "SwitchOrganizationResponse":
         """Mint a new access JWT after ``users.organization_id`` / role were updated."""
         from app.models.organization import SwitchOrganizationResponse
 
@@ -330,6 +351,9 @@ class AuthService:
             organization_id=user.organization_id,
         )
         expires_at = get_token_expires_at(access_token)
+        saltedge_customer_id = await self._primary_saltedge_customer_id_for_org(
+            user.organization_id
+        )
         return SwitchOrganizationResponse(
             access_token=access_token,
             token_type="bearer",
@@ -341,6 +365,7 @@ class AuthService:
             organization_id=uuid.UUID(user.organization_id) if user.organization_id else None,
             email_verified=user.email_verified,
             phone_verified=user.phone_verified,
+            saltedge_customer_id=saltedge_customer_id,
         )
 
     async def logout(self, refresh_token: str) -> None:
@@ -416,7 +441,7 @@ class AuthService:
             self.db.add(new_session)
             await self.db.commit()
 
-            return _build_auth_response(user, access_token, raw_refresh)
+            return await self._build_auth_response(user, access_token, raw_refresh)
 
         except (AuthError,):
             raise

@@ -35,6 +35,7 @@ class UserProfileResponse(BaseModel):
     organization_id: UUID | None = None
     email_verified: bool = False
     phone_verified: bool = False
+    saltedge_customer_id: str | None = None
 
 
 class AuthPublicResponse(TokenResponse, UserProfileResponse):

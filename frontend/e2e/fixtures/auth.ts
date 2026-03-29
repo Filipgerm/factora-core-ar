@@ -16,6 +16,8 @@ function fakeJwt(): string {
   return `e2e.${payload}.sig`;
 }
 
+const DEMO_SALTEDGE_CUSTOMER_ID = "demo-customer-se-001";
+
 type E2EProfile = {
   user_id: string;
   username: string;
@@ -24,6 +26,7 @@ type E2EProfile = {
   organization_id: string | null;
   email_verified: boolean;
   phone_verified: boolean;
+  saltedge_customer_id: string | null;
 };
 
 /**
@@ -45,6 +48,7 @@ export async function installE2EAuth(
     organization_id: organizationId,
     email_verified: true,
     phone_verified: false,
+    saltedge_customer_id: organizationId ? DEMO_SALTEDGE_CUSTOMER_ID : null,
   };
   await page.addInitScript(
     (payload: { token: string; profile: E2EProfile }) => {

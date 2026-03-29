@@ -16,6 +16,7 @@ declare global {
         organization_id: string | null;
         email_verified: boolean;
         phone_verified: boolean;
+        saltedge_customer_id: string | null;
       };
     };
   }

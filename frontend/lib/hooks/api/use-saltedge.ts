@@ -33,23 +33,37 @@ function useHasOrg() {
   return Boolean(session?.hasToken && session.profile?.organization_id);
 }
 
-/** Prefer `NEXT_PUBLIC_SALTEDGE_CUSTOMER_ID`; otherwise first SaltEdge customer id from API. */
+/**
+ * Resolve Salt Edge customer id: env override → session profile (DB primary for org) →
+ * first row from `GET /v1/saltedge/customers`.
+ */
 export function useResolvedSaltEdgeCustomerId() {
   const envId = process.env.NEXT_PUBLIC_SALTEDGE_CUSTOMER_ID?.trim() || null;
+  const { data: session } = useAuthSession();
+  const profileId = session?.profile?.saltedge_customer_id?.trim() || null;
   const q = useSaltEdgeCustomersQuery();
 
   const withIds =
     q.data?.data?.filter((c: SaltEdgeCustomer) => c.customer_id) ?? [];
   const fromApi = withIds[0]?.customer_id ?? null;
-  const customerId = envId || fromApi || null;
-  const ambiguous = !envId && withIds.length > 1;
+  const customerId = envId || profileId || fromApi || null;
+  const ambiguous = !envId && !profileId && withIds.length > 1;
+  const needsApi = !envId && !profileId;
+  const isLoading = Boolean(needsApi && q.isLoading);
+  const isError = Boolean(needsApi && q.isError);
 
   return {
     customerId,
-    isLoading: q.isLoading,
-    isError: q.isError,
+    isLoading,
+    isError,
     refetchCustomers: q.refetch,
-    source: envId ? ("env" as const) : fromApi ? ("api" as const) : null,
+    source: envId
+      ? ("env" as const)
+      : profileId
+        ? ("profile" as const)
+        : fromApi
+          ? ("api" as const)
+          : null,
     ambiguous,
   };
 }

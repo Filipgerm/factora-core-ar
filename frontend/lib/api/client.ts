@@ -73,6 +73,7 @@ function profileFromPublic(res: {
   organization_id?: string | null;
   email_verified?: boolean;
   phone_verified?: boolean;
+  saltedge_customer_id?: string | null;
 }): StoredAuthProfile {
   return {
     user_id: res.user_id,
@@ -82,6 +83,7 @@ function profileFromPublic(res: {
     organization_id: res.organization_id ?? null,
     email_verified: res.email_verified ?? false,
     phone_verified: res.phone_verified ?? false,
+    saltedge_customer_id: res.saltedge_customer_id?.trim() || null,
   };
 }
 

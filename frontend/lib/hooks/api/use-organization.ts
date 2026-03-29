@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { apiFetch } from "@/lib/api/client";
-import { setSession } from "@/lib/api/session";
+import { setSession, type StoredAuthProfile } from "@/lib/api/session";
 import { queryKeys } from "@/lib/api/query-keys";
 import { apiErrorFromResponse } from "@/lib/api/error";
 import { authPublicResponseSchema } from "@/lib/schemas/auth";
@@ -38,7 +38,8 @@ function profileFromAuth(res: {
   organization_id?: string | null;
   email_verified?: boolean;
   phone_verified?: boolean;
-}) {
+  saltedge_customer_id?: string | null;
+}): StoredAuthProfile {
   return {
     user_id: res.user_id,
     username: res.username,
@@ -47,6 +48,7 @@ function profileFromAuth(res: {
     organization_id: res.organization_id ?? null,
     email_verified: res.email_verified ?? false,
     phone_verified: res.phone_verified ?? false,
+    saltedge_customer_id: res.saltedge_customer_id?.trim() || null,
   };
 }
 

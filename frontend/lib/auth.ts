@@ -57,6 +57,7 @@ export async function signIn(
     organization_id: data.organization_id ?? null,
     email_verified: data.email_verified ?? false,
     phone_verified: data.phone_verified ?? false,
+    saltedge_customer_id: data.saltedge_customer_id?.trim() || null,
   };
   setSession(data.access_token, stored);
 
@@ -104,5 +105,8 @@ export async function updateUserType(_newUserType: UserType): Promise<void> {
   if (!current?.user_id) {
     throw new Error("No active session found");
   }
-  setSession(getAccessToken() ?? "", { ...current });
+  setSession(getAccessToken() ?? "", {
+    ...current,
+    saltedge_customer_id: current.saltedge_customer_id ?? null,
+  });
 }

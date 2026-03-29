@@ -35,4 +35,4 @@ class MembershipController:
             user_payload["sub"],
             str(request.organization_id),
         )
-        return self.auth_service.build_switch_organization_response(user)
+        return await self.auth_service.build_switch_organization_response(user)

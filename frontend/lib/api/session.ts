@@ -11,6 +11,8 @@ export type StoredAuthProfile = {
   organization_id: string | null;
   email_verified: boolean;
   phone_verified: boolean;
+  /** Primary Salt Edge customer id for the active org (from auth / switch-org payloads). */
+  saltedge_customer_id: string | null;
 };
 
 export type AuthSessionBridge = {

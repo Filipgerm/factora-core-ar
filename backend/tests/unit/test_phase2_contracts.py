@@ -16,7 +16,7 @@ from app.models.auth import AuthPublicResponse, AuthResponse
 from app.models.gemi import GemiDocumentsFetchResponse, GemiSearchResponse
 from app.agents.ingestion import ingestion_graph
 from app.agents.reconciliation import reconciliation_graph
-from app.services.auth_service import _build_auth_response
+from app.services.auth_service import AuthService
 from app.services.embeddings.vector_store import _vector_literal
 from app.core.security.jwt import encode_access_token, get_token_expires_at
 
@@ -41,7 +41,8 @@ def test_auth_public_response_has_no_refresh_token_field() -> None:
     assert "refresh_token" not in dumped
 
 
-def test_auth_response_includes_refresh_token() -> None:
+@pytest.mark.asyncio
+async def test_auth_response_includes_refresh_token() -> None:
     uid = str(uuid.uuid4())
     tok, _ = encode_access_token(uid, role="owner", organization_id=None)
     user = SimpleNamespace(
@@ -53,10 +54,16 @@ def test_auth_response_includes_refresh_token() -> None:
         email_verified=True,
         phone_verified=False,
     )
-    resp = _build_auth_response(user, tok, "opaque-refresh-token")
+    db = AsyncMock()
+    exec_result = MagicMock()
+    exec_result.scalar_one_or_none = MagicMock(return_value=None)
+    db.execute = AsyncMock(return_value=exec_result)
+    svc = AuthService(db, code_pepper="pepper")
+    resp = await svc._build_auth_response(user, tok, "opaque-refresh-token")
     assert isinstance(resp, AuthResponse)
     assert resp.refresh_token == "opaque-refresh-token"
     assert resp.access_token == tok
+    assert resp.saltedge_customer_id is None
 
 
 @pytest.mark.asyncio

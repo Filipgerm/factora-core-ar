@@ -43,6 +43,7 @@ export const switchOrganizationResponseSchema = z.object({
   organization_id: uuidLike.nullish(),
   email_verified: z.boolean().optional().default(false),
   phone_verified: z.boolean().optional().default(false),
+  saltedge_customer_id: z.string().nullable().optional(),
 });
 
 export const counterpartyCreateSchema = z.object({

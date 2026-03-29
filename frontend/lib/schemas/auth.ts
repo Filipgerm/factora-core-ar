@@ -60,6 +60,7 @@ export const userProfileResponseSchema = z.object({
   organization_id: uuidLike.nullish(),
   email_verified: z.boolean().optional().default(false),
   phone_verified: z.boolean().optional().default(false),
+  saltedge_customer_id: z.string().nullable().optional(),
 });
 
 /** Login / refresh / Google — refresh token is httpOnly cookie only, never in JSON. */
