@@ -1,5 +1,8 @@
 from __future__ import annotations
 from typing import Any, Callable, Dict, Iterator, Optional
+from uuid import UUID
+
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select
 from datetime import datetime, date, timezone
@@ -7,7 +10,7 @@ import asyncio
 from functools import partial
 
 from app.config import Settings
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from packages.saltedge import SaltEdgeClient
 from packages.saltedge.models.accounts import (
     AccountsResponse,
@@ -427,11 +430,32 @@ class SaltEdgeService:
 
     # ---------- Helper methods for database storage ----------
 
+    def _customer_belongs_to_org(self, row: CustomerModel) -> bool:
+        """Compare org ids in a UUID-safe way (JWT string vs PG UUID-as-string)."""
+        try:
+            return UUID(str(row.organization_id)) == UUID(str(self.organization_id))
+        except ValueError:
+            return str(row.organization_id) == str(self.organization_id)
+
+    def _apply_customer_payload(self, row: CustomerModel, customer_data: Any) -> None:
+        row.external_id = customer_data.customer_id
+        if hasattr(customer_data, "identifier"):
+            row.identifier = customer_data.identifier
+        if hasattr(customer_data, "email"):
+            row.email = getattr(customer_data, "email", None)
+        row.categorization_type = getattr(
+            customer_data, "categorization_type", "personal"
+        )
+
     async def _store_or_update_customer(self, customer_data) -> None:
         """Upsert a SaltEdge customer into the local database.
 
+        Looks up by primary key ``id`` (SaltEdge customer id) first. The previous
+        query required matching ``organization_id`` as well; if a row with the
+        same ``id`` already existed under another tenant (or a concurrent insert
+        landed first), the ORM assumed "missing" and issued INSERT → duplicate PK.
+
         Args:
-            db: Async database session.
             customer_data: SaltEdge SDK customer model instance to persist.
         """
         raw = getattr(customer_data, "customer_id", None) or getattr(
@@ -441,34 +465,47 @@ class SaltEdgeService:
             return
         customer_id = str(raw)
 
-        # 1. 🔒 SECURE LOOKUP: Filter by both ID and Organization
-        query = select(CustomerModel).where(
-            CustomerModel.id == customer_id,
-            CustomerModel.organization_id
-            == self.organization_id,  # <--- Multi-Tenancy Security Check
+        existing = await self.db.scalar(
+            select(CustomerModel).where(CustomerModel.id == customer_id)
         )
-        result = await self.db.execute(query)
-        existing = result.scalar_one_or_none()
 
         if existing:
-            existing.external_id = customer_data.customer_id
-            if hasattr(customer_data, "identifier"):
-                existing.identifier = customer_data.identifier
-        else:
-            # 2. 🔒 SECURE Creation; Assign the organization_id
-            customer = CustomerModel(
-                id=customer_id,
-                organization_id=self.organization_id,  # <--- Multi-Tenancy Security Check
-                external_id=customer_data.customer_id,
-                identifier=getattr(customer_data, "identifier", None),
-                email=getattr(customer_data, "email", None),
-                categorization_type=getattr(
-                    customer_data, "categorization_type", "personal"
-                ),
-            )
-            self.db.add(customer)
+            if not self._customer_belongs_to_org(existing):
+                raise ConflictError(
+                    detail="This Salt Edge customer is already linked to another organization.",
+                    code="saltedge.customer_org_mismatch",
+                )
+            self._apply_customer_payload(existing, customer_data)
+            await self.db.commit()
+            return
 
-        await self.db.commit()
+        customer = CustomerModel(
+            id=customer_id,
+            organization_id=self.organization_id,
+            external_id=customer_data.customer_id,
+            identifier=getattr(customer_data, "identifier", None),
+            email=getattr(customer_data, "email", None),
+            categorization_type=getattr(
+                customer_data, "categorization_type", "personal"
+            ),
+        )
+        self.db.add(customer)
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            await self.db.rollback()
+            existing = await self.db.scalar(
+                select(CustomerModel).where(CustomerModel.id == customer_id)
+            )
+            if existing is None:
+                raise
+            if not self._customer_belongs_to_org(existing):
+                raise ConflictError(
+                    detail="This Salt Edge customer is already linked to another organization.",
+                    code="saltedge.customer_org_mismatch",
+                )
+            self._apply_customer_payload(existing, customer_data)
+            await self.db.commit()
 
     async def _store_or_update_connection(self, connection_data) -> None:
         """Upsert a SaltEdge connection into the local database."""
