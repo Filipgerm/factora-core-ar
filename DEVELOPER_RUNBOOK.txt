@@ -1,0 +1,322 @@
+================================================================================
+FACTORA — DEVELOPER RUNBOOK (COPY-PASTE)
+================================================================================
+Quick manual tests for auth, agents, Gmail, AI chat, Stripe, SaltEdge, dashboard,
+and invoices. All API routes are under /v1/ unless noted.
+
+Replace placeholders: YOUR_EMAIL, YOUR_PASSWORD, TOKEN_FROM_EMAIL, demo IDs, paths.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+  A. Prerequisites & run the API
+  B. OpenAPI (Swagger / OpenAPI JSON)
+  C. Auth — signup, login, refresh, logout
+  D. Auth — forgot password & reset password (full workflow)
+  E. Auth — change password (logged in)
+  F. Auth — Google sign-in (outline)
+  G. Organization sanity check
+  H. Ingestion agent — preview & Gmail pipeline
+  I. Gmail — OAuth authorize URL (browser)
+  J. AI — streaming chat (SSE) & feedback
+  K. Stripe — webhook (CLI) & authenticated sync examples
+  L. SaltEdge — list customers
+  M. Dashboard & invoices (quick checks)
+  N. Optional pytest shortcuts
+  O. Quick reference (URLs)
+
+================================================================================
+A) PREREQUISITES & RUN THE API
+================================================================================
+
+  cd backend
+
+  # .env: SUPABASE_URI, JWT_SECRET_KEY, CODE_PEPPER, FRONTEND_BASE_URL (for reset
+  # email links), Brevo keys if you test forgot-password email delivery, LLM keys
+  # for agents/AI, STRIPE_* for Stripe, SALTEDGE_* for real banking (demo uses fixtures).
+
+  uv run alembic upgrade head
+
+  # Optional demo tenant (see scripts/seed_demo_db.py):
+  # ENVIRONMENT=demo uv run python scripts/seed_demo_db.py
+
+  uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  export API_BASE="http://127.0.0.1:8000"
+
+
+================================================================================
+B) OPENAPI (SWAGGER / OPENAPI JSON)
+================================================================================
+
+  Browser — interactive UI:
+    ${API_BASE}/docs
+
+  Alternative docs:
+    ${API_BASE}/redoc
+
+  Machine-readable schema:
+    ${API_BASE}/openapi.json
+
+
+================================================================================
+C) AUTH — SIGNUP, LOGIN, REFRESH, LOGOUT
+================================================================================
+
+  # --- Sign up (returns profile only; no access token — log in next) ---
+  curl -sS -X POST "${API_BASE}/v1/auth/signup" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"Dev User","email":"YOUR_EMAIL@example.com","password":"YourPassMin8chars"}'
+
+  # --- Login (JSON: access_token + profile; refresh token = httpOnly cookie on /v1/auth) ---
+  curl -sS -c /tmp/factora_cookies.txt -X POST "${API_BASE}/v1/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"demo-dashboard@example.org","password":"FactoraDemo2026!"}'
+
+  # Capture access token (needs jq):
+  export ACCESS_TOKEN="$(curl -sS -c /tmp/factora_cookies.txt -b /tmp/factora_cookies.txt \
+    -X POST "${API_BASE}/v1/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"demo-dashboard@example.org","password":"FactoraDemo2026!"}' \
+    | jq -r '.access_token')"
+
+  echo "$ACCESS_TOKEN"
+
+  # --- Refresh (sends cookie automatically; returns new access_token + profile) ---
+  curl -sS -c /tmp/factora_cookies.txt -b /tmp/factora_cookies.txt \
+    -X POST "${API_BASE}/v1/auth/refresh" \
+    -H "Content-Type: application/json" \
+    -d '{}'
+
+  # --- Logout (revokes refresh session; clears cookie) ---
+  curl -sS -c /tmp/factora_cookies.txt -b /tmp/factora_cookies.txt \
+    -X POST "${API_BASE}/v1/auth/logout" \
+    -H "Content-Type: application/json" \
+    -d '{}'
+
+
+================================================================================
+D) AUTH — FORGOT PASSWORD & RESET PASSWORD (FULL WORKFLOW)
+================================================================================
+
+  Notes:
+  - Forgot-password requires the account EMAIL (not username). If you forgot it,
+    look up in DB: SELECT email, username FROM users WHERE username ILIKE '%plilip%';
+  - API always returns the same generic success message (anti-enumeration).
+  - Reset link in email: {FRONTEND_BASE_URL}/auth/reset-password?token=...
+    Copy the raw "token" query value for the API below if you skip the UI.
+  - Email delivery uses NotificationService (Brevo); check logs if nothing arrives.
+
+  # --- Step 1 — request reset email ---
+  curl -sS -X POST "${API_BASE}/v1/auth/forgot-password" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"YOUR_EMAIL@example.com"}'
+
+  # Expected: 200 + message like "If an account exists for that email, a reset link has been sent."
+
+  # --- Step 2 — open email, copy token from link, or use frontend reset page ---
+
+  # --- Step 3 — set new password (token expires in ~1 hour) ---
+  curl -sS -X POST "${API_BASE}/v1/auth/reset-password" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "token":"PASTE_TOKEN_FROM_EMAIL_OR_URL",
+      "new_password":"YourNewPasswordMin8",
+      "confirm_password":"YourNewPasswordMin8"
+    }'
+
+  # --- Step 4 — log in with the new password ---
+  curl -sS -c /tmp/factora_cookies.txt -X POST "${API_BASE}/v1/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"YOUR_EMAIL@example.com","password":"YourNewPasswordMin8"}'
+
+
+================================================================================
+E) AUTH — CHANGE PASSWORD (LOGGED IN)
+================================================================================
+
+  # Revokes all sessions after success; you must log in again with new password.
+
+  curl -sS -X POST "${API_BASE}/v1/auth/change-password" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "current_password":"YourOldPassword",
+      "new_password":"YourNewPasswordMin8",
+      "confirm_password":"YourNewPasswordMin8"
+    }'
+
+
+================================================================================
+F) AUTH — GOOGLE SIGN-IN (OUTLINE)
+================================================================================
+
+  # Frontend obtains a Google ID token (Sign-In JS SDK). Backend:
+  curl -sS -c /tmp/factora_cookies.txt -X POST "${API_BASE}/v1/auth/google" \
+    -H "Content-Type: application/json" \
+    -d '{"id_token":"PASTE_GOOGLE_ID_TOKEN_JWT"}'
+
+  # Response: same shape as login (access_token + profile); refresh = httpOnly cookie.
+
+
+================================================================================
+G) ORGANIZATION SANITY CHECK (JWT + ORG)
+================================================================================
+
+  curl -sS -X GET "${API_BASE}/v1/organization/me" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}"
+
+  # Lists org memberships (switch-org uses POST /v1/organizations/switch — see OpenAPI).
+
+
+================================================================================
+H) INGESTION AGENT — PREVIEW & GMAIL PIPELINE
+================================================================================
+
+  # --- Preview — multipart; does NOT create an invoice (lighter graph path) ---
+  curl -sS -X POST "${API_BASE}/v1/integrations/ingestion/preview" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -F 'raw_text=Invoice INV-100 Acme Corp Total EUR 1.234,56 due 2026-04-15'
+
+  curl -sS -X POST "${API_BASE}/v1/integrations/ingestion/preview" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -F 'text=Paste body here.' \
+    -F 'file=@/path/to/invoice.pdf;type=application/pdf'
+
+  # --- Full pipeline — Gmail sync (Owner/Admin); requires Gmail OAuth connected ---
+  curl -sS -X POST "${API_BASE}/v1/integrations/gmail/sync" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{}'
+
+  curl -sS -X POST "${API_BASE}/v1/integrations/gmail/sync?google_email=user@gmail.com" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{}'
+
+  # Pub/Sub (production): POST ${API_BASE}/v1/webhooks/gmail/pubsub
+
+
+================================================================================
+I) GMAIL — OAUTH AUTHORIZE URL (BROWSER)
+================================================================================
+
+  # Returns JSON with URL to open in browser (Owner or Admin):
+  curl -sS -X GET "${API_BASE}/v1/integrations/gmail/authorize" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}"
+
+  # OAuth callback is GET /v1/integrations/gmail/callback?code=...&state=...
+  # (registered in Google Cloud console for your app).
+
+
+================================================================================
+J) AI — STREAMING CHAT (SSE) & FEEDBACK
+================================================================================
+
+  # Chat stream — use -N so curl does not buffer SSE lines:
+  curl -sSN -X POST "${API_BASE}/v1/ai/chat/stream" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"message":"Summarize Greek VAT basics for a SaaS invoice."}'
+
+  # Feedback (pgvector / active learning):
+  curl -sS -X POST "${API_BASE}/v1/ai/feedback" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "content_text":"Office supplies purchase €120",
+      "suggested_label":"misc",
+      "corrected_label":"office_expense",
+      "source":"dev-cli"
+    }'
+
+
+================================================================================
+K) STRIPE — WEBHOOK (CLI) & AUTHENTICATED SYNC
+================================================================================
+
+  # Webhook endpoint (signature verified with STRIPE_WEBHOOK_SECRET):
+  #   POST ${API_BASE}/v1/stripe/webhook
+  #
+  # Local testing with Stripe CLI (install stripe first):
+  #   stripe listen --forward-to localhost:8000/v1/stripe/webhook
+  # Use the signing secret the CLI prints as STRIPE_WEBHOOK_SECRET in .env, then:
+  #   stripe trigger payment_intent.succeeded
+  #
+  # Direct curl without Stripe-Signature header will fail verification — use CLI or sign payload.
+
+  # --- Examples: authenticated mirror/sync (Owner or Admin; needs STRIPE_SECRET_KEY) ---
+
+  curl -sS -X POST "${API_BASE}/v1/stripe/sync/balance-snapshot" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}"
+
+  curl -sS -X POST "${API_BASE}/v1/stripe/sync/balance-transactions?page_size=50&max_pages=2" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}"
+
+  curl -sS -X POST "${API_BASE}/v1/stripe/sync/payouts?page_size=50&max_pages=2" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}"
+
+
+================================================================================
+L) SALTEDGE — LIST CUSTOMERS
+================================================================================
+
+  curl -sS -X GET "${API_BASE}/v1/saltedge/customers" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}"
+
+  # Demo: ENVIRONMENT=demo uses synthetic fixtures without real Salt Edge HTTP.
+
+
+================================================================================
+M) DASHBOARD & INVOICES (QUICK CHECKS)
+================================================================================
+
+  # P&L metrics — customer_id must belong to your org (e.g. from login profile or customers list):
+  curl -sS -G "${API_BASE}/v1/dashboard/pl-metrics" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    --data-urlencode "customer_id=demo-customer-se-001" \
+    --data-urlencode "days=30"
+
+  curl -sS -X GET "${API_BASE}/v1/dashboard/seller-metrics" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}"
+
+  # Invoices list (optional ?source=gmail|manual|aade|...):
+  curl -sS -X GET "${API_BASE}/v1/invoices" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}"
+
+  curl -sS -G "${API_BASE}/v1/invoices" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    --data-urlencode "source=gmail"
+
+
+================================================================================
+N) OPTIONAL PYTEST SHORTCUTS
+================================================================================
+
+  cd backend
+
+  uv run pytest tests/unit/test_phase2_contracts.py::test_ingestion_agent_demo_mode_short_circuit -q
+
+  uv run pytest tests/unit/test_phase2_coverage.py -k ingestion -q --tb=short
+
+
+================================================================================
+O) QUICK REFERENCE
+================================================================================
+
+  OpenAPI UI:     ${API_BASE}/docs
+  Login:          POST ${API_BASE}/v1/auth/login
+  Refresh:        POST ${API_BASE}/v1/auth/refresh        (+ refresh cookie)
+  Forgot password: POST ${API_BASE}/v1/auth/forgot-password
+  Reset password:  POST ${API_BASE}/v1/auth/reset-password
+  Org me:         GET  ${API_BASE}/v1/organization/me
+  Ingest preview: POST ${API_BASE}/v1/integrations/ingestion/preview
+  Gmail sync:     POST ${API_BASE}/v1/integrations/gmail/sync
+  Gmail authorize: GET ${API_BASE}/v1/integrations/gmail/authorize
+  AI chat SSE:    POST ${API_BASE}/v1/ai/chat/stream
+  Stripe webhook: POST ${API_BASE}/v1/stripe/webhook
+  SaltEdge:       GET  ${API_BASE}/v1/saltedge/customers
+  Dashboard P&L:  GET  ${API_BASE}/v1/dashboard/pl-metrics?customer_id=...&days=30
+  Invoices:       GET  ${API_BASE}/v1/invoices
+
+================================================================================
