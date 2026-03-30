@@ -1,0 +1,144 @@
+================================================================================
+FACTORA — INGESTION AGENT: COPY-PASTE RUNBOOK
+================================================================================
+Paths below assume repo root = factora-core-ar. API is versioned under /v1/.
+
+--------------------------------------------------------------------------------
+0) PREREQUISITES
+--------------------------------------------------------------------------------
+
+  cd backend
+
+  # Dependencies + DB: ensure .env has at least SUPABASE_URI (or your Postgres URL),
+  # JWT_SECRET_KEY, CODE_PEPPER, and LLM keys your ingestion graph needs
+  # (see .env.example — e.g. OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI as configured).
+
+  # Migrations (once per database):
+  uv run alembic upgrade head
+
+  # Optional — demo tenant + user (ENVIRONMENT=demo or ALLOW_DEMO_SEED=1 per seed script):
+  # ENVIRONMENT=demo uv run python scripts/seed_demo_db.py
+
+
+--------------------------------------------------------------------------------
+1) START THE API (UVICORN)
+--------------------------------------------------------------------------------
+
+  cd backend
+
+  uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Default base URL for the commands below:
+  export API_BASE="http://127.0.0.1:8000"
+
+
+--------------------------------------------------------------------------------
+2) OPENAPI / SWAGGER (ALL YOUR ENDPOINTS)
+--------------------------------------------------------------------------------
+
+  Interactive docs (try requests in the browser):
+    ${API_BASE}/docs
+
+  Alternative docs UI:
+    ${API_BASE}/redoc
+
+  Raw OpenAPI JSON (for codegen / Postman import):
+    ${API_BASE}/openapi.json
+
+  Replace host/port if you run elsewhere.
+
+
+--------------------------------------------------------------------------------
+3) GET A JWT (REQUIRED FOR INGESTION ROUTES)
+--------------------------------------------------------------------------------
+
+  Preview and Gmail sync require Authorization: Bearer <access_token>.
+
+  Example — password login (adjust email/password to your user):
+
+  export API_BASE="http://127.0.0.1:8000"
+
+  # Stores refresh cookie for /v1/auth/* paths; extract access_token (requires jq):
+  export ACCESS_TOKEN="$(curl -sS -c /tmp/factora_cookies.txt -b /tmp/factora_cookies.txt \
+    -X POST "${API_BASE}/v1/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"demo-dashboard@example.org","password":"FactoraDemo2026!"}' \
+    | jq -r '.access_token')"
+
+  echo "$ACCESS_TOKEN"
+
+  # If login returns 422, use a real EmailStr-safe address (see scripts/seed_demo_db.py).
+
+
+--------------------------------------------------------------------------------
+4) INGESTION — PREVIEW (NO INVOICE PERSISTED)
+--------------------------------------------------------------------------------
+
+  Runs the ingestion LangGraph on pasted text and/or an uploaded file.
+  Endpoint: POST /v1/integrations/ingestion/preview
+  Behaviour: same graph as production path, but include_vector_hints=false in code
+  (lighter path; does not create an invoice).
+
+  # Text only:
+  curl -sS -X POST "${API_BASE}/v1/integrations/ingestion/preview" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -F 'raw_text=Invoice INV-100 Acme Corp Total EUR 1.234,56 due 2026-04-15'
+
+  # Alias field name:
+  curl -sS -X POST "${API_BASE}/v1/integrations/ingestion/preview" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -F 'text=Paste email body or OCR text here.'
+
+  # With file (PDF/image etc., max 10 MiB):
+  curl -sS -X POST "${API_BASE}/v1/integrations/ingestion/preview" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -F 'raw_text=See attached' \
+    -F 'file=@/path/to/invoice.pdf;type=application/pdf'
+
+
+--------------------------------------------------------------------------------
+5) INGESTION — “NORMAL” (GMAIL PIPELINE → GRAPH + INVOICE CREATION)
+--------------------------------------------------------------------------------
+
+  Full ingestion with vector hints and invoice persistence runs inside the Gmail
+  sync pipeline (not a separate “ingest” URL for arbitrary files).
+
+  Endpoint: POST /v1/integrations/gmail/sync
+  Auth: Bearer token + role Owner or Admin
+  Prereqs: Gmail connected for the org (OAuth flow via GET /v1/integrations/gmail/authorize).
+
+  curl -sS -X POST "${API_BASE}/v1/integrations/gmail/sync" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{}'
+
+  # Optional — restrict to one connected mailbox:
+  curl -sS -X POST "${API_BASE}/v1/integrations/gmail/sync?google_email=user@gmail.com" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{}'
+
+  Pub/Sub-driven sync (production): POST /v1/webhooks/gmail/pubsub (Google pushes here).
+
+
+--------------------------------------------------------------------------------
+6) OPTIONAL — RUN INGESTION-RELATED UNIT TESTS (OFFLINE / MOCKED)
+--------------------------------------------------------------------------------
+
+  cd backend
+
+  uv run pytest tests/unit/test_phase2_contracts.py::test_ingestion_agent_demo_mode_short_circuit -q
+
+  uv run pytest tests/unit/test_phase2_coverage.py -k ingestion -q --tb=short
+
+
+--------------------------------------------------------------------------------
+QUICK REFERENCE
+--------------------------------------------------------------------------------
+
+  Preview:     POST  ${API_BASE}/v1/integrations/ingestion/preview   (multipart, Bearer)
+  Gmail sync:  POST  ${API_BASE}/v1/integrations/gmail/sync         (JSON body, Owner/Admin)
+  OpenAPI UI:        ${API_BASE}/docs
+  OpenAPI JSON:      ${API_BASE}/openapi.json
+
+================================================================================
