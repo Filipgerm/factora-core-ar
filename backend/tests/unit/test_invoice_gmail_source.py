@@ -56,3 +56,28 @@ def test_gmail_sync_response_rejects_negative_skipped() -> None:
 def test_gmail_sync_response_accepts_zero_counts() -> None:
     r = GmailSyncResponse(ingested=0, skipped=0, mailbox="a@b.com")
     assert r.ingested == 0 and r.skipped == 0
+
+
+@pytest.mark.asyncio
+async def test_invoice_service_create_sets_is_recurring() -> None:
+    """is_recurring field must be persisted on the ORM Invoice row."""
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=None)
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+
+    org_id = str(uuid.uuid4())
+    svc = InvoiceService(db, org_id)
+    body = InvoiceCreateRequest(
+        source=InvoiceSourceEnum.GMAIL,
+        external_id="gmail-recurring-test",
+        counterparty_display_name="Adobe Inc",
+        amount=Decimal("59.99"),
+        issue_date=date(2026, 3, 15),
+        is_recurring=True,
+    )
+    await svc.create(body)
+
+    added = db.add.call_args[0][0]
+    assert added.is_recurring is True

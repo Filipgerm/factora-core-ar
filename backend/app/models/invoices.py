@@ -47,6 +47,7 @@ class InvoiceCreateRequest(BaseModel):
     status: InvoiceStatusEnum = InvoiceStatusEnum.DRAFT
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     requires_human_review: bool = False
+    is_recurring: bool = False
 
     @model_validator(mode="after")
     def _manual_requires_label(self) -> InvoiceCreateRequest:
@@ -86,3 +87,4 @@ class InvoiceResponse(BaseModel):
     status: InvoiceStatusEnum
     confidence: float | None
     requires_human_review: bool
+    is_recurring: bool
