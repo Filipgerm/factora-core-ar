@@ -10,6 +10,13 @@ docs recommend separate embedding providers (e.g. Voyage). So ``EMBEDDING_PROVID
 ``gemini`` or ``openai`` even when agents call Claude — keys are ``GEMINI_API_KEY`` /
 ``OPENAI_API_KEY``, not ``ANTHROPIC_API_KEY``.
 
+**Gemini quota isolation:** When ``GEMINI_EMBEDDING_API_KEY`` is set, embedding calls use
+that key exclusively so they draw from a separate Google AI Studio project quota and do
+not contend with ``GEMINI_API_KEY`` used by the chat/vision model. When the field is empty,
+``GEMINI_API_KEY`` is used as the fallback.  The correct embedding model for AI Studio is
+``text-embedding-004`` (set via ``GEMINI_EMBEDDING_MODEL``). Do not use Vertex AI model
+names such as ``textembedding-gecko`` — they are not served by the AI Studio endpoint.
+
 **Contract:** Async functions; raise ``ValidationError`` / ``ExternalServiceError`` from
 ``app.core.exceptions`` on misconfiguration or provider failure.
 """
@@ -25,13 +32,17 @@ from app.core.exceptions import ExternalServiceError, ValidationError
 logger = logging.getLogger(__name__)
 
 
-def _require_gemini_key() -> str:
-    k = (settings.GEMINI_API_KEY or "").strip()
+def _require_gemini_embedding_key() -> str:
+    """Return the dedicated embedding key when set, falling back to the chat key."""
+    k = (settings.GEMINI_EMBEDDING_API_KEY or "").strip() or (settings.GEMINI_API_KEY or "").strip()
     if not k:
         raise ValidationError(
-            "Gemini API key is not configured.",
+            "No Gemini API key is configured for embeddings.",
             code="config.gemini_missing",
-            fields={"GEMINI_API_KEY": "Required when EMBEDDING_PROVIDER=gemini"},
+            fields={
+                "GEMINI_EMBEDDING_API_KEY": "Preferred — separate AI Studio project key for embeddings",
+                "GEMINI_API_KEY": "Fallback when GEMINI_EMBEDDING_API_KEY is empty",
+            },
         )
     return k
 
@@ -91,9 +102,9 @@ async def _embed_gemini(texts: list[str]) -> list[list[float]]:
     from google import genai
     from google.genai import types
 
-    _require_gemini_key()
+    api_key = _require_gemini_embedding_key()
     dim = int(settings.EMBEDDING_DIMENSIONS)
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    client = genai.Client(api_key=api_key)
     try:
         resp = await client.aio.models.embed_content(
             model=settings.GEMINI_EMBEDDING_MODEL,

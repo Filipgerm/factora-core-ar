@@ -55,7 +55,15 @@ class Settings(BaseSettings):
         description="gemini | openai | anthropic — chat/JSON/vision/stream provider",
     )
     GEMINI_API_KEY: str = Field(
-        default="", description="Google AI Studio / Gemini API key"
+        default="", description="Google AI Studio / Gemini API key (chat + vision)"
+    )
+    GEMINI_EMBEDDING_API_KEY: str = Field(
+        default="",
+        description=(
+            "Separate Google AI Studio key used exclusively for text-embedding-004 calls. "
+            "When set, embedding calls use this key so they draw from a different RPM quota "
+            "than the chat model. Falls back to GEMINI_API_KEY when empty."
+        ),
     )
     GEMINI_CHAT_MODEL: str = Field(
         default="gemini-2.5-flash",
@@ -63,7 +71,7 @@ class Settings(BaseSettings):
     )
     GEMINI_EMBEDDING_MODEL: str = Field(
         default="text-embedding-004",
-        description="Gemini embedding model (output dimensionality set via EMBEDDING_DIMENSIONS)",
+        description="Gemini embedding model — must be text-embedding-004 for AI Studio free tier",
     )
     OPENAI_API_KEY: str = Field(
         default="",
