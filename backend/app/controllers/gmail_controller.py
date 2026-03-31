@@ -88,6 +88,7 @@ class GmailController:
                 attachment_base64=attachment_base64,
                 attachment_mime_type=attachment_mime_type,
                 include_vector_hints=False,
+                trigger="preview",
             )
         except AppError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e

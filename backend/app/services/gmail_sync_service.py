@@ -263,6 +263,7 @@ class GmailSyncService:
                     email_subject=subject,
                     email_from=from_hdr,
                     include_vector_hints=True,
+                    trigger="gmail_sync",
                 )
 
                 if result.get("error"):

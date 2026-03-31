@@ -4,6 +4,9 @@ Embeddings delegate to ``app.services.embeddings.backend`` so VectorStoreService
 
 **Workflow (runtime):** Set ``LLM_PROVIDER`` to ``gemini``, ``openai``, or ``anthropic`` and
 configure the matching API key and model env vars (see ``backend/.env.example``).
+
+**Observability:** ``@traceable`` on each public method creates a LangSmith child span
+inside any active LangGraph trace, capturing model name, messages, and raw response.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ import logging
 from typing import Any
 
 from anthropic import NOT_GIVEN, AsyncAnthropic
+from langsmith import traceable
 from openai import AsyncOpenAI
 
 from app.config import settings
@@ -60,13 +64,20 @@ class LLMClient:
         self._anthropic: AsyncAnthropic | None = None
         self._genai_client: Any = None
 
-        if settings.LLM_PROVIDER == "openai" and (settings.OPENAI_API_KEY or "").strip():
+        if (
+            settings.LLM_PROVIDER == "openai"
+            and (settings.OPENAI_API_KEY or "").strip()
+        ):
             self._openai = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        elif settings.LLM_PROVIDER == "anthropic" and (
-            settings.ANTHROPIC_API_KEY or ""
-        ).strip():
+        elif (
+            settings.LLM_PROVIDER == "anthropic"
+            and (settings.ANTHROPIC_API_KEY or "").strip()
+        ):
             self._anthropic = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-        elif settings.LLM_PROVIDER == "gemini" and (settings.GEMINI_API_KEY or "").strip():
+        elif (
+            settings.LLM_PROVIDER == "gemini"
+            and (settings.GEMINI_API_KEY or "").strip()
+        ):
             from google import genai
 
             self._genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -99,6 +110,7 @@ class LLMClient:
             return settings.ANTHROPIC_CHAT_MODEL
         return settings.GEMINI_CHAT_MODEL
 
+    @traceable(run_type="llm", name="chat_completion")
     async def chat_completion(
         self,
         messages: list[dict[str, str]],
@@ -149,6 +161,7 @@ class LLMClient:
         )
         return (resp.text or "").strip()
 
+    @traceable(run_type="llm", name="chat_completion_json")
     async def chat_completion_json(
         self,
         messages: list[dict[str, str]],
@@ -215,6 +228,7 @@ class LLMClient:
         raw = (resp.text or "").strip() or "{}"
         return json.loads(raw)
 
+    @traceable(run_type="llm", name="chat_completion_json_vision")
     async def chat_completion_json_vision(
         self,
         *,
@@ -317,6 +331,7 @@ class LLMClient:
         raw = (resp.text or "").strip() or "{}"
         return json.loads(raw)
 
+    @traceable(run_type="embedding", name="embedding_for_text", hide_inputs=True)
     async def embedding_for_text(self, text: str) -> list[float]:
         if settings.demo_mode:
             dim = max(1, int(settings.EMBEDDING_DIMENSIONS))

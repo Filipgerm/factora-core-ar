@@ -9,6 +9,17 @@
 
 **Contract:** Import ``reconciliation_graph`` from ``app.agents.reconciliation``;
 ``ainvoke`` initial state requires ``organization_id`` and ``db``.
+
+**LangSmith tracing:** When the service that invokes this graph is created, pass a
+``RunnableConfig`` so traces appear in the correct bucket::
+
+    from langchain_core.runnables import RunnableConfig
+    config: RunnableConfig = {
+        "run_name": "reconciliation",
+        "tags": ["reconciliation", trigger],   # trigger e.g. "scheduled" | "manual"
+        "metadata": {"organization_id": org_id, "trigger": trigger},
+    }
+    result = await reconciliation_graph.ainvoke(state, config=config)
 """
 from __future__ import annotations
 

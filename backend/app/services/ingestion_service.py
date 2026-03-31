@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.ingestion import ingestion_graph
@@ -48,8 +49,15 @@ class IngestionService:
         email_subject: str | None = None,
         email_from: str | None = None,
         include_vector_hints: bool = True,
+        trigger: str = "api",
     ) -> dict[str, Any]:
-        """Execute ``ingestion_graph`` and return the terminal ``result`` payload."""
+        """Execute ``ingestion_graph`` and return the terminal ``result`` payload.
+
+        Args:
+            trigger: Origin of this invocation — used as a LangSmith tag so traces
+                can be filtered by source bucket (``gmail_sync``, ``preview``,
+                ``pubsub``, ``api``).
+        """
         state: IngestionState = {
             "organization_id": self._organization_id,
             "raw_text": raw_text or "",
@@ -65,5 +73,13 @@ class IngestionService:
         if include_vector_hints:
             state["vector_store_factory"] = self._vector_store_factory()
 
-        out = await ingestion_graph.ainvoke(state)
+        config: RunnableConfig = {
+            "run_name": "ingestion",
+            "tags": ["ingestion", trigger],
+            "metadata": {
+                "organization_id": self._organization_id,
+                "trigger": trigger,
+            },
+        }
+        out = await ingestion_graph.ainvoke(state, config=config)
         return dict(out.get("result") or {})

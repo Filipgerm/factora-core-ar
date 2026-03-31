@@ -9,6 +9,17 @@
 
 **Contract:** Import from ``app.agents.collections``; initial state needs ``organization_id``
 and ``db``. Demo mode skips live LLM content and uses safe copy.
+
+**LangSmith tracing:** When the service that invokes this graph is created, pass a
+``RunnableConfig`` so traces appear in the correct bucket::
+
+    from langchain_core.runnables import RunnableConfig
+    config: RunnableConfig = {
+        "run_name": "collections",
+        "tags": ["collections", trigger],   # trigger e.g. "scheduled" | "manual"
+        "metadata": {"organization_id": org_id, "trigger": trigger},
+    }
+    result = await collections_graph.ainvoke(state, config=config)
 """
 from __future__ import annotations
 
