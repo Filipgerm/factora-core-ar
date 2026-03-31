@@ -79,13 +79,23 @@ class VectorStoreService:
         content_text: str,
         source: str,
         embedding_metadata: dict[str, Any] | None = None,
+        counterparty_id: str | None = None,
     ) -> OrganizationEmbedding:
-        """Embed ``content_text`` and insert a row for this organization."""
+        """Embed ``content_text`` and insert a row for this organization.
+
+        Args:
+            content_text: Raw text to embed and store.
+            source: Short label for the ingestion channel (max 64 chars).
+            embedding_metadata: Arbitrary JSONB payload stored alongside the vector.
+            counterparty_id: Optional FK to ``counterparties.id`` for vendor-scoped
+                similarity search and recurring-invoice detection.
+        """
         vectors = await self.embed_texts([content_text])
         vec = vectors[0]
         row = OrganizationEmbedding(
             id=str(uuid.uuid4()),
             organization_id=self.organization_id,
+            counterparty_id=counterparty_id,
             source=source[:64],
             content_text=content_text,
             embedding=vec,
@@ -111,10 +121,19 @@ class VectorStoreService:
         source: str,
         vector: Sequence[float],
         embedding_metadata: dict[str, Any] | None = None,
+        counterparty_id: str | None = None,
     ) -> OrganizationEmbedding | None:
         """Insert a row using an already-computed embedding (e.g. from ingestion graph).
 
         Skips persist when the vector length does not match ``EMBEDDING_DIMENSIONS``.
+
+        Args:
+            content_text: Raw text the vector was generated from.
+            source: Short label for the ingestion channel (max 64 chars).
+            vector: Pre-computed embedding; must match ``EMBEDDING_DIMENSIONS``.
+            embedding_metadata: Arbitrary JSONB payload stored alongside the vector.
+            counterparty_id: Optional FK to ``counterparties.id`` for vendor-scoped
+                similarity search and recurring-invoice detection.
         """
         if not vector:
             return None
@@ -132,6 +151,7 @@ class VectorStoreService:
         row = OrganizationEmbedding(
             id=str(uuid.uuid4()),
             organization_id=self.organization_id,
+            counterparty_id=counterparty_id,
             source=source[:64],
             content_text=trimmed[:16_000],
             embedding=[float(x) for x in vector],
@@ -199,8 +219,24 @@ class VectorStoreService:
         suggested_label: str,
         corrected_label: str,
         source: str = "human_feedback",
+        original_confidence: float | None = None,
+        was_auto_applied: bool = False,
+        correction_count: int = 1,
+        counterparty_id: str | None = None,
     ) -> OrganizationEmbedding:
-        """Persist a human correction as a new embedding row for active learning."""
+        """Persist a human correction as a new embedding row for active learning.
+
+        The stored metadata provides a full audit trail of AI quality:
+
+        - ``original_category`` / ``corrected_category``: what the AI guessed vs
+          what the human confirmed, enabling per-vendor accuracy analytics.
+        - ``original_confidence``: the model's confidence at the time of correction,
+          so you can learn that low-confidence predictions need different thresholds.
+        - ``correction_count``: how many times this document type has been corrected,
+          surfacing systematic misclassification patterns.
+        - ``was_auto_applied``: whether the correction bypassed human review, to
+          distinguish supervised from unsupervised active learning signal.
+        """
         trimmed = content_text.strip()
         if not trimmed:
             raise ValidationError(
@@ -209,12 +245,18 @@ class VectorStoreService:
                 fields={"content_text": "Provide non-empty text"},
             )
         embed_body = f"{trimmed}\nconfirmed_category={corrected_label}"
+        metadata: dict[str, Any] = {
+            "feedback_type": "category_correction",
+            "original_category": suggested_label,
+            "corrected_category": corrected_label,
+            "correction_count": correction_count,
+            "was_auto_applied": was_auto_applied,
+        }
+        if original_confidence is not None:
+            metadata["original_confidence"] = original_confidence
         return await self.upsert_memory(
             content_text=embed_body,
             source=source[:64],
-            embedding_metadata={
-                "suggested_label": suggested_label,
-                "corrected_label": corrected_label,
-                "feedback_type": "category_correction",
-            },
+            embedding_metadata=metadata,
+            counterparty_id=counterparty_id,
         )
