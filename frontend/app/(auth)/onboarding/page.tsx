@@ -149,7 +149,7 @@ export default function OnboardingPage() {
             <p className="text-center text-sm text-slate-600 dark:text-slate-400">
               <Link
                 href="/login"
-                className="font-semibold text-[var(--brand-primary)] underline-offset-4 transition-colors duration-200 hover:underline dark:text-teal-400"
+                className="font-semibold text-primary underline-offset-4 transition-colors duration-200 hover:underline hover:text-primary/90"
               >
                 Back to sign in
               </Link>
