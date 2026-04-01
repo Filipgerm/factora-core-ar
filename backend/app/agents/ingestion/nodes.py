@@ -8,10 +8,13 @@
        raw email metadata BEFORE extraction so hints reach the LLM.
     4. ``extract`` — LLM JSON (text or vision) with ERP fields + confidence;
        receives ``neighbors`` as a formatted hint block in the user message.
-    5. ``check_recurrence`` — DB temporal-pattern check; overrides the LLM's
-       ``is_recurring`` when ≥ 3 distinct invoice months with avg gap ≤ 3 months
-       are found for the same vendor + similar amount.
-    6. ``finalize`` — embedding via ``LLMClient.embedding_for_text``, merge
+    5. ``resolve_counterparty`` — maps the extracted vendor name/VAT number to an
+       existing Counterparty row; Phase 1 exact VAT lookup, Phase 2 embedding
+       similarity over counterparty-linked embeddings.
+    6. ``check_recurrence`` — DB temporal-pattern check using the resolved
+       counterparty FK (or vendor ILIKE fallback for new vendors); overrides
+       the LLM's ``is_recurring`` when ≥ 3 distinct months with avg gap ≤ 3.
+    7. ``finalize`` — embedding via ``LLMClient.embedding_for_text``, merge
        ``requires_human_review`` using ``INGESTION_CONFIDENCE_AUTO_APPLY_THRESHOLD``.
 
 **Side effects:** LLM HTTP when not in demo mode; vector search and invoice history
@@ -29,11 +32,13 @@ from typing import Any
 from pypdf import PdfReader
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.agents.base import INGESTION_CONFIDENCE_AUTO_APPLY_THRESHOLD
+from app.db.models.counterparty import Counterparty
 from app.db.models.invoices import Invoice
 from app.agents.ingestion.constants import (
+    COUNTERPARTY_RESOLVE_MAX_DISTANCE,
     EXTRACT_RAW_TEXT_MAX_CHARS,
     MAX_ATTACHMENT_BYTES,
     SIMILARITY_QUERY_MAX_CHARS,
@@ -232,6 +237,95 @@ class IngestionNodes:
             logger.warning("similarity search skipped: %s", e)
             neighbors = []
         return {**state, "neighbors": neighbors}
+
+    async def resolve_counterparty(self, state: IngestionState) -> IngestionState:
+        """Map the extracted vendor to an existing Counterparty record in the DB.
+
+        **Phase 1 — VAT number lookup (exact, high precision):**
+            If the LLM extracted a ``vendor_vat_number``, query ``counterparties``
+            by ``(organization_id, vat_number)`` after upper-casing and stripping
+            whitespace from both sides. Greek AFM (ΑΦΜ) and EU VAT IDs are handled
+            identically. If matched, short-circuit — no embedding call needed.
+
+        **Phase 2 — Embedding similarity (fuzzy, bounded by COUNTERPARTY_RESOLVE_MAX_DISTANCE):**
+            Embed the extracted vendor name string, then query
+            ``organization_embeddings`` restricted to rows that already carry a
+            ``counterparty_id`` FK. The nearest embedding whose cosine distance is
+            below the threshold wins. This handles name variants ("AWS",
+            "Amazon Web Services", "Amazon Ireland Ltd") that share the same
+            counterparty row without needing exact string matching.
+
+        Sets ``state["resolved_counterparty_id"]`` to the matched UUID or ``None``.
+        Downstream nodes (``check_recurrence``) and ``finalize`` consume this key.
+        """
+        if "result" in state:
+            return state
+
+        ext = state.get("extracted") or {}
+        org_id = state["organization_id"]
+        db: AsyncSession = state["db"]
+
+        # --- Phase 1: exact VAT number match ---
+        raw_vat = (ext.get("vendor_vat_number") or "").strip().upper().replace(" ", "")
+        if raw_vat:
+            try:
+                cp_id = await db.scalar(
+                    select(Counterparty.id)
+                    .where(
+                        Counterparty.organization_id == org_id,
+                        func.upper(
+                            func.replace(Counterparty.vat_number, " ", "")
+                        ) == raw_vat,
+                        Counterparty.deleted_at.is_(None),
+                    )
+                    .limit(1)
+                )
+                if cp_id:
+                    logger.debug("resolve_counterparty: VAT match → %s", cp_id)
+                    return {**state, "resolved_counterparty_id": str(cp_id)}
+            except Exception as e:
+                logger.warning("resolve_counterparty VAT lookup failed: %s", e)
+
+        # --- Phase 2: embedding similarity over counterparty-linked rows ---
+        vendor = (ext.get("vendor") or "").strip()
+        if not vendor:
+            return {**state, "resolved_counterparty_id": None}
+
+        llm = self._llm(state)
+        try:
+            vec = await llm.embedding_for_text(vendor)
+        except Exception as e:
+            logger.warning("resolve_counterparty embedding failed: %s", e)
+            return {**state, "resolved_counterparty_id": None}
+
+        qv = "[" + ",".join(str(float(x)) for x in vec) + "]"
+        sql = text(
+            """
+            SELECT counterparty_id::text,
+                   (embedding <=> CAST(:qv AS vector)) AS distance
+            FROM organization_embeddings
+            WHERE organization_id = CAST(:oid AS uuid)
+              AND counterparty_id IS NOT NULL
+            ORDER BY embedding <=> CAST(:qv AS vector)
+            LIMIT 1
+            """
+        )
+        try:
+            res = await db.execute(sql, {"qv": qv, "oid": org_id})
+            row = res.mappings().first()
+        except Exception as e:
+            logger.warning("resolve_counterparty similarity query failed: %s", e)
+            return {**state, "resolved_counterparty_id": None}
+
+        if row and float(row["distance"]) < COUNTERPARTY_RESOLVE_MAX_DISTANCE:
+            logger.debug(
+                "resolve_counterparty: embedding match dist=%.3f → %s",
+                row["distance"],
+                row["counterparty_id"],
+            )
+            return {**state, "resolved_counterparty_id": str(row["counterparty_id"])}
+
+        return {**state, "resolved_counterparty_id": None}
 
     async def check_recurrence(self, state: IngestionState) -> IngestionState:
         """Override the LLM's is_recurring flag using real invoice history.

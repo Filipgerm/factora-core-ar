@@ -47,6 +47,10 @@ class IngestionState(TypedDict, total=False):
     llm: NotRequired[Any]
     extracted: dict[str, Any]
     neighbors: list[dict[str, Any]]
+    # Set by resolve_counterparty: UUID of the matched Counterparty row, or None
+    # when no match was found. Consumed by check_recurrence (precise FK query)
+    # and surfaced in finalize result so the service can skip a second lookup.
+    resolved_counterparty_id: NotRequired[str | None]
     # Set by check_recurrence: number of distinct calendar months with invoices
     # from the same vendor + similar amount found in the DB. 0 = no history.
     recurrence_months_found: NotRequired[int]
