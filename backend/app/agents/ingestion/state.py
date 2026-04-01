@@ -47,4 +47,7 @@ class IngestionState(TypedDict, total=False):
     llm: NotRequired[Any]
     extracted: dict[str, Any]
     neighbors: list[dict[str, Any]]
+    # Set by check_recurrence: number of distinct calendar months with invoices
+    # from the same vendor + similar amount found in the DB. 0 = no history.
+    recurrence_months_found: NotRequired[int]
     result: dict[str, Any]

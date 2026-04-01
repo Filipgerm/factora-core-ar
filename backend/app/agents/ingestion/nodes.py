@@ -29,7 +29,10 @@ from typing import Any
 from pypdf import PdfReader
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import func, select
+
 from app.agents.base import INGESTION_CONFIDENCE_AUTO_APPLY_THRESHOLD
+from app.db.models.invoices import Invoice
 from app.agents.ingestion.constants import (
     EXTRACT_RAW_TEXT_MAX_CHARS,
     MAX_ATTACHMENT_BYTES,
@@ -229,6 +232,86 @@ class IngestionNodes:
             logger.warning("similarity search skipped: %s", e)
             neighbors = []
         return {**state, "neighbors": neighbors}
+
+    async def check_recurrence(self, state: IngestionState) -> IngestionState:
+        """Override the LLM's is_recurring flag using real invoice history.
+
+        Strategy:
+          1. Find all non-deleted invoices in this org with the same vendor name
+             (case-insensitive).
+          2. Among those, retain only "attribute-similar" ones: amount within ±25%
+             of the extracted amount (when the amount is known). If fewer than 3
+             attribute-similar invoices exist, fall back to all vendor-matched rows
+             to avoid false negatives on early history.
+          3. Extract the distinct calendar (year, month) pairs from those invoices.
+          4. Sort chronologically and compute the average gap between consecutive
+             months. Average gap ≤ 3 months covers monthly, bi-monthly, and
+             quarterly billing cycles.
+          5. If distinct-month count ≥ 3 AND avg gap ≤ 3 → mark is_recurring=True.
+             This is a hard override; if the LLM already said True, it stays True.
+        """
+        if "result" in state:
+            return state
+        ext = dict(state.get("extracted") or {})
+        vendor = (ext.get("vendor") or "").strip()
+        if not vendor:
+            return {**state, "recurrence_months_found": 0}
+
+        db: AsyncSession = state["db"]
+        org_id = state["organization_id"]
+        extracted_amount = _coerce_float(ext.get("amount"))
+
+        q = (
+            select(Invoice.amount, Invoice.issue_date)
+            .where(
+                Invoice.organization_id == org_id,
+                Invoice.counterparty_display_name.ilike(vendor),
+                Invoice.deleted_at.is_(None),
+                Invoice.issue_date.is_not(None),
+            )
+        )
+        try:
+            result = await db.execute(q)
+            rows = result.all()
+        except Exception as e:
+            logger.warning("check_recurrence DB query failed: %s", e)
+            return {**state, "recurrence_months_found": 0}
+
+        if not rows:
+            return {**state, "recurrence_months_found": 0}
+
+        # Prefer amount-similar invoices; fall back to all vendor matches if sparse.
+        if extracted_amount and extracted_amount > 0:
+            similar_dates = [
+                r.issue_date
+                for r in rows
+                if r.amount is not None
+                and float(r.amount) > 0
+                and abs(float(r.amount) - extracted_amount)
+                / max(float(r.amount), extracted_amount)
+                <= 0.25
+            ]
+            if len(similar_dates) < 3:
+                similar_dates = [r.issue_date for r in rows]
+        else:
+            similar_dates = [r.issue_date for r in rows]
+
+        # Count distinct calendar months.
+        months = sorted({(d.year, d.month) for d in similar_dates if d})
+        month_count = len(months)
+
+        if month_count >= 3:
+            # Verify a consistent billing cadence: avg gap ≤ 3 calendar months.
+            gaps = [
+                (months[i + 1][0] - months[i][0]) * 12
+                + (months[i + 1][1] - months[i][1])
+                for i in range(len(months) - 1)
+            ]
+            avg_gap = sum(gaps) / len(gaps)
+            if avg_gap <= 3:
+                ext["is_recurring"] = True
+
+        return {**state, "extracted": ext, "recurrence_months_found": month_count}
 
     async def finalize(self, state: IngestionState) -> IngestionState:
         if "result" in state:
