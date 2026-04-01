@@ -18,13 +18,12 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gmail_api_client import GmailApiClient
 from app.core.exceptions import NotFoundError, ValidationError as AppValidationError
 from app.core.security.field_encryption import decrypt_secret
-from app.db.models.embeddings import OrganizationEmbedding
 from app.db.models.gmail import GmailMailboxConnection, GmailProcessedMessage
 from app.models.gmail import GmailSyncMessageDetail
 from app.models.invoices import (
@@ -352,20 +351,8 @@ class GmailSyncService:
                 if isinstance(vec, list) and vec:
                     vs = VectorStoreService(self._db, organization_id)
                     try:
-                        # Determine whether this counterparty has been seen before
-                        # (any prior embedding exists for it) to flag recurring invoices.
-                        is_recurring = False
-                        if inv.counterparty_id:
-                            prior_count = await self._db.scalar(
-                                select(func.count())
-                                .select_from(OrganizationEmbedding)
-                                .where(
-                                    OrganizationEmbedding.counterparty_id
-                                    == inv.counterparty_id
-                                )
-                            )
-                            is_recurring = (prior_count or 0) > 0
-
+                        # is_recurring comes from the agent: LLM text signal combined
+                        # with the check_recurrence DB temporal-pattern node.
                         await vs.persist_precomputed_vector(
                             content_text=_embedding_content_text(result),
                             source="gmail_ingestion",
@@ -376,7 +363,8 @@ class GmailSyncService:
                                 "source": "gmail",
                                 "invoice_month": inv.issue_date.month,
                                 "invoice_year": inv.issue_date.year,
-                                "is_recurring": is_recurring,
+                                "is_recurring": bool(result.get("is_recurring", False)),
+                                "category": result.get("category") or "",
                             },
                             counterparty_id=inv.counterparty_id,
                         )
