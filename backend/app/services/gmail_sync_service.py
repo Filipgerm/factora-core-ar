@@ -326,6 +326,7 @@ class GmailSyncService:
                             due_date=due_d,
                             status=inv_status,
                             confidence=conf_f,
+                            is_recurring=bool(result.get("is_recurring", False)),
                             requires_human_review=bool(result.get("requires_human_review")),
                         )
                     )
