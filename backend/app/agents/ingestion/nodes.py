@@ -145,14 +145,14 @@ class IngestionNodes:
 
         return {**state, "result": {"error": "unsupported_attachment_type"}}
 
-    async def validate(self, state: IngestionState) -> IngestionState:
+    async def validate(self, state: IngestionState) -> IngestionState | None:
         if "result" in state:
             return state
         has_text = bool((state.get("raw_text") or "").strip())
         has_vision = bool(state.get("vision_image_base64"))
         if not has_text and not has_vision:
             return {**state, "result": {"error": "empty_text"}}
-        return
+        return None  # LangGraph treats None as "no state update" — skip to next node.
 
     async def extract(self, state: IngestionState) -> IngestionState:
         if "result" in state:
@@ -298,6 +298,10 @@ class IngestionNodes:
             logger.warning("resolve_counterparty embedding failed: %s", e)
             return {**state, "resolved_counterparty_id": None}
 
+        # Raw SQL is required here: SQLAlchemy ORM has no native binding for the
+        # pgvector `<=>` cosine-distance operator. `qv` is safe because every
+        # element was coerced to float() before string-formatting; `oid` is a
+        # named bind parameter handled by SQLAlchemy's parameterisation layer.
         qv = "[" + ",".join(str(float(x)) for x in vec) + "]"
         sql = text(
             """
@@ -363,15 +367,20 @@ class IngestionNodes:
                 )
             )
         else:
-            # Fallback: vendor name ILIKE for vendors not yet in the DB.
+            # Fallback: substring ILIKE for vendors not yet in the DB.
+            # Escape LIKE metacharacters so a vendor named "50%" can't widen the
+            # match; then wrap in % for case-insensitive substring search.
             vendor = (ext.get("vendor") or "").strip()
             if not vendor:
                 return {**state, "recurrence_months_found": 0}
+            safe_vendor = vendor.replace("!", "!!").replace("%", "!%").replace("_", "!_")
             q = (
                 select(Invoice.amount, Invoice.issue_date)
                 .where(
                     Invoice.organization_id == org_id,
-                    Invoice.counterparty_display_name.ilike(vendor),
+                    Invoice.counterparty_display_name.ilike(
+                        f"%{safe_vendor}%", escape="!"
+                    ),
                     Invoice.deleted_at.is_(None),
                     Invoice.issue_date.is_not(None),
                 )
