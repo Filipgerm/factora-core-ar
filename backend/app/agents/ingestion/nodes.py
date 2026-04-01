@@ -30,9 +30,8 @@ from io import BytesIO
 from typing import Any
 
 from pypdf import PdfReader
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import INGESTION_CONFIDENCE_AUTO_APPLY_THRESHOLD
 from app.db.models.counterparty import Counterparty
@@ -482,6 +481,7 @@ class IngestionNodes:
                 "requires_human_review": requires_human_review,
                 "vector_hints": state.get("neighbors", []),
                 "resolved_counterparty_id": state.get("resolved_counterparty_id"),
+                "recurrence_months_found": state.get("recurrence_months_found", 0),
                 "extracted": ext,
             },
         }
