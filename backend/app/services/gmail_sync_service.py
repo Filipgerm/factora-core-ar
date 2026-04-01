@@ -310,12 +310,15 @@ class GmailSyncService:
                     conf_f = None
                 summary_short = (result.get("summary") or "")[:500] or None
 
+                resolved_cp_id: str | None = result.get("resolved_counterparty_id") or None
+
                 inv_svc = InvoiceService(self._db, organization_id)
                 try:
                     inv = await inv_svc.create(
                         InvoiceCreateRequest(
                             source=InvoiceSourceEnum.GMAIL,
                             external_id=mid,
+                            counterparty_id=resolved_cp_id,
                             counterparty_display_name=ext_vendor,
                             amount=dec_amt,
                             currency=currency,
