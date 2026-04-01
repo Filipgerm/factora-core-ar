@@ -4,13 +4,18 @@
     1. ``materialize`` — decode base64 attachment; PDFs append extracted text to
        ``raw_text``; images set ``vision_image_*`` for the extract node.
     2. ``validate`` — require non-empty text and/or a staged vision image.
-    3. ``extract`` — LLM JSON (text or vision) with ERP fields + confidence.
-    4. ``context`` — optional pgvector neighbors via ``vector_store_factory``.
-    5. ``finalize`` — embedding via ``LLMClient.embedding_for_text``, merge
+    3. ``context`` — pgvector neighbors via ``vector_store_factory``, queried from
+       raw email metadata BEFORE extraction so hints reach the LLM.
+    4. ``extract`` — LLM JSON (text or vision) with ERP fields + confidence;
+       receives ``neighbors`` as a formatted hint block in the user message.
+    5. ``check_recurrence`` — DB temporal-pattern check; overrides the LLM's
+       ``is_recurring`` when ≥ 3 distinct invoice months with avg gap ≤ 3 months
+       are found for the same vendor + similar amount.
+    6. ``finalize`` — embedding via ``LLMClient.embedding_for_text``, merge
        ``requires_human_review`` using ``INGESTION_CONFIDENCE_AUTO_APPLY_THRESHOLD``.
 
-**Side effects:** OpenAI HTTP when not in demo mode; optional vector search scoped by
-``organization_id``. Agents do not call Gmail — a service supplies bytes/metadata.
+**Side effects:** LLM HTTP when not in demo mode; vector search and invoice history
+queries scoped by ``organization_id``. Agents do not call Gmail.
 """
 
 from __future__ import annotations
@@ -138,7 +143,7 @@ class IngestionNodes:
         has_vision = bool(state.get("vision_image_base64"))
         if not has_text and not has_vision:
             return {**state, "result": {"error": "empty_text"}}
-        return  
+        return
 
     async def extract(self, state: IngestionState) -> IngestionState:
         if "result" in state:
@@ -187,6 +192,12 @@ class IngestionNodes:
         return {**state, "extracted": extracted}
 
     async def context(self, state: IngestionState) -> IngestionState:
+        """Fetch pgvector neighbors BEFORE extraction using raw email metadata.
+
+        Querying from email subject/sender + raw text means the LLM has access
+        to organisation-historical context (including human corrections) when it
+        makes its extraction decisions in the ``extract`` node.
+        """
         if "result" in state:
             return state
         factory = self._vector_store_factory(state)
@@ -194,15 +205,16 @@ class IngestionNodes:
             return {**state, "neighbors": []}
         db: AsyncSession = state["db"]
         vs = factory(db, state["organization_id"])
-        ext = state.get("extracted") or {}
-        query_parts = [
-            str(ext.get("description") or ""),
-            str(ext.get("vendor") or ""),
-            str(ext.get("summary") or ""),
+        # Use pre-extraction signals: email subject and sender give the clearest
+        # semantic signal; fall back to the raw document body.
+        header_parts = [
+            str(state.get("email_subject") or ""),
+            str(state.get("email_from") or ""),
         ]
-        query_text = "\n".join(p for p in query_parts if p).strip() or (
-            state.get("raw_text") or ""
-        )[:SIMILARITY_QUERY_MAX_CHARS]
+        query_text = (
+            "\n".join(p for p in header_parts if p).strip()
+            or (state.get("raw_text") or "")[:SIMILARITY_QUERY_MAX_CHARS]
+        )
         try:
             neighbors = await vs.similarity_search(
                 query_text[:SIMILARITY_QUERY_MAX_CHARS],
@@ -252,7 +264,9 @@ class IngestionNodes:
             "summary": ext.get("summary") or "",
             "currency": ext.get("currency") or "",
             "vat_rate": ext.get("vat_rate") or "",
-            "line_items": ext.get("line_items") if isinstance(ext.get("line_items"), list) else [],
+            "line_items": (
+                ext.get("line_items") if isinstance(ext.get("line_items"), list) else []
+            ),
             "issue_date": (str(ext.get("issue_date") or "")).strip(),
             "due_date": (str(ext.get("due_date") or "")).strip(),
         }
