@@ -331,39 +331,52 @@ class IngestionNodes:
         """Override the LLM's is_recurring flag using real invoice history.
 
         Strategy:
-          1. Find all non-deleted invoices in this org with the same vendor name
-             (case-insensitive).
-          2. Among those, retain only "attribute-similar" ones: amount within ±25%
-             of the extracted amount (when the amount is known). If fewer than 3
-             attribute-similar invoices exist, fall back to all vendor-matched rows
-             to avoid false negatives on early history.
-          3. Extract the distinct calendar (year, month) pairs from those invoices.
-          4. Sort chronologically and compute the average gap between consecutive
-             months. Average gap ≤ 3 months covers monthly, bi-monthly, and
-             quarterly billing cycles.
-          5. If distinct-month count ≥ 3 AND avg gap ≤ 3 → mark is_recurring=True.
-             This is a hard override; if the LLM already said True, it stays True.
+          1. Prefer the ``resolved_counterparty_id`` from the preceding node for an
+             exact FK join — this correctly groups "AWS", "Amazon Web Services", and
+             "Amazon Ireland Ltd" under one counterparty.  Falls back to
+             case-insensitive vendor name matching for new vendors not yet in the DB.
+          2. Among matched invoices, retain only "attribute-similar" ones: amount
+             within ±25% of the extracted amount (when known). Falls back to all
+             matched rows when fewer than 3 similar ones exist.
+          3. Extract distinct calendar (year, month) pairs from those invoices.
+          4. Sort chronologically; compute average gap between consecutive months.
+             Gap ≤ 3 covers monthly, bi-monthly, and quarterly billing cycles.
+          5. count ≥ 3 AND avg gap ≤ 3 → mark is_recurring=True (hard override).
         """
         if "result" in state:
             return state
         ext = dict(state.get("extracted") or {})
-        vendor = (ext.get("vendor") or "").strip()
-        if not vendor:
-            return {**state, "recurrence_months_found": 0}
-
         db: AsyncSession = state["db"]
         org_id = state["organization_id"]
         extracted_amount = _coerce_float(ext.get("amount"))
+        counterparty_id = state.get("resolved_counterparty_id")
 
-        q = (
-            select(Invoice.amount, Invoice.issue_date)
-            .where(
-                Invoice.organization_id == org_id,
-                Invoice.counterparty_display_name.ilike(vendor),
-                Invoice.deleted_at.is_(None),
-                Invoice.issue_date.is_not(None),
+        if counterparty_id:
+            # Precise path: FK join — handles all vendor name variants correctly.
+            q = (
+                select(Invoice.amount, Invoice.issue_date)
+                .where(
+                    Invoice.organization_id == org_id,
+                    Invoice.counterparty_id == counterparty_id,
+                    Invoice.deleted_at.is_(None),
+                    Invoice.issue_date.is_not(None),
+                )
             )
-        )
+        else:
+            # Fallback: vendor name ILIKE for vendors not yet in the DB.
+            vendor = (ext.get("vendor") or "").strip()
+            if not vendor:
+                return {**state, "recurrence_months_found": 0}
+            q = (
+                select(Invoice.amount, Invoice.issue_date)
+                .where(
+                    Invoice.organization_id == org_id,
+                    Invoice.counterparty_display_name.ilike(vendor),
+                    Invoice.deleted_at.is_(None),
+                    Invoice.issue_date.is_not(None),
+                )
+            )
+
         try:
             result = await db.execute(q)
             rows = result.all()
@@ -459,6 +472,7 @@ class IngestionNodes:
                 **invoice_payload,
                 "requires_human_review": requires_human_review,
                 "vector_hints": state.get("neighbors", []),
+                "resolved_counterparty_id": state.get("resolved_counterparty_id"),
                 "extracted": ext,
             },
         }
