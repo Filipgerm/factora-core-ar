@@ -40,6 +40,7 @@ from app.agents.ingestion.constants import (
 from app.agents.ingestion.prompts import (
     EXTRACT_SYSTEM_MESSAGE,
     EXTRACT_VISION_SYSTEM_MESSAGE,
+    format_context_hints,
     format_extract_user_content,
     format_vision_user_content,
 )
@@ -149,11 +150,15 @@ class IngestionNodes:
         if "result" in state:
             return state
         llm = self._llm(state)
+        neighbors = state.get("neighbors") or []
+        hints = format_context_hints(neighbors)
+
         if state.get("vision_image_base64") and state.get("vision_image_mime"):
             user_text = format_vision_user_content(
                 email_subject=state.get("email_subject") or "",
                 email_from=state.get("email_from") or "",
                 body_hint=state.get("raw_text") or "",
+                hints=hints,
             )
             extracted = await llm.chat_completion_json_vision(
                 system_message=EXTRACT_VISION_SYSTEM_MESSAGE,
@@ -186,7 +191,7 @@ class IngestionNodes:
         truncated = state["raw_text"][:EXTRACT_RAW_TEXT_MAX_CHARS]
         messages = [
             {"role": "system", "content": EXTRACT_SYSTEM_MESSAGE},
-            {"role": "user", "content": format_extract_user_content(truncated)},
+            {"role": "user", "content": format_extract_user_content(truncated, hints)},
         ]
         extracted = await llm.chat_completion_json(messages)
         return {**state, "extracted": extracted}
