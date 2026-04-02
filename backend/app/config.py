@@ -204,6 +204,14 @@ class Settings(BaseSettings):
         """True when ENVIRONMENT=development."""
         return self.ENVIRONMENT == "development"
 
+    @computed_field  # type: ignore[misc]
+    @property
+    def redis_url(self) -> str:
+        """Redis connection URL for non-Celery clients (rate limits, SETNX helpers)."""
+        if self.REDIS_STANDALONE_URL.strip():
+            return self.REDIS_STANDALONE_URL.strip()
+        return self.CELERY_BROKER_URL.split("?")[0]
+
     # --- Observability ---
     SENTRY_DSN: str = Field(
         default="",
@@ -246,6 +254,10 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = Field(
         default="redis://localhost:6379/1",
         description="Redis DB for Celery results (use a different logical DB index than broker if single host)",
+    )
+    REDIS_STANDALONE_URL: str = Field(
+        default="",
+        description="Optional Redis URL for rate limits / cache; empty → derive from CELERY_BROKER_URL",
     )
 
     model_config = {
