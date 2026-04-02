@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.clients.gmail_api_client import GmailApiClient
 from app.controllers.gmail_controller import GmailController
@@ -74,7 +75,16 @@ async def test_pubsub_push_decodes_envelope_and_calls_sync() -> None:
     req.json = AsyncMock(return_value={"message": {"data": data_b64}})
 
     sync = MagicMock()
-    sync.sync_for_email_address = AsyncMock()
+    sync.sync_for_email_address = AsyncMock(
+        return_value={
+            "queued": 0,
+            "ingested": 0,
+            "skipped": 0,
+            "errors": [],
+            "mailbox": "acct@example.com",
+            "messages": [],
+        }
+    )
 
     ctl = GmailController(
         oauth_service=MagicMock(),
@@ -87,7 +97,10 @@ async def test_pubsub_push_decodes_envelope_and_calls_sync() -> None:
         st.GMAIL_PUBSUB_VERIFICATION_AUDIENCE = ""
         out = await ctl.pubsub_push(req)
 
-    assert out["status"] == "ok"
+    assert isinstance(out, JSONResponse)
+    assert out.status_code == 202
+    body = json.loads(out.body.decode())
+    assert body["mailbox"] == "acct@example.com"
     sync.sync_for_email_address.assert_awaited_once_with(
         email_address="acct@example.com",
         history_id="42",
@@ -145,4 +158,5 @@ async def test_pubsub_push_demo_short_circuit() -> None:
     with patch("app.controllers.gmail_controller.settings") as st:
         st.demo_mode = True
         out = await ctl.pubsub_push(req)
-    assert out["status"] == "ignored_demo"
+    assert isinstance(out, JSONResponse)
+    assert json.loads(out.body.decode())["status"] == "ignored_demo"

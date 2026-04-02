@@ -55,7 +55,7 @@ def test_gmail_sync_response_rejects_negative_skipped() -> None:
 
 def test_gmail_sync_response_accepts_zero_counts() -> None:
     r = GmailSyncResponse(ingested=0, skipped=0, mailbox="a@b.com")
-    assert r.ingested == 0 and r.skipped == 0
+    assert r.ingested == 0 and r.skipped == 0 and r.queued == 0
 
 
 @pytest.mark.asyncio
