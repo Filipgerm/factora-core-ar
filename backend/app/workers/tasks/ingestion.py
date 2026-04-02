@@ -34,6 +34,7 @@ async def _run_ingestion_async(organization_id: str, payload: dict[str, Any]) ->
             raw_text=payload.get("raw_text") or "",
             attachment_base64=payload.get("attachment_base64"),
             attachment_mime_type=payload.get("attachment_mime_type"),
+            attachment_storage_path=payload.get("attachment_storage_path"),
             email_subject=payload.get("email_subject"),
             email_from=payload.get("email_from"),
             include_vector_hints=bool(payload.get("include_vector_hints", True)),

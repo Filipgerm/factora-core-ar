@@ -42,12 +42,18 @@ class TaskQueueService:
             "raw_text": raw_text,
             "attachment_base64": attachment_base64,
             "attachment_mime_type": attachment_mime_type,
+            "attachment_storage_path": None,
             "email_subject": email_subject,
             "email_from": email_from,
             "include_vector_hints": include_vector_hints,
             "trigger": trigger,
         }
         async_result = run_ingestion_task.delay(organization_id, payload)
+        return str(async_result.id)
+
+    def enqueue_ingestion_payload(self, organization_id: str, payload: dict[str, Any]) -> str:
+        """Enqueue using a pre-built payload (e.g. after ``build_ingestion_celery_payload``)."""
+        async_result = run_ingestion_task.delay(organization_id, dict(payload))
         return str(async_result.id)
 
 
