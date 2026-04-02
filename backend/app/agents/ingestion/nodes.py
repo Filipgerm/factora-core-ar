@@ -153,56 +153,6 @@ class IngestionNodes:
             return {**state, "result": {"error": "empty_text"}}
         return None  # LangGraph treats None as "no state update" — skip to next node.
 
-    async def extract(self, state: IngestionState) -> IngestionState:
-        if "result" in state:
-            return state
-        llm = self._llm(state)
-        neighbors = state.get("neighbors") or []
-        hints = format_context_hints(neighbors)
-
-        if state.get("vision_image_base64") and state.get("vision_image_mime"):
-            user_text = format_vision_user_content(
-                email_subject=state.get("email_subject") or "",
-                email_from=state.get("email_from") or "",
-                body_hint=state.get("raw_text") or "",
-                hints=hints,
-            )
-            extracted = await llm.chat_completion_json_vision(
-                system_message=EXTRACT_VISION_SYSTEM_MESSAGE,
-                user_text=user_text,
-                image_base64=state["vision_image_base64"],
-                image_mime_type=state["vision_image_mime"],
-            )
-            return {**state, "extracted": extracted}
-
-        if settings.demo_mode:
-            extracted = {
-                "description": "Demo SaaS subscription invoice",
-                "amount": 120.0,
-                "vendor": "Demo Vendor A.E.",
-                "category": "software",
-                "is_recurring": True,
-                "confidence": 0.92,
-                "summary": (
-                    "Demo mode extraction. Subscription invoice from Demo Vendor A.E. "
-                    "for €120.00; treated as recurring software spend."
-                ),
-                "currency": "EUR",
-                "vat_rate": "24",
-                "line_items": ["Platform fee — €120.00"],
-                "issue_date": "",
-                "due_date": "",
-            }
-            return {**state, "extracted": extracted}
-
-        truncated = state["raw_text"][:EXTRACT_RAW_TEXT_MAX_CHARS]
-        messages = [
-            {"role": "system", "content": EXTRACT_SYSTEM_MESSAGE},
-            {"role": "user", "content": format_extract_user_content(truncated, hints)},
-        ]
-        extracted = await llm.chat_completion_json(messages)
-        return {**state, "extracted": extracted}
-
     async def context(self, state: IngestionState) -> IngestionState:
         """Fetch pgvector neighbors BEFORE extraction using raw email metadata.
 
@@ -236,6 +186,56 @@ class IngestionNodes:
             logger.warning("similarity search skipped: %s", e)
             neighbors = []
         return {**state, "neighbors": neighbors}
+
+    async def extract(self, state: IngestionState) -> IngestionState:
+        if "result" in state:
+            return state
+        llm = self._llm(state)
+        neighbors = state.get("neighbors") or []
+        hints = format_context_hints(neighbors)
+
+        if settings.demo_mode:
+            extracted = {
+                "description": "Demo SaaS subscription invoice",
+                "amount": 120.0,
+                "vendor": "Demo Vendor A.E.",
+                "category": "software",
+                "is_recurring": True,
+                "confidence": 0.92,
+                "summary": (
+                    "Demo mode extraction. Subscription invoice from Demo Vendor A.E. "
+                    "for €120.00; treated as recurring software spend."
+                ),
+                "currency": "EUR",
+                "vat_rate": "24",
+                "line_items": ["Platform fee — €120.00"],
+                "issue_date": "",
+                "due_date": "",
+            }
+            return {**state, "extracted": extracted}
+
+        if state.get("vision_image_base64") and state.get("vision_image_mime"):
+            user_text = format_vision_user_content(
+                email_subject=state.get("email_subject") or "",
+                email_from=state.get("email_from") or "",
+                body_hint=state.get("raw_text") or "",
+                hints=hints,
+            )
+            extracted = await llm.chat_completion_json_vision(
+                system_message=EXTRACT_VISION_SYSTEM_MESSAGE,
+                user_text=user_text,
+                image_base64=state["vision_image_base64"],
+                image_mime_type=state["vision_image_mime"],
+            )
+            return {**state, "extracted": extracted}
+
+        truncated = state["raw_text"][:EXTRACT_RAW_TEXT_MAX_CHARS]
+        messages = [
+            {"role": "system", "content": EXTRACT_SYSTEM_MESSAGE},
+            {"role": "user", "content": format_extract_user_content(truncated, hints)},
+        ]
+        extracted = await llm.chat_completion_json(messages)
+        return {**state, "extracted": extracted}
 
     async def resolve_counterparty(self, state: IngestionState) -> IngestionState:
         """Map the extracted vendor to an existing Counterparty record in the DB.
@@ -272,9 +272,8 @@ class IngestionNodes:
                     select(Counterparty.id)
                     .where(
                         Counterparty.organization_id == org_id,
-                        func.upper(
-                            func.replace(Counterparty.vat_number, " ", "")
-                        ) == raw_vat,
+                        func.upper(func.replace(Counterparty.vat_number, " ", ""))
+                        == raw_vat,
                         Counterparty.deleted_at.is_(None),
                     )
                     .limit(1)
@@ -356,14 +355,11 @@ class IngestionNodes:
 
         if counterparty_id:
             # Precise path: FK join — handles all vendor name variants correctly.
-            q = (
-                select(Invoice.amount, Invoice.issue_date)
-                .where(
-                    Invoice.organization_id == org_id,
-                    Invoice.counterparty_id == counterparty_id,
-                    Invoice.deleted_at.is_(None),
-                    Invoice.issue_date.is_not(None),
-                )
+            q = select(Invoice.amount, Invoice.issue_date).where(
+                Invoice.organization_id == org_id,
+                Invoice.counterparty_id == counterparty_id,
+                Invoice.deleted_at.is_(None),
+                Invoice.issue_date.is_not(None),
             )
         else:
             # Fallback: substring ILIKE for vendors not yet in the DB.
@@ -372,17 +368,14 @@ class IngestionNodes:
             vendor = (ext.get("vendor") or "").strip()
             if not vendor:
                 return {**state, "recurrence_months_found": 0}
-            safe_vendor = vendor.replace("!", "!!").replace("%", "!%").replace("_", "!_")
-            q = (
-                select(Invoice.amount, Invoice.issue_date)
-                .where(
-                    Invoice.organization_id == org_id,
-                    Invoice.counterparty_display_name.ilike(
-                        f"%{safe_vendor}%", escape="!"
-                    ),
-                    Invoice.deleted_at.is_(None),
-                    Invoice.issue_date.is_not(None),
-                )
+            safe_vendor = (
+                vendor.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+            )
+            q = select(Invoice.amount, Invoice.issue_date).where(
+                Invoice.organization_id == org_id,
+                Invoice.counterparty_display_name.ilike(f"%{safe_vendor}%", escape="!"),
+                Invoice.deleted_at.is_(None),
+                Invoice.issue_date.is_not(None),
             )
 
         try:
