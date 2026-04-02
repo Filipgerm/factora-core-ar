@@ -45,6 +45,7 @@ dependencies = [
     "google-auth>=2.49.1",
     "cryptography>=46.0.5",
     "sentry-sdk[fastapi]>=2.56.0",
+    "celery[redis]>=5.4.0",
 ]
 
 [dependency-groups]
