@@ -14,6 +14,7 @@ task at a time without nested event-loop issues.
 from __future__ import annotations
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.config import settings
 
@@ -21,7 +22,12 @@ celery_app = Celery(
     "factora",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.workers.tasks.ingestion"],
+    include=[
+        "app.workers.tasks.ingestion",
+        "app.workers.tasks.gmail",
+        "app.workers.tasks.future_agents",
+        "app.workers.tasks.maintenance",
+    ],
 )
 
 celery_app.conf.update(
@@ -35,4 +41,12 @@ celery_app.conf.update(
     task_soft_time_limit=840,
     worker_prefetch_multiplier=1,
     broker_connection_retry_on_startup=True,
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    beat_schedule={
+        "maintenance-hourly-heartbeat": {
+            "task": "maintenance.worker_heartbeat",
+            "schedule": crontab(minute=0),
+        },
+    },
 )
