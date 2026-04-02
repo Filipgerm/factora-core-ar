@@ -50,6 +50,20 @@ async def upload_bytes(
     await anyio.to_thread.run_sync(_do_upload)
 
 
+async def download_bytes(storage_path: str, *, bucket: str | None = None) -> bytes:
+    """Download an object from the default (or given) bucket."""
+
+    def _do_download() -> bytes:
+        supabase = get_supabase()
+        b = bucket or SUPABASE_BUCKET
+        data = supabase.storage.from_(b).download(storage_path)
+        if isinstance(data, (bytes, bytearray)):
+            return bytes(data)
+        raise TypeError("storage download returned unexpected type")
+
+    return await anyio.to_thread.run_sync(_do_download)
+
+
 def storage_public_url(storage_path: str, *, bucket: str | None = None) -> str:
     supabase = get_supabase()
     b = bucket or SUPABASE_BUCKET
