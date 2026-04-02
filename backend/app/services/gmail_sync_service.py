@@ -5,8 +5,8 @@
 **Flow:**
     1. Load ``GmailMailboxConnection``; decrypt refresh; refresh access token.
     2. List new message ids (history or ``messages.list`` fallback).
-    3. For each message with attachments (or body text), skip if processed.
-    4. ``IngestionService.run_ingestion`` → ``InvoiceService.create`` with ``source=GMAIL``.
+    3. Reserve ``GmailProcessedMessage`` rows, commit, enqueue Celery (or process inline in worker).
+    4. Worker path: fetch MIME → ``IngestionService`` → ``InvoiceService.create`` with ``source=GMAIL``.
 """
 
 from __future__ import annotations
@@ -19,13 +19,14 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gmail_api_client import GmailApiClient
 from app.core.exceptions import NotFoundError, ValidationError as AppValidationError
 from app.core.security.field_encryption import decrypt_secret
 from app.db.models.gmail import GmailMailboxConnection, GmailProcessedMessage
-from app.models.gmail import GmailSyncMessageDetail
+from app.models.gmail import GmailSyncMessageDetail, GmailSyncOutcome
 from app.models.invoices import (
     InvoiceCreateRequest,
     InvoiceSourceEnum,
@@ -160,6 +161,216 @@ class GmailSyncService:
             )
         return conn
 
+    def _enqueue_gmail_task(self, organization_id: str, processed_row_id: str) -> str:
+        """Push work to Celery (lazy import avoids worker ↔ service cycles)."""
+        from app.workers.tasks.gmail import process_gmail_message_task
+
+        return str(process_gmail_message_task.delay(organization_id, processed_row_id).id)
+
+    async def process_reserved_gmail_message(self, processed_message_id: str) -> GmailSyncMessageDetail:
+        """Worker entry: complete ingest + invoice for a ``queued`` processed row."""
+        row = await self._db.get(GmailProcessedMessage, processed_message_id)
+        if not row:
+            return GmailSyncMessageDetail(
+                gmail_message_id="",
+                subject="",
+                outcome="error",
+                error="reserved_row_not_found",
+            )
+        mid = row.gmail_message_id
+        organization_id = row.organization_id
+        if row.ingest_status == "completed":
+            return GmailSyncMessageDetail(
+                gmail_message_id=mid,
+                subject="",
+                outcome="skipped_already_processed",
+            )
+        if row.ingest_status in ("skipped_duplicate",):
+            return GmailSyncMessageDetail(
+                gmail_message_id=mid,
+                subject="",
+                outcome="skipped_duplicate_invoice",
+            )
+
+        row.ingest_status = "processing"
+        row.error_message = None
+        await self._db.commit()
+
+        try:
+            conn = await self._connection(organization_id, row.mailbox_google_email)
+            access = await self._access_token(conn)
+            msg = await self._gmail.get_message(access_token=access, message_id=mid)
+            payload = msg.get("payload") or {}
+            subject = _subject_from_payload(payload) or ""
+            text_chunks: list[str] = []
+            files: list[tuple[str, str, str]] = []
+            _walk_parts(payload, files, text_chunks)
+            snippet = msg.get("snippet") or ""
+            body_text = "\n".join(text_chunks).strip() or snippet
+
+            attachment_b64: str | None = None
+            attachment_mime: str | None = None
+            if files:
+                _, mime, att_id = files[0]
+                att = await self._gmail.get_attachment(
+                    access_token=access,
+                    message_id=mid,
+                    attachment_id=att_id,
+                )
+                raw_b64 = att.get("data") or ""
+                attachment_b64 = raw_b64.replace("-", "+").replace("_", "/")
+                attachment_mime = mime
+
+            from_hdr = ""
+            for h in payload.get("headers") or []:
+                if (h.get("name") or "").lower() == "from":
+                    from_hdr = h.get("value") or ""
+                    break
+
+            ingestion = IngestionService(self._db, organization_id)
+            result = await ingestion.run_ingestion(
+                raw_text=body_text,
+                attachment_base64=attachment_b64,
+                attachment_mime_type=attachment_mime,
+                email_subject=subject,
+                email_from=from_hdr,
+                include_vector_hints=True,
+                trigger="gmail_sync",
+            )
+
+            if result.get("error"):
+                err = str(result.get("error") or "ingestion error")
+                upd = await self._db.get(GmailProcessedMessage, processed_message_id)
+                if upd:
+                    upd.ingest_status = "failed"
+                    upd.error_message = err[:8000]
+                    await self._db.commit()
+                return GmailSyncMessageDetail(
+                    gmail_message_id=mid,
+                    subject=subject,
+                    outcome="ingestion_failed",
+                    error=err[:2000],
+                )
+
+            ext_vendor = (result.get("vendor") or "Unknown")[:255]
+            amt = result.get("amount")
+            try:
+                dec_amt = Decimal(str(amt)) if amt is not None else Decimal("0.01")
+            except Exception:
+                dec_amt = Decimal("0.01")
+            if dec_amt <= 0:
+                dec_amt = Decimal("0.01")
+
+            currency = (result.get("currency") or "EUR").upper()[:3]
+            if len(currency) != 3:
+                currency = "EUR"
+
+            inv_status = (
+                InvoiceStatusEnum.PENDING_REVIEW
+                if result.get("requires_human_review")
+                else InvoiceStatusEnum.DRAFT
+            )
+
+            issue_d = _parse_iso_date(result.get("issue_date")) or _date_from_gmail_internal(
+                msg.get("internalDate")
+            ) or date.today()
+            due_d = _parse_iso_date(result.get("due_date"))
+
+            conf_raw = result.get("confidence")
+            try:
+                conf_f = float(conf_raw) if conf_raw is not None else None
+            except (TypeError, ValueError):
+                conf_f = None
+            summary_short = (result.get("summary") or "")[:500] or None
+
+            resolved_cp_id: str | None = result.get("resolved_counterparty_id") or None
+
+            inv_svc = InvoiceService(self._db, organization_id)
+            try:
+                inv = await inv_svc.create(
+                    InvoiceCreateRequest(
+                        source=InvoiceSourceEnum.GMAIL,
+                        external_id=mid,
+                        counterparty_id=resolved_cp_id,
+                        counterparty_display_name=ext_vendor,
+                        amount=dec_amt,
+                        currency=currency,
+                        issue_date=issue_d,
+                        due_date=due_d,
+                        status=inv_status,
+                        confidence=conf_f,
+                        is_recurring=bool(result.get("is_recurring", False)),
+                        requires_human_review=bool(result.get("requires_human_review")),
+                    )
+                )
+            except AppValidationError as ve:
+                if getattr(ve, "code", None) == "validation.duplicate_external_id":
+                    upd = await self._db.get(GmailProcessedMessage, processed_message_id)
+                    if upd:
+                        upd.ingest_status = "skipped_duplicate"
+                        upd.error_message = None
+                        await self._db.commit()
+                    return GmailSyncMessageDetail(
+                        gmail_message_id=mid,
+                        subject=subject,
+                        outcome="skipped_duplicate_invoice",
+                    )
+                raise
+
+            vec = result.get("embedding")
+            if isinstance(vec, list) and vec:
+                vs = VectorStoreService(self._db, organization_id)
+                try:
+                    await vs.persist_precomputed_vector(
+                        content_text=_embedding_content_text(result),
+                        source="gmail_ingestion",
+                        vector=vec,
+                        embedding_metadata={
+                            "gmail_message_id": mid,
+                            "invoice_id": inv.id,
+                            "source": "gmail",
+                            "invoice_month": inv.issue_date.month,
+                            "invoice_year": inv.issue_date.year,
+                            "is_recurring": bool(result.get("is_recurring", False)),
+                            "category": result.get("category") or "",
+                        },
+                        counterparty_id=inv.counterparty_id,
+                    )
+                except Exception as embed_err:
+                    logger.warning("gmail embedding persist skipped for %s: %s", mid, embed_err)
+
+            fin = await self._db.get(GmailProcessedMessage, processed_message_id)
+            if fin:
+                fin.ingest_status = "completed"
+                fin.error_message = None
+            conn.history_id = str(msg.get("historyId") or conn.history_id or "")
+            await self._db.commit()
+            return GmailSyncMessageDetail(
+                gmail_message_id=mid,
+                subject=subject,
+                outcome="ingested",
+                invoice_id=inv.id,
+                confidence=conf_f,
+                requires_human_review=bool(result.get("requires_human_review")),
+                extraction_summary=summary_short,
+                vendor=ext_vendor,
+            )
+        except Exception as e:
+            await self._db.rollback()
+            logger.exception("gmail reserved ingest failed for row %s", processed_message_id)
+            err_s = str(e)
+            fail_row = await self._db.get(GmailProcessedMessage, processed_message_id)
+            if fail_row:
+                fail_row.ingest_status = "failed"
+                fail_row.error_message = err_s[:8000]
+                await self._db.commit()
+            return GmailSyncMessageDetail(
+                gmail_message_id=mid,
+                subject="",
+                outcome="error",
+                error=err_s[:2000],
+            )
+
     async def sync_mailbox(
         self,
         *,
@@ -202,20 +413,46 @@ class GmailSyncService:
                 if m.get("id"):
                     message_ids.append(m["id"])
 
-        ingested = 0
+        queued = 0
         skipped = 0
         errors: list[str] = []
         messages_out: list[GmailSyncMessageDetail] = []
 
         for mid in message_ids[:max_messages]:
-            subject = ""
-            exists = await self._db.scalar(
-                select(GmailProcessedMessage.id).where(
+            existing = await self._db.scalar(
+                select(GmailProcessedMessage).where(
                     GmailProcessedMessage.organization_id == organization_id,
                     GmailProcessedMessage.gmail_message_id == mid,
                 )
             )
-            if exists:
+            if existing:
+                skipped += 1
+                if existing.ingest_status in ("queued", "processing"):
+                    outcome: GmailSyncOutcome = "queued_pending"
+                else:
+                    outcome = "skipped_already_processed"
+                messages_out.append(
+                    GmailSyncMessageDetail(
+                        gmail_message_id=mid,
+                        subject="",
+                        outcome=outcome,
+                        celery_task_id=existing.celery_task_id,
+                    )
+                )
+                continue
+
+            row = GmailProcessedMessage(
+                id=str(uuid.uuid4()),
+                organization_id=organization_id,
+                gmail_message_id=mid,
+                ingest_status="queued",
+                mailbox_google_email=mailbox_email,
+            )
+            self._db.add(row)
+            try:
+                await self._db.commit()
+            except IntegrityError:
+                await self._db.rollback()
                 skipped += 1
                 messages_out.append(
                     GmailSyncMessageDetail(
@@ -227,183 +464,16 @@ class GmailSyncService:
                 continue
 
             try:
-                msg = await self._gmail.get_message(access_token=access, message_id=mid)
-                payload = msg.get("payload") or {}
-                subject = _subject_from_payload(payload) or ""
-                text_chunks: list[str] = []
-                files: list[tuple[str, str, str]] = []
-                _walk_parts(payload, files, text_chunks)
-                snippet = msg.get("snippet") or ""
-                body_text = "\n".join(text_chunks).strip() or snippet
-
-                attachment_b64: str | None = None
-                attachment_mime: str | None = None
-                if files:
-                    _, mime, att_id = files[0]
-                    att = await self._gmail.get_attachment(
-                        access_token=access,
-                        message_id=mid,
-                        attachment_id=att_id,
-                    )
-                    raw_b64 = att.get("data") or ""
-                    attachment_b64 = raw_b64.replace("-", "+").replace("_", "/")
-                    attachment_mime = mime
-
-                from_hdr = ""
-                for h in payload.get("headers") or []:
-                    if (h.get("name") or "").lower() == "from":
-                        from_hdr = h.get("value") or ""
-                        break
-
-                ingestion = IngestionService(self._db, organization_id)
-                result = await ingestion.run_ingestion(
-                    raw_text=body_text,
-                    attachment_base64=attachment_b64,
-                    attachment_mime_type=attachment_mime,
-                    email_subject=subject,
-                    email_from=from_hdr,
-                    include_vector_hints=True,
-                    trigger="gmail_sync",
-                )
-
-                if result.get("error"):
-                    err = str(result.get("error") or "ingestion error")
-                    errors.append(f"{mid}: {err}")
-                    messages_out.append(
-                        GmailSyncMessageDetail(
-                            gmail_message_id=mid,
-                            subject=subject,
-                            outcome="ingestion_failed",
-                            error=err[:2000],
-                        )
-                    )
-                    continue
-
-                ext_vendor = (result.get("vendor") or "Unknown")[:255]
-                amt = result.get("amount")
-                try:
-                    dec_amt = Decimal(str(amt)) if amt is not None else Decimal("0.01")
-                except Exception:
-                    dec_amt = Decimal("0.01")
-                if dec_amt <= 0:
-                    dec_amt = Decimal("0.01")
-
-                currency = (result.get("currency") or "EUR").upper()[:3]
-                if len(currency) != 3:
-                    currency = "EUR"
-
-                inv_status = (
-                    InvoiceStatusEnum.PENDING_REVIEW
-                    if result.get("requires_human_review")
-                    else InvoiceStatusEnum.DRAFT
-                )
-
-                issue_d = _parse_iso_date(result.get("issue_date")) or _date_from_gmail_internal(
-                    msg.get("internalDate")
-                ) or date.today()
-                due_d = _parse_iso_date(result.get("due_date"))
-
-                conf_raw = result.get("confidence")
-                try:
-                    conf_f = float(conf_raw) if conf_raw is not None else None
-                except (TypeError, ValueError):
-                    conf_f = None
-                summary_short = (result.get("summary") or "")[:500] or None
-
-                resolved_cp_id: str | None = result.get("resolved_counterparty_id") or None
-
-                inv_svc = InvoiceService(self._db, organization_id)
-                try:
-                    inv = await inv_svc.create(
-                        InvoiceCreateRequest(
-                            source=InvoiceSourceEnum.GMAIL,
-                            external_id=mid,
-                            counterparty_id=resolved_cp_id,
-                            counterparty_display_name=ext_vendor,
-                            amount=dec_amt,
-                            currency=currency,
-                            issue_date=issue_d,
-                            due_date=due_d,
-                            status=inv_status,
-                            confidence=conf_f,
-                            is_recurring=bool(result.get("is_recurring", False)),
-                            requires_human_review=bool(result.get("requires_human_review")),
-                        )
-                    )
-                except AppValidationError as ve:
-                    if getattr(ve, "code", None) == "validation.duplicate_external_id":
-                        skipped += 1
-                        self._db.add(
-                            GmailProcessedMessage(
-                                id=str(uuid.uuid4()),
-                                organization_id=organization_id,
-                                gmail_message_id=mid,
-                            )
-                        )
-                        await self._db.commit()
-                        messages_out.append(
-                            GmailSyncMessageDetail(
-                                gmail_message_id=mid,
-                                subject=subject,
-                                outcome="skipped_duplicate_invoice",
-                            )
-                        )
-                        continue
-                    raise
-
-                vec = result.get("embedding")
-                if isinstance(vec, list) and vec:
-                    vs = VectorStoreService(self._db, organization_id)
-                    try:
-                        # is_recurring comes from the agent: LLM text signal combined
-                        # with the check_recurrence DB temporal-pattern node.
-                        await vs.persist_precomputed_vector(
-                            content_text=_embedding_content_text(result),
-                            source="gmail_ingestion",
-                            vector=vec,
-                            embedding_metadata={
-                                "gmail_message_id": mid,
-                                "invoice_id": inv.id,
-                                "source": "gmail",
-                                "invoice_month": inv.issue_date.month,
-                                "invoice_year": inv.issue_date.year,
-                                "is_recurring": bool(result.get("is_recurring", False)),
-                                "category": result.get("category") or "",
-                            },
-                            counterparty_id=inv.counterparty_id,
-                        )
-                    except Exception as embed_err:
-                        logger.warning(
-                            "gmail embedding persist skipped for %s: %s", mid, embed_err
-                        )
-
-                self._db.add(
-                    GmailProcessedMessage(
-                        id=str(uuid.uuid4()),
-                        organization_id=organization_id,
-                        gmail_message_id=mid,
-                    )
-                )
-                conn.history_id = str(msg.get("historyId") or conn.history_id or "")
-                await self._db.commit()
-                ingested += 1
-                messages_out.append(
-                    GmailSyncMessageDetail(
-                        gmail_message_id=mid,
-                        subject=subject,
-                        outcome="ingested",
-                        invoice_id=inv.id,
-                        confidence=conf_f,
-                        requires_human_review=bool(result.get("requires_human_review")),
-                        extraction_summary=summary_short,
-                        vendor=ext_vendor,
-                    )
-                )
+                tid = self._enqueue_gmail_task(organization_id, row.id)
             except Exception as e:
-                await self._db.rollback()
-                logger.exception("gmail ingest failed for %s", mid)
                 err_s = str(e)
+                logger.exception("gmail enqueue failed for %s", mid)
                 errors.append(f"{mid}: {err_s}")
+                fail_row = await self._db.get(GmailProcessedMessage, row.id)
+                if fail_row:
+                    fail_row.ingest_status = "failed"
+                    fail_row.error_message = f"enqueue: {err_s}"[:8000]
+                    await self._db.commit()
                 messages_out.append(
                     GmailSyncMessageDetail(
                         gmail_message_id=mid,
@@ -412,16 +482,33 @@ class GmailSyncService:
                         error=err_s[:2000],
                     )
                 )
+                continue
+
+            fresh = await self._db.get(GmailProcessedMessage, row.id)
+            if fresh:
+                fresh.celery_task_id = tid
+                await self._db.commit()
+
+            queued += 1
+            messages_out.append(
+                GmailSyncMessageDetail(
+                    gmail_message_id=mid,
+                    subject="",
+                    outcome="queued",
+                    celery_task_id=tid,
+                )
+            )
 
         logger.info(
-            "gmail sync complete: mailbox=%s ingested=%d skipped=%d errors=%d",
+            "gmail sync queue: mailbox=%s queued=%d skipped=%d errors=%d",
             mailbox_email,
-            ingested,
+            queued,
             skipped,
             len(errors),
         )
         return {
-            "ingested": ingested,
+            "queued": queued,
+            "ingested": queued,
             "skipped": skipped,
             "errors": errors,
             "mailbox": mailbox_email,
@@ -443,6 +530,7 @@ class GmailSyncService:
         if not conn:
             logger.warning("Pub/Sub for unknown mailbox: %s", email_address)
             return {
+                "queued": 0,
                 "ingested": 0,
                 "skipped": 0,
                 "errors": ["unknown_mailbox"],
