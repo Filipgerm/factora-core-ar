@@ -43,6 +43,7 @@ from app.services.ai_service import AIService
 from app.services.file_service import FileService
 from app.services.invoice_service import InvoiceService
 from app.services.ingestion_service import IngestionService
+from app.services.task_queue_service import TaskQueueService, get_task_queue_service
 from app.services.gmail_oauth_service import GmailOAuthService
 from app.services.gmail_sync_service import GmailSyncService
 from app.controllers.gmail_controller import GmailController
@@ -357,6 +358,14 @@ def get_ingestion_service(
 IngSvc = Annotated[IngestionService, Depends(get_ingestion_service)]
 
 
+def get_task_queue() -> TaskQueueService:
+    """Stateless Celery enqueue facade — inject where background ingestion is queued."""
+    return get_task_queue_service()
+
+
+TaskQ = Annotated[TaskQueueService, Depends(get_task_queue)]
+
+
 def get_gmail_oauth_service(db: DB) -> GmailOAuthService:
     return GmailOAuthService(db)
 
@@ -462,7 +471,9 @@ def get_stripe_sync_service(
 def get_stripe_controller(
     db: DB,
     org_id: CurrentOrgId,
-    webhook_service: Annotated[StripeWebhookService, Depends(get_stripe_webhook_service)],
+    webhook_service: Annotated[
+        StripeWebhookService, Depends(get_stripe_webhook_service)
+    ],
     stripe_client: Annotated[StripeClient, Depends(get_stripe_client)],
 ) -> StripeController:
     return StripeController(
@@ -472,7 +483,9 @@ def get_stripe_controller(
 
 def get_stripe_controller_for_webhook(
     db: DB,
-    webhook_service: Annotated[StripeWebhookService, Depends(get_stripe_webhook_service)],
+    webhook_service: Annotated[
+        StripeWebhookService, Depends(get_stripe_webhook_service)
+    ],
     stripe_client: Annotated[StripeClient, Depends(get_stripe_client)],
 ) -> StripeController:
     return StripeController(
@@ -481,4 +494,6 @@ def get_stripe_controller_for_webhook(
 
 
 StripeCtrl = Annotated[StripeController, Depends(get_stripe_controller)]
-StripeWebhookCtrl = Annotated[StripeController, Depends(get_stripe_controller_for_webhook)]
+StripeWebhookCtrl = Annotated[
+    StripeController, Depends(get_stripe_controller_for_webhook)
+]

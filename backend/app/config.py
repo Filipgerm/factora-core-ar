@@ -238,6 +238,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Celery + Redis (background tasks) ---
+    CELERY_BROKER_URL: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis URL for Celery broker (e.g. redis://:pass@host:6379/0)",
+    )
+    CELERY_RESULT_BACKEND: str = Field(
+        default="redis://localhost:6379/1",
+        description="Redis DB for Celery results (use a different logical DB index than broker if single host)",
+    )
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
