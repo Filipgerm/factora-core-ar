@@ -57,6 +57,8 @@ dev = [
     "pytest-cov",
     "asgi-lifespan",
     "httpx",
+    # Optional Celery monitoring UI (local): celery ... flower
+    "flower>=2.0.0",
 ]
 
 [tool.pytest.ini_options]
