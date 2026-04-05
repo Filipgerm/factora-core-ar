@@ -453,6 +453,421 @@ async def _insert_alerts(session: AsyncSession, org_id: str) -> None:
     logger.info("Inserted 4 active alerts")
 
 
+async def _insert_gl(session: AsyncSession, org_id: str) -> None:
+    """Seed SaaS-style general ledger data (IFRS 15 wording, multi-entity, usage batches)."""
+    from app.db.models._utils import utcnow
+    from app.db.models.gl import (
+        GlAccount,
+        GlAccountType,
+        GlAccountingPeriod,
+        GlAuditEvent,
+        GlBillingBatch,
+        GlDimension,
+        GlDimensionValue,
+        GlJournalEntry,
+        GlJournalLine,
+        GlJournalLineDimensionTag,
+        GlJournalStatus,
+        GlLegalEntity,
+        GlNormalBalance,
+        GlPeriodStatus,
+        GlRecurringEntryTemplate,
+        GlRecurringEntryTemplateLine,
+        GlRecurringFrequency,
+        GlRevenueRecognitionSchedule,
+        GlRevenueRecognitionScheduleLine,
+        GlSubledgerKind,
+    )
+
+    e1 = "00000000-0000-6000-8000-000000000001"
+    e2 = "00000000-0000-6000-8000-000000000002"
+    session.add(
+        GlLegalEntity(
+            id=e1,
+            organization_id=org_id,
+            code="HOLD",
+            name="Factora Holding EU",
+            functional_currency="EUR",
+            is_primary=True,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+    session.add(
+        GlLegalEntity(
+            id=e2,
+            organization_id=org_id,
+            code="US_SUB",
+            name="Factora US Inc.",
+            functional_currency="USD",
+            is_primary=False,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+
+    dim_cust = "00000000-0000-6000-8000-000000000010"
+    dim_prod = "00000000-0000-6000-8000-000000000011"
+    dim_dept = "00000000-0000-6000-8000-000000000012"
+    session.add(
+        GlDimension(
+            id=dim_cust,
+            organization_id=org_id,
+            key="customer",
+            label="Customer",
+            deleted_at=None,
+        )
+    )
+    session.add(
+        GlDimension(
+            id=dim_prod,
+            organization_id=org_id,
+            key="product_line",
+            label="Product line",
+            deleted_at=None,
+        )
+    )
+    session.add(
+        GlDimension(
+            id=dim_dept,
+            organization_id=org_id,
+            key="department",
+            label="Department",
+            deleted_at=None,
+        )
+    )
+
+    dv_acme = "00000000-0000-6000-8000-000000000020"
+    dv_ent = "00000000-0000-6000-8000-000000000021"
+    dv_api = "00000000-0000-6000-8000-000000000022"
+    dv_fin = "00000000-0000-6000-8000-000000000023"
+    session.add(
+        GlDimensionValue(
+            id=dv_acme,
+            organization_id=org_id,
+            dimension_id=dim_cust,
+            code="ACME",
+            label="Acme Corp",
+            deleted_at=None,
+        )
+    )
+    session.add(
+        GlDimensionValue(
+            id=dv_ent,
+            organization_id=org_id,
+            dimension_id=dim_prod,
+            code="ENT",
+            label="Enterprise tier",
+            deleted_at=None,
+        )
+    )
+    session.add(
+        GlDimensionValue(
+            id=dv_api,
+            organization_id=org_id,
+            dimension_id=dim_prod,
+            code="API",
+            label="API usage",
+            deleted_at=None,
+        )
+    )
+    session.add(
+        GlDimensionValue(
+            id=dv_fin,
+            organization_id=org_id,
+            dimension_id=dim_dept,
+            code="FIN",
+            label="Finance",
+            deleted_at=None,
+        )
+    )
+
+    acc_cash = "00000000-0000-6000-8000-000000000030"
+    acc_ar = "00000000-0000-6000-8000-000000000031"
+    acc_def = "00000000-0000-6000-8000-000000000032"
+    acc_rev = "00000000-0000-6000-8000-000000000033"
+    acc_cogs = "00000000-0000-6000-8000-000000000034"
+    acc_ap = "00000000-0000-6000-8000-000000000035"
+    acc_opex = "00000000-0000-6000-8000-000000000036"
+    for aid, code, name, atype, nb, ctrl, sub in [
+        (acc_cash, "1000", "Cash and cash equivalents", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (acc_ar, "1100", "Trade receivables (control)", GlAccountType.ASSET, GlNormalBalance.DEBIT, True, GlSubledgerKind.AR),
+        (acc_def, "2000", "Deferred contract liability", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (acc_ap, "2100", "Trade payables (control)", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, True, GlSubledgerKind.AP),
+        (acc_rev, "4000", "Subscription revenue", GlAccountType.REVENUE, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (acc_cogs, "5000", "Cost of subscription services", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (acc_opex, "6100", "General & administrative", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+    ]:
+        session.add(
+            GlAccount(
+                id=aid,
+                organization_id=org_id,
+                parent_account_id=None,
+                code=code,
+                name=name,
+                account_type=atype,
+                normal_balance=nb,
+                subledger_kind=sub,
+                is_active=True,
+                is_control_account=ctrl,
+                sort_order=int(code),
+                deleted_at=None,
+                created_at=utcnow(),
+                updated_at=utcnow(),
+            )
+        )
+
+    p_jan = "00000000-0000-6000-8000-000000000040"
+    p_feb = "00000000-0000-6000-8000-000000000041"
+    session.add(
+        GlAccountingPeriod(
+            id=p_jan,
+            organization_id=org_id,
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            label="Jan 2026",
+            status=GlPeriodStatus.OPEN,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+    session.add(
+        GlAccountingPeriod(
+            id=p_feb,
+            organization_id=org_id,
+            period_start=date(2026, 2, 1),
+            period_end=date(2026, 2, 28),
+            label="Feb 2026",
+            status=GlPeriodStatus.SOFT_CLOSE,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+
+    je_posted = "00000000-0000-6000-8000-000000000050"
+    je_draft = "00000000-0000-6000-8000-000000000051"
+    jl_p1 = "00000000-0000-6000-8000-000000000060"
+    jl_p2 = "00000000-0000-6000-8000-000000000061"
+    jl_d1 = "00000000-0000-6000-8000-000000000062"
+    jl_d2 = "00000000-0000-6000-8000-000000000063"
+
+    session.add(
+        GlJournalEntry(
+            id=je_posted,
+            organization_id=org_id,
+            legal_entity_id=e1,
+            posting_period_id=p_jan,
+            status=GlJournalStatus.POSTED,
+            document_currency="EUR",
+            base_currency="EUR",
+            fx_rate_to_base=Decimal("1"),
+            memo="Cash invoicing — performance obligation satisfied over time (IFRS 15)",
+            reference="INV-GL-001",
+            source_batch_id="batch-stripe-usage-001",
+            posted_at=utcnow(),
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+    session.add(
+        GlJournalLine(
+            id=jl_p1,
+            organization_id=org_id,
+            journal_entry_id=je_posted,
+            account_id=acc_cash,
+            description="Cash receipt from enterprise contract",
+            debit=Decimal("12000.00"),
+            credit=Decimal("0"),
+            line_order=0,
+        )
+    )
+    session.add(
+        GlJournalLine(
+            id=jl_p2,
+            organization_id=org_id,
+            journal_entry_id=je_posted,
+            account_id=acc_def,
+            description="Deferred contract liability — unearned portion",
+            debit=Decimal("0"),
+            credit=Decimal("12000.00"),
+            line_order=1,
+        )
+    )
+    session.add(
+        GlJournalLineDimensionTag(journal_line_id=jl_p1, dimension_value_id=dv_acme)
+    )
+    session.add(
+        GlJournalLineDimensionTag(journal_line_id=jl_p1, dimension_value_id=dv_ent)
+    )
+
+    session.add(
+        GlJournalEntry(
+            id=je_draft,
+            organization_id=org_id,
+            legal_entity_id=e1,
+            posting_period_id=p_jan,
+            status=GlJournalStatus.DRAFT,
+            document_currency="EUR",
+            base_currency="EUR",
+            fx_rate_to_base=Decimal("1"),
+            memo="Draft: recognize January subscription revenue",
+            reference=None,
+            source_batch_id=None,
+            posted_at=None,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+    session.add(
+        GlJournalLine(
+            id=jl_d1,
+            organization_id=org_id,
+            journal_entry_id=je_draft,
+            account_id=acc_def,
+            description="Release deferred liability",
+            debit=Decimal("5000.00"),
+            credit=Decimal("0"),
+            line_order=0,
+        )
+    )
+    session.add(
+        GlJournalLine(
+            id=jl_d2,
+            organization_id=org_id,
+            journal_entry_id=je_draft,
+            account_id=acc_rev,
+            description="Revenue recognized in period",
+            debit=Decimal("0"),
+            credit=Decimal("5000.00"),
+            line_order=1,
+        )
+    )
+
+    session.add(
+        GlBillingBatch(
+            id="00000000-0000-6000-8000-000000000070",
+            organization_id=org_id,
+            legal_entity_id=e1,
+            external_batch_id="batch-stripe-usage-001",
+            source_system="stripe_billing",
+            event_count=2_847_192,
+            total_amount=Decimal("12000.00"),
+            currency="EUR",
+            received_at=utcnow(),
+        )
+    )
+    session.add(
+        GlBillingBatch(
+            id="00000000-0000-6000-8000-000000000071",
+            organization_id=org_id,
+            legal_entity_id=e2,
+            external_batch_id="batch-metronome-hourly-us",
+            source_system="metronome",
+            event_count=9_102_334,
+            total_amount=Decimal("48000.00"),
+            currency="USD",
+            received_at=utcnow(),
+        )
+    )
+
+    sch_id = "00000000-0000-6000-8000-000000000080"
+    session.add(
+        GlRevenueRecognitionSchedule(
+            id=sch_id,
+            organization_id=org_id,
+            legal_entity_id=e1,
+            contract_name="Acme — 12-month enterprise (IFRS 15 schedule)",
+            currency="EUR",
+            total_contract_value=Decimal("12000.00"),
+            created_at=utcnow(),
+        )
+    )
+    for i, (opn, rec, clo) in enumerate(
+        [
+            (Decimal("12000"), Decimal("1000"), Decimal("11000")),
+            (Decimal("11000"), Decimal("1000"), Decimal("10000")),
+            (Decimal("10000"), Decimal("1000"), Decimal("9000")),
+        ]
+    ):
+        session.add(
+            GlRevenueRecognitionScheduleLine(
+                id=f"00000000-0000-6000-8000-00000000008{i + 1}",
+                organization_id=org_id,
+                schedule_id=sch_id,
+                period_month=date(2026, 1 + i, 1),
+                deferred_opening=opn,
+                recognized_in_period=rec,
+                deferred_closing=clo,
+            )
+        )
+
+    tmpl_id = "00000000-0000-6000-8000-000000000090"
+    session.add(
+        GlRecurringEntryTemplate(
+            id=tmpl_id,
+            organization_id=org_id,
+            legal_entity_id=e1,
+            name="Monthly SaaS hosting accrual",
+            memo="Estimate based on usage dashboards",
+            frequency=GlRecurringFrequency.MONTHLY,
+            day_of_month=1,
+            is_active=True,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+    session.add(
+        GlRecurringEntryTemplateLine(
+            id="00000000-0000-6000-8000-000000000091",
+            organization_id=org_id,
+            template_id=tmpl_id,
+            account_id=acc_cogs,
+            description="Hosting COGS accrual",
+            debit=Decimal("2500.00"),
+            credit=Decimal("0"),
+            line_order=0,
+        )
+    )
+    session.add(
+        GlRecurringEntryTemplateLine(
+            id="00000000-0000-6000-8000-000000000092",
+            organization_id=org_id,
+            template_id=tmpl_id,
+            account_id=acc_ap,
+            description="Accrued hosting payable",
+            debit=Decimal("0"),
+            credit=Decimal("2500.00"),
+            line_order=1,
+        )
+    )
+
+    session.add(
+        GlAuditEvent(
+            id="00000000-0000-6000-8000-0000000000A0",
+            organization_id=org_id,
+            subject_type="journal_entry",
+            subject_id=je_posted,
+            action="created",
+            actor_user_id=DEMO_USER_ID,
+            payload={"source": "seed_demo_db"},
+            created_at=utcnow(),
+        )
+    )
+    session.add(
+        GlAuditEvent(
+            id="00000000-0000-6000-8000-0000000000A1",
+            organization_id=org_id,
+            subject_type="journal_entry",
+            subject_id=je_posted,
+            action="posted",
+            actor_user_id=DEMO_USER_ID,
+            payload=None,
+            created_at=utcnow(),
+        )
+    )
+    logger.info("Inserted general ledger demo (entities, CoA, journals, batches, IFRS 15 schedule)")
+
+
 async def _upsert_demo_user(session: AsyncSession, org_id: str) -> None:
     """Ensure a password user exists with JWT ``organization_id`` = seeded demo org."""
     import uuid
@@ -552,6 +967,7 @@ async def run_seed() -> None:
             await _insert_aade(session, DEMO_ORG_ID)
             await _insert_invoices(session, DEMO_ORG_ID)
             await _insert_alerts(session, DEMO_ORG_ID)
+            await _insert_gl(session, DEMO_ORG_ID)
             await _upsert_demo_user(session, DEMO_ORG_ID)
 
     logger.info("Demo DB seed completed for org %s", DEMO_ORG_ID)
