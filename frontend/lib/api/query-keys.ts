@@ -54,4 +54,25 @@ export const queryKeys = {
     list: (params?: { source?: string }) =>
       [...queryKeys.invoices.all, "list", params ?? {}] as const,
   },
+  generalLedger: {
+    all: ["general-ledger"] as const,
+    entities: () => [...queryKeys.generalLedger.all, "entities"] as const,
+    accounts: () => [...queryKeys.generalLedger.all, "accounts"] as const,
+    periods: () => [...queryKeys.generalLedger.all, "periods"] as const,
+    dimensions: () => [...queryKeys.generalLedger.all, "dimensions"] as const,
+    journals: (params: Record<string, unknown>) =>
+      [...queryKeys.generalLedger.all, "journals", params] as const,
+    journal: (id: string) =>
+      [...queryKeys.generalLedger.all, "journal", id] as const,
+    journalAudit: (id: string) =>
+      [...queryKeys.generalLedger.all, "journal-audit", id] as const,
+    billingBatches: () =>
+      [...queryKeys.generalLedger.all, "billing-batches"] as const,
+    revenueSchedules: (params: Record<string, unknown>) =>
+      [...queryKeys.generalLedger.all, "revenue-schedules", params] as const,
+    trialBalance: (params: Record<string, unknown>) =>
+      [...queryKeys.generalLedger.all, "trial-balance", params] as const,
+    recurringTemplates: (params: Record<string, unknown>) =>
+      [...queryKeys.generalLedger.all, "recurring-templates", params] as const,
+  },
 } as const;
