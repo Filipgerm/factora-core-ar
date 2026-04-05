@@ -13,6 +13,7 @@ import {
   Wallet,
   CreditCard,
   BarChart3,
+  ScrollText,
 } from "lucide-react";
 
 import { OrganizationSwitcher } from "@/components/dashboard/organization-switcher";
@@ -43,6 +44,7 @@ const SIMPLE_NAV = [
     label: "Cash Reconciliation",
     icon: GitMerge,
   },
+  { href: "/general-ledger", label: "General ledger", icon: ScrollText },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/reporting", label: "Reporting", icon: BarChart3 },
 ] as const;
@@ -161,7 +163,7 @@ export function AppSidebar() {
           </Link>
         </div>
         <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-          {SIMPLE_NAV.slice(0, 2).map(({ href, label, icon: Icon }) => {
+          {SIMPLE_NAV.slice(0, 3).map(({ href, label, icon: Icon }) => {
             const active =
               pathname === href || pathname.startsWith(`${href}/`);
             return (
@@ -237,7 +239,7 @@ export function AppSidebar() {
             </button>
           </div>
 
-          {SIMPLE_NAV.slice(2).map(({ href, label, icon: Icon }) => {
+          {SIMPLE_NAV.slice(3).map(({ href, label, icon: Icon }) => {
             const active =
               pathname === href || pathname.startsWith(`${href}/`);
             return (
