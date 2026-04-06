@@ -77,6 +77,8 @@ export const glJournalEntrySchema = z.object({
   memo: z.string().nullable(),
   reference: z.string().nullable(),
   source_batch_id: z.string().nullable(),
+  entry_date: z.string(),
+  reversed_from_id: z.string().uuid().nullable(),
   posted_at: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -114,6 +116,7 @@ export const glRevenueScheduleSchema = z.object({
   contract_name: z.string(),
   currency: z.string(),
   total_contract_value: money,
+  recognition_method: z.enum(["straight_line", "milestone", "usage_based"]),
   lines: z.array(glRevenueWaterfallPointSchema),
 });
 export type GlRevenueSchedule = z.infer<typeof glRevenueScheduleSchema>;
@@ -146,8 +149,10 @@ export const glTrialBalanceRowSchema = z.object({
   account_id: z.string().uuid(),
   account_code: z.string(),
   account_name: z.string(),
+  account_type: z.enum(["asset", "liability", "equity", "revenue", "expense"]),
   debit_total: money,
   credit_total: money,
+  net_balance: money,
 });
 export type GlTrialBalanceRow = z.infer<typeof glTrialBalanceRowSchema>;
 
@@ -179,9 +184,14 @@ export const glJournalLineInputSchema = z.object({
 });
 export type GlJournalLineInput = z.infer<typeof glJournalLineInputSchema>;
 
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+
 export const glJournalEntryCreateSchema = z.object({
   legal_entity_id: z.string().uuid(),
   posting_period_id: z.string().uuid().nullable().optional(),
+  entry_date: isoDate,
   document_currency: z.string().length(3),
   base_currency: z.string().length(3).default("EUR"),
   fx_rate_to_base: z.number().positive().optional().nullable(),

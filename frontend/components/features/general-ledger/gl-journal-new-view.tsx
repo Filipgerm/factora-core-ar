@@ -49,12 +49,14 @@ export function GlJournalNewView() {
   const { data: periods = [] } = useGlPeriodsQuery();
 
   const selectable = accounts.filter((a) => !a.is_control_account && a.is_active);
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   const form = useForm<GlJournalEntryCreate>({
     resolver: zodResolver(glJournalEntryCreateSchema),
     defaultValues: {
       legal_entity_id: effectiveEntityId ?? "",
       posting_period_id: periods[0]?.id ?? null,
+      entry_date: todayIso,
       document_currency: "EUR",
       base_currency: "EUR",
       fx_rate_to_base: undefined,
@@ -155,7 +157,7 @@ export function GlJournalNewView() {
               name="posting_period_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs">Period</FormLabel>
+                  <FormLabel className="text-xs">Posting period</FormLabel>
                   <Select
                     value={field.value ?? "none"}
                     onValueChange={(v) =>
@@ -182,18 +184,31 @@ export function GlJournalNewView() {
             />
             <FormField
               control={form.control}
-              name="memo"
+              name="entry_date"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs">Memo</FormLabel>
+                  <FormLabel className="text-xs">Entry date (economic event)</FormLabel>
                   <FormControl>
-                    <Input className="h-9" {...field} />
+                    <Input className="h-9" type="date" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
+          <FormField
+            control={form.control}
+            name="memo"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Memo</FormLabel>
+                <FormControl>
+                  <Input className="h-9" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <div className="grid gap-3 sm:grid-cols-3">
             <FormField
               control={form.control}

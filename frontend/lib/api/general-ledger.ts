@@ -137,6 +137,25 @@ export async function postGlJournalEntry(id: string): Promise<GlJournalEntry> {
   return glJournalEntrySchema.parse(await res.json());
 }
 
+export type GlJournalReverseBody = {
+  entry_date?: string;
+  memo?: string;
+  reference?: string;
+};
+
+export async function reverseGlJournalEntry(
+  id: string,
+  body?: GlJournalReverseBody | null
+): Promise<GlJournalEntry> {
+  const res = await apiFetch(`/v1/general-ledger/journal-entries/${id}/reverse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) throw await apiErrorFromResponse(res);
+  return glJournalEntrySchema.parse(await res.json());
+}
+
 export async function fetchGlJournalAudit(
   id: string
 ): Promise<GlAuditEvent[]> {

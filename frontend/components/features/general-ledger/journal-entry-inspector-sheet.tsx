@@ -24,22 +24,31 @@ import {
   useGlAccountsQuery,
   useGlJournalAuditQuery,
   useGlJournalEntryQuery,
+  useReverseGlJournalMutation,
 } from "@/lib/hooks/api/use-general-ledger";
 import { formatLedgerMoney } from "@/components/features/general-ledger/gl-money";
 import { useLedgerView } from "@/components/features/general-ledger/ledger-view-context";
+import { useToast } from "@/hooks/use-toast";
+import { isApiError } from "@/lib/api/types";
 
 type Props = {
   entryId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onJumpToEntry?: (id: string) => void;
+  onReversalCreated?: (newDraftId: string) => void;
 };
 
 export function JournalEntryInspectorSheet({
   entryId,
   open,
   onOpenChange,
+  onJumpToEntry,
+  onReversalCreated,
 }: Props) {
   const { displayCurrency } = useLedgerView();
+  const { toast } = useToast();
+  const reverseMut = useReverseGlJournalMutation();
   const { data: entry, isLoading } = useGlJournalEntryQuery(
     open ? entryId : null
   );
@@ -103,6 +112,24 @@ export function JournalEntryInspectorSheet({
                       </>
                     )}
                   </div>
+                  <div className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      Entry date:
+                    </span>{" "}
+                    {entry.entry_date}
+                  </div>
+                  {entry.reversed_from_id && onJumpToEntry ? (
+                    <div>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0 text-xs text-blue-700"
+                        onClick={() => onJumpToEntry(entry.reversed_from_id!)}
+                      >
+                        Open original journal (reversal link)
+                      </Button>
+                    </div>
+                  ) : null}
                   {entry.memo && (
                     <p className="text-sm text-foreground/90">{entry.memo}</p>
                   )}
@@ -173,6 +200,39 @@ export function JournalEntryInspectorSheet({
                       FX to {entry.base_currency}: {entry.fx_rate_to_base} ·
                       Display ({displayCurrency}) is cosmetic in this demo.
                     </p>
+                  )}
+                  {entry.status === "posted" && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="w-full text-xs"
+                      disabled={reverseMut.isPending}
+                      onClick={async () => {
+                        try {
+                          const draft = await reverseMut.mutateAsync({
+                            id: entry.id,
+                            body: {},
+                          });
+                          toast({
+                            title: "Reversing draft created",
+                            description:
+                              "Review and post the new entry from the journal list.",
+                          });
+                          onReversalCreated?.(draft.id);
+                        } catch (e) {
+                          toast({
+                            title: "Could not create reversal",
+                            description: isApiError(e)
+                              ? e.message
+                              : "Unexpected error",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      Create reversing entry (draft)
+                    </Button>
                   )}
                 </div>
               )}

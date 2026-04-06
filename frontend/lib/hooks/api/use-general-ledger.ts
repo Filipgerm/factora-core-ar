@@ -18,7 +18,9 @@ import {
   patchGlJournalEntry,
   patchGlPeriod,
   postGlJournalEntry,
+  reverseGlJournalEntry,
   type GlJournalListParams,
+  type GlJournalReverseBody,
 } from "@/lib/api/general-ledger";
 import { queryKeys } from "@/lib/api/query-keys";
 import { apiErrorFromResponse } from "@/lib/api/error";
@@ -197,6 +199,22 @@ export function usePostGlJournalMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => postGlJournalEntry(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.generalLedger.all });
+    },
+  });
+}
+
+export function useReverseGlJournalMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body?: GlJournalReverseBody | null;
+    }) => reverseGlJournalEntry(id, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.generalLedger.all });
     },

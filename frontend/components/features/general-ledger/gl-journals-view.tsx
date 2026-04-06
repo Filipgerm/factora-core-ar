@@ -154,7 +154,7 @@ export function GlJournalsView() {
                 onClick={() => setSheetId(e.id)}
               >
                 <TableCell className="text-xs tabular-nums text-muted-foreground">
-                  {new Date(e.created_at).toLocaleDateString()}
+                  {e.entry_date}
                 </TableCell>
                 <TableCell className="text-xs">
                   <Badge
@@ -223,6 +223,8 @@ export function GlJournalsView() {
         entryId={sheetId}
         open={Boolean(sheetId)}
         onOpenChange={(o) => !o && setSheetId(null)}
+        onJumpToEntry={(id) => setSheetId(id)}
+        onReversalCreated={(id) => setSheetId(id)}
       />
 
       {draftEdit && lineEdits && (

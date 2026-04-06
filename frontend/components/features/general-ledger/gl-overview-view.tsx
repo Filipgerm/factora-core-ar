@@ -99,21 +99,23 @@ export function GlOverviewView() {
             <TableHeader>
               <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-slate-50/80">
                 <TableHead className="text-xs">Account</TableHead>
+                <TableHead className="text-xs">Type</TableHead>
                 <TableHead className="text-right text-xs">Debit</TableHead>
                 <TableHead className="text-right text-xs">Credit</TableHead>
+                <TableHead className="text-right text-xs">Net</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tbLoading && (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-xs text-muted-foreground">
+                  <TableCell colSpan={5} className="text-xs text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               )}
               {!tbLoading && tb.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3} className="py-10 text-center">
+                  <TableCell colSpan={5} className="py-10 text-center">
                     <div className="mx-auto flex max-w-sm flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-6">
                       <BookOpen
                         className="size-8 text-slate-300"
@@ -149,6 +151,9 @@ export function GlOverviewView() {
                       {row.account_name}
                     </span>
                   </TableCell>
+                  <TableCell className="text-xs capitalize text-muted-foreground">
+                    {row.account_type}
+                  </TableCell>
                   <TableCell className="text-right text-xs tabular-nums">
                     {row.debit_total > 0 ? (
                       <Link
@@ -172,6 +177,9 @@ export function GlOverviewView() {
                     ) : (
                       "—"
                     )}
+                  </TableCell>
+                  <TableCell className="text-right text-xs tabular-nums font-medium text-slate-800">
+                    {formatLedgerMoney(row.net_balance, displayCurrency)}
                   </TableCell>
                 </TableRow>
               ))}
