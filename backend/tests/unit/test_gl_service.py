@@ -10,7 +10,8 @@ import pytest
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.general_ledger import GlJournalLineInput
-from app.services.gl_service import GlService
+from app.services.gl_service import GlService, _trial_balance_net_balance
+from app.db.models.gl import GlNormalBalance
 
 
 @pytest.mark.asyncio
@@ -109,3 +110,15 @@ def test_static_fx_rate_identity() -> None:
     from app.services.gl_service import _static_fx_rate
 
     assert _static_fx_rate("EUR", "EUR") == Decimal("1")
+
+
+def test_trial_balance_net_balance_debit_normal() -> None:
+    assert _trial_balance_net_balance(
+        GlNormalBalance.DEBIT, Decimal("100"), Decimal("40")
+    ) == Decimal("60.0000")
+
+
+def test_trial_balance_net_balance_credit_normal() -> None:
+    assert _trial_balance_net_balance(
+        GlNormalBalance.CREDIT, Decimal("100"), Decimal("250")
+    ) == Decimal("150.0000")
