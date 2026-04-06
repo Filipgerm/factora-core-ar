@@ -14,7 +14,7 @@ export const MOCK_PL_METRICS = {
   average_margin: null,
   balance: 11_250_000,
   currency: "EUR",
-  period_days: 30,
+  period_days: 180,
   monthly_revenue: [
     { month: "2025-11", value: 2_400_000 },
     { month: "2025-12", value: 2_550_000 },
