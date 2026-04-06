@@ -33,6 +33,14 @@ Invalidate any previous refresh sessions for that user on each seed run.
   seeded demo user above so the access token carries that org id.
 - If you sign in as another user, you will see that user's org — often empty until
   you create or seed data for *that* org.
+
+**Reset all logins and reattach only the demo tenant**
+
+1. ``uv run alembic upgrade head``
+2. ``CONFIRM_WIPE_ALL_USERS=1 uv run python scripts/wipe_all_users.py``
+3. ``ENVIRONMENT=demo uv run python scripts/seed_demo_db.py``
+
+Then sign in with the demo email below (JWT ``organization_id`` will be the fixed demo UUID).
 """
 from __future__ import annotations
 
@@ -515,6 +523,7 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             updated_at=utcnow(),
         )
     )
+    await session.flush()
 
     dim_cust = "00000000-0000-6000-8000-000000000010"
     dim_prod = "00000000-0000-6000-8000-000000000011"
@@ -972,13 +981,15 @@ async def run_seed() -> None:
         async with session.begin():
             await _insert_demo_org(session, DEMO_ORG_ID)
             await session.flush()
+            # Demo user must exist before GL seed: audit events reference DEMO_USER_ID (FK → users).
+            await _upsert_demo_user(session, DEMO_ORG_ID)
+            await session.flush()
             await _insert_counterparties(session, DEMO_ORG_ID)
             await _insert_banking(session, DEMO_ORG_ID)
             await _insert_aade(session, DEMO_ORG_ID)
             await _insert_invoices(session, DEMO_ORG_ID)
             await _insert_alerts(session, DEMO_ORG_ID)
             await _insert_gl(session, DEMO_ORG_ID)
-            await _upsert_demo_user(session, DEMO_ORG_ID)
 
     logger.info("Demo DB seed completed for org %s", DEMO_ORG_ID)
 
