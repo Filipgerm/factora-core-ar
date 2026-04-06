@@ -44,6 +44,12 @@ class GlRecurringFrequencyEnum(StrEnum):
     QUARTERLY = "quarterly"
 
 
+class GlRecognitionMethodEnum(StrEnum):
+    STRAIGHT_LINE = "straight_line"
+    MILESTONE = "milestone"
+    USAGE_BASED = "usage_based"
+
+
 # --- Legal entities ---
 
 
@@ -173,6 +179,8 @@ class GlJournalEntryResponse(BaseModel):
     memo: str | None
     reference: str | None
     source_batch_id: str | None
+    entry_date: date
+    reversed_from_id: str | None
     posted_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -184,6 +192,7 @@ class GlJournalEntryResponse(BaseModel):
 class GlJournalEntryCreateRequest(BaseModel):
     legal_entity_id: str
     posting_period_id: str | None = None
+    entry_date: date
     document_currency: str = Field(..., min_length=3, max_length=3)
     base_currency: str = Field(default="EUR", min_length=3, max_length=3)
     fx_rate_to_base: Decimal | None = Field(None, gt=Decimal("0"))
@@ -194,12 +203,24 @@ class GlJournalEntryCreateRequest(BaseModel):
 
 class GlJournalEntryUpdateRequest(BaseModel):
     posting_period_id: str | None = None
+    entry_date: date | None = None
     document_currency: str | None = Field(None, min_length=3, max_length=3)
     base_currency: str | None = Field(None, min_length=3, max_length=3)
     fx_rate_to_base: Decimal | None = Field(None, gt=Decimal("0"))
     memo: str | None = None
     reference: str | None = None
     lines: list[GlJournalLineInput] | None = None
+
+
+class GlJournalEntryReverseRequest(BaseModel):
+    """Optional payload when creating a reversing draft journal."""
+
+    entry_date: date | None = Field(
+        default=None,
+        description="Economic date of the reversal; UTC calendar date when omitted.",
+    )
+    memo: str | None = None
+    reference: str | None = None
 
 
 # --- Billing batches ---
@@ -236,6 +257,7 @@ class GlRevenueScheduleResponse(BaseModel):
     contract_name: str
     currency: str
     total_contract_value: Decimal
+    recognition_method: GlRecognitionMethodEnum
     lines: list[GlRevenueWaterfallPoint] = Field(default_factory=list)
 
 
@@ -300,8 +322,10 @@ class GlTrialBalanceRowResponse(BaseModel):
     account_id: str
     account_code: str
     account_name: str
+    account_type: GlAccountTypeEnum
     debit_total: Decimal
     credit_total: Decimal
+    net_balance: Decimal
 
 
 # --- FX ---
