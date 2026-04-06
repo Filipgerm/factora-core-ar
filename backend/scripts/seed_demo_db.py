@@ -709,6 +709,7 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
         GlLegalEntity,
         GlNormalBalance,
         GlPeriodStatus,
+        GlRecognitionMethod,
         GlRecurringEntryTemplate,
         GlRecurringEntryTemplateLine,
         GlRecurringFrequency,
@@ -903,6 +904,8 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             memo="Cash invoicing — performance obligation satisfied over time (IFRS 15)",
             reference="INV-GL-001",
             source_batch_id="batch-stripe-usage-001",
+            entry_date=date(2026, 1, 14),
+            reversed_from_id=None,
             posted_at=utcnow(),
             created_at=utcnow(),
             updated_at=utcnow(),
@@ -952,6 +955,8 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             memo="Draft: recognize January subscription revenue",
             reference=None,
             source_batch_id=None,
+            entry_date=date(2026, 1, 31),
+            reversed_from_id=None,
             posted_at=None,
             created_at=utcnow(),
             updated_at=utcnow(),
@@ -1018,6 +1023,7 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             contract_name="Acme — 12-month enterprise (IFRS 15 schedule)",
             currency="EUR",
             total_contract_value=Decimal("12000.00"),
+            recognition_method=GlRecognitionMethod.STRAIGHT_LINE,
             created_at=utcnow(),
         )
     )
@@ -1033,6 +1039,38 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
                 id=f"00000000-0000-6000-8000-00000000008{i + 1}",
                 organization_id=org_id,
                 schedule_id=sch_id,
+                period_month=date(2026, 1 + i, 1),
+                deferred_opening=opn,
+                recognized_in_period=rec,
+                deferred_closing=clo,
+            )
+        )
+
+    sch_us = "00000000-0000-6000-8000-000000000085"
+    session.add(
+        GlRevenueRecognitionSchedule(
+            id=sch_us,
+            organization_id=org_id,
+            legal_entity_id=e2,
+            contract_name="US sub — API metering (usage-based recognition)",
+            currency="USD",
+            total_contract_value=Decimal("48000.00"),
+            recognition_method=GlRecognitionMethod.USAGE_BASED,
+            created_at=utcnow(),
+        )
+    )
+    for i, (opn, rec, clo) in enumerate(
+        [
+            (Decimal("48000"), Decimal("8200"), Decimal("39800")),
+            (Decimal("39800"), Decimal("15300"), Decimal("24500")),
+            (Decimal("24500"), Decimal("24500"), Decimal("0")),
+        ]
+    ):
+        session.add(
+            GlRevenueRecognitionScheduleLine(
+                id=f"00000000-0000-6000-8000-00000000009{i + 5}",
+                organization_id=org_id,
+                schedule_id=sch_us,
                 period_month=date(2026, 1 + i, 1),
                 deferred_opening=opn,
                 recognized_in_period=rec,
