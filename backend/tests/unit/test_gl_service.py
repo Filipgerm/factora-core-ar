@@ -85,11 +85,24 @@ async def test_validate_manual_lines_rejects_control_account() -> None:
 @pytest.mark.asyncio
 async def test_get_journal_entry_not_found() -> None:
     db = AsyncMock()
+    schema_row = MagicMock()
+    schema_row.scalar.return_value = True
+    db.execute = AsyncMock(return_value=schema_row)
     db.scalar = AsyncMock(return_value=None)
     svc = GlService(db, str(uuid.uuid4()))
     with pytest.raises(NotFoundError) as exc:
         await svc.get_journal_entry(str(uuid.uuid4()))
     assert exc.value.code == "gl.journal_not_found"
+
+
+@pytest.mark.asyncio
+async def test_list_entities_empty_when_gl_schema_missing() -> None:
+    db = AsyncMock()
+    schema_row = MagicMock()
+    schema_row.scalar.return_value = False
+    db.execute = AsyncMock(return_value=schema_row)
+    svc = GlService(db, str(uuid.uuid4()))
+    assert await svc.list_entities() == []
 
 
 def test_static_fx_rate_identity() -> None:

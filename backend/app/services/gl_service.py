@@ -26,7 +26,8 @@ from sqlalchemy.orm import selectinload
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from app.services.gl_schema_check import gl_ledger_schema_installed
 from app.db.models.gl import (
     GlAccount,
     GlAccountType,
@@ -121,6 +122,24 @@ class GlService:
         self.db = db
         self.organization_id = organization_id
         self.actor_user_id = actor_user_id
+        self._gl_schema_confirmed: bool = False
+
+    async def _gl_tables_ready(self) -> bool:
+        """True once GL migration is applied; re-probes until then (no stale False cache)."""
+        if self._gl_schema_confirmed:
+            return True
+        if await gl_ledger_schema_installed(self.db):
+            self._gl_schema_confirmed = True
+            return True
+        return False
+
+    async def _require_gl_for_write(self) -> None:
+        if not await self._gl_tables_ready():
+            raise ServiceUnavailableError(
+                "General ledger tables are not installed. From the backend directory run: "
+                "uv run alembic upgrade head",
+                code="gl.schema_missing",
+            )
 
     async def _entity(self, entity_id: str) -> GlLegalEntity:
         row = await self.db.scalar(
@@ -273,6 +292,8 @@ class GlService:
         )
 
     async def list_entities(self) -> list[GlLegalEntityResponse]:
+        if not await self._gl_tables_ready():
+            return []
         result = await self.db.execute(
             select(GlLegalEntity)
             .where(GlLegalEntity.organization_id == self.organization_id)
@@ -282,6 +303,8 @@ class GlService:
         return [GlLegalEntityResponse.model_validate(r) for r in rows]
 
     async def list_accounts(self) -> list[GlAccountResponse]:
+        if not await self._gl_tables_ready():
+            return []
         result = await self.db.execute(
             select(GlAccount)
             .where(
@@ -293,6 +316,7 @@ class GlService:
         return [GlAccountResponse.model_validate(r) for r in result.scalars().all()]
 
     async def create_account(self, body: GlAccountCreateRequest) -> GlAccountResponse:
+        await self._require_gl_for_write()
         if body.parent_account_id:
             await self._account(body.parent_account_id)
         dup = await self.db.scalar(
@@ -328,6 +352,7 @@ class GlService:
     async def update_account(
         self, account_id: str, body: GlAccountUpdateRequest
     ) -> GlAccountResponse:
+        await self._require_gl_for_write()
         row = await self._account(account_id)
         if body.name is not None:
             row.name = body.name.strip()
@@ -358,6 +383,8 @@ class GlService:
         return GlAccountResponse.model_validate(row)
 
     async def list_periods(self) -> list[GlAccountingPeriodResponse]:
+        if not await self._gl_tables_ready():
+            return []
         result = await self.db.execute(
             select(GlAccountingPeriod)
             .where(GlAccountingPeriod.organization_id == self.organization_id)
@@ -368,6 +395,7 @@ class GlService:
     async def update_period(
         self, period_id: str, body: GlAccountingPeriodUpdateRequest
     ) -> GlAccountingPeriodResponse:
+        await self._require_gl_for_write()
         row = await self._period(period_id)
         row.status = GlPeriodStatus(body.status.value)
         await self.db.commit()
@@ -375,6 +403,8 @@ class GlService:
         return GlAccountingPeriodResponse.model_validate(row)
 
     async def list_dimensions(self) -> list[GlDimensionResponse]:
+        if not await self._gl_tables_ready():
+            return []
         result = await self.db.execute(
             select(GlDimension)
             .where(
@@ -412,6 +442,8 @@ class GlService:
         posting_period_id: str | None,
         source_batch_id: str | None,
     ) -> list[GlJournalEntryResponse]:
+        if not await self._gl_tables_ready():
+            return []
         stmt = (
             select(GlJournalEntry)
             .where(GlJournalEntry.organization_id == self.organization_id)
@@ -444,6 +476,8 @@ class GlService:
         return [self._journal_to_response(e) for e in entries]
 
     async def get_journal_entry(self, entry_id: str) -> GlJournalEntryResponse:
+        if not await self._gl_tables_ready():
+            raise NotFoundError("Journal entry not found", code="gl.journal_not_found")
         entry = await self.db.scalar(
             select(GlJournalEntry)
             .where(
@@ -463,6 +497,7 @@ class GlService:
     async def create_journal_entry(
         self, body: GlJournalEntryCreateRequest
     ) -> GlJournalEntryResponse:
+        await self._require_gl_for_write()
         await self._entity(body.legal_entity_id)
         await self._validate_manual_lines(body.lines)
         for ln in body.lines:
@@ -517,6 +552,7 @@ class GlService:
     async def update_journal_entry(
         self, entry_id: str, body: GlJournalEntryUpdateRequest
     ) -> GlJournalEntryResponse:
+        await self._require_gl_for_write()
         entry = await self.db.scalar(
             select(GlJournalEntry)
             .where(
@@ -587,6 +623,7 @@ class GlService:
         return await self.get_journal_entry(entry_id)
 
     async def post_journal_entry(self, entry_id: str) -> GlJournalEntryResponse:
+        await self._require_gl_for_write()
         entry = await self.db.scalar(
             select(GlJournalEntry)
             .where(
@@ -638,6 +675,8 @@ class GlService:
         return await self.get_journal_entry(entry_id)
 
     async def list_audit_for_journal(self, entry_id: str) -> list[GlAuditEventResponse]:
+        if not await self._gl_tables_ready():
+            return []
         await self.get_journal_entry(entry_id)
         result = await self.db.execute(
             select(GlAuditEvent)
@@ -651,6 +690,8 @@ class GlService:
         return [GlAuditEventResponse.model_validate(r) for r in result.scalars().all()]
 
     async def list_billing_batches(self) -> list[GlBillingBatchResponse]:
+        if not await self._gl_tables_ready():
+            return []
         result = await self.db.execute(
             select(GlBillingBatch)
             .where(GlBillingBatch.organization_id == self.organization_id)
@@ -664,6 +705,8 @@ class GlService:
         legal_entity_id: str | None,
         consolidated: bool,
     ) -> list[GlRevenueScheduleResponse]:
+        if not await self._gl_tables_ready():
+            return []
         stmt = select(GlRevenueRecognitionSchedule).where(
             GlRevenueRecognitionSchedule.organization_id == self.organization_id
         )
@@ -706,6 +749,8 @@ class GlService:
         consolidated: bool,
         posting_period_id: str | None,
     ) -> list[GlTrialBalanceRowResponse]:
+        if not await self._gl_tables_ready():
+            return []
         if posting_period_id:
             await self._period(posting_period_id)
 
@@ -775,6 +820,8 @@ class GlService:
         legal_entity_id: str | None,
         consolidated: bool,
     ) -> list[GlRecurringTemplateResponse]:
+        if not await self._gl_tables_ready():
+            return []
         stmt = select(GlRecurringEntryTemplate).where(
             GlRecurringEntryTemplate.organization_id == self.organization_id
         )
@@ -844,6 +891,7 @@ class GlService:
     async def create_recurring_template(
         self, body: GlRecurringTemplateCreateRequest
     ) -> GlRecurringTemplateResponse:
+        await self._require_gl_for_write()
         await self._entity(body.legal_entity_id)
         await self._validate_template_lines(body.template_lines)
         t = GlRecurringEntryTemplate(
@@ -881,6 +929,7 @@ class GlService:
     async def update_recurring_template(
         self, template_id: str, body: GlRecurringTemplateUpdateRequest
     ) -> GlRecurringTemplateResponse:
+        await self._require_gl_for_write()
         t = await self.db.scalar(
             select(GlRecurringEntryTemplate)
             .where(

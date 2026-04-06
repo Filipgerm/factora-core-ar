@@ -23,6 +23,16 @@ Creates a **demo login** tied to the seeded org so the dashboard JWT carries
 - **Password:** ``DEMO_SEED_PASSWORD`` if set, otherwise dev default ``FactoraDemo2026!``
 
 Invalidate any previous refresh sessions for that user on each seed run.
+
+**Why the dashboard looks empty in ``ENVIRONMENT=demo``**
+
+- ``ENVIRONMENT=demo`` only switches app *behaviour* (feature flags, safer defaults).
+  It does **not** replace your JWT ``organization_id`` or auto-fill the database.
+- Demo **business rows** (banking, invoices, general ledger, etc.) are tied to org
+  ``00000000-0000-0000-0000-000000000001``. You only see them when logged in as the
+  seeded demo user above so the access token carries that org id.
+- If you sign in as another user, you will see that user's org — often empty until
+  you create or seed data for *that* org.
 """
 from __future__ import annotations
 
