@@ -46,11 +46,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import os
 import sys
+from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
+
+from dateutil.relativedelta import relativedelta
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(_BACKEND_ROOT) not in sys.path:
@@ -69,18 +73,9 @@ DEMO_USER_EMAIL = "demo-dashboard@example.org"
 DEMO_USER_USERNAME = "Demo Dashboard"
 _DEFAULT_DEMO_PASSWORD = "FactoraDemo2026!"
 
-# Scale banking fixtures so the 30d P&L window shows ~€7.85M revenue (fixture ratios preserved).
-_DEMO_BASE_PERIOD_REVENUE = Decimal("35700")  # sum of positive posted txs in dashboard_transactions.json
-_DEMO_TARGET_PERIOD_REVENUE = Decimal("7850000")
-DEMO_BANK_TX_AMOUNT_SCALE = (
-    _DEMO_TARGET_PERIOD_REVENUE / _DEMO_BASE_PERIOD_REVENUE
-).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
-
+# Account balances in fixtures are scaled so total cash ≈ 2.65× last full month revenue.
 _DEMO_BASE_TOTAL_BALANCE = Decimal("18450.85") + Decimal("45200.0") + Decimal("12880.0")
-_DEMO_TARGET_TOTAL_BALANCE = Decimal("11250000")
-DEMO_BANK_BALANCE_SCALE = (
-    _DEMO_TARGET_TOTAL_BALANCE / _DEMO_BASE_TOTAL_BALANCE
-).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+_DEMO_BANK_ACCOUNTS = ["demo-account-001", "demo-account-002", "demo-account-003"]
 
 
 def _require_safe_to_run() -> None:
@@ -115,19 +110,235 @@ def _parse_date(value: str | date | None) -> date | None:
     return date.fromisoformat(str(value))
 
 
-def _dashboard_seed_transaction_dates(n: int, today: date) -> list[date]:
-    """Spread ``n`` rows across the last 27 days so P&L (default 30-day window) includes them."""
+def _demo_banking_month_segments(today: date, days_back: int = 175) -> list[tuple[date, date]]:
+    """Calendar month slices overlapping ``[today - days_back, today]``, oldest first."""
+    ws = today - timedelta(days=days_back)
+    segments: list[tuple[date, date]] = []
+    cm = today.replace(day=1)
+    while True:
+        sy, sm = cm.year, cm.month
+        ms = date(sy, sm, 1)
+        _, ld = monthrange(sy, sm)
+        me = date(sy, sm, ld)
+        a, b = max(ms, ws), min(me, today)
+        if a <= b:
+            segments.append((a, b))
+        if ms <= ws:
+            break
+        cm = ms - relativedelta(months=1)
+    segments.sort(key=lambda x: x[0])
+    return segments
+
+
+def _spread_dates(seg_start: date, seg_end: date, n: int) -> list[date]:
     if n <= 0:
         return []
+    span = max((seg_end - seg_start).days, 0)
     if n == 1:
-        return [today - timedelta(days=5)]
-    oldest = today - timedelta(days=27)
-    span = 26
+        return [seg_start + timedelta(days=span // 2)]
     out: list[date] = []
-    for idx in range(n):
-        off = int(round(idx * span / (n - 1)))
-        out.append(oldest + timedelta(days=off))
+    for i in range(n):
+        off = int(round(i * span / (n - 1))) if n > 1 else 0
+        out.append(seg_start + timedelta(days=min(off, span)))
     return out
+
+
+def _split_total(total: Decimal, weights: list[Decimal]) -> list[Decimal]:
+    tw = sum(weights, Decimal("0"))
+    if tw <= 0 or total <= 0:
+        return []
+    raw = [
+        (total * w / tw).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) for w in weights
+    ]
+    diff = total - sum(raw, Decimal("0"))
+    if raw and diff != 0:
+        raw[-1] = (raw[-1] + diff).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return raw
+
+
+def build_programmatic_demo_transactions(
+    today: date,
+) -> tuple[list[dict[str, object]], Decimal]:
+    """Multi-month posted banking activity: rising revenue with month-to-month wobble (~60.5% expenses).
+
+    Returns transaction row dicts and the revenue of the latest *mostly full* month
+    (for scaling account balances to ~2.65× that figure).
+    """
+    segments = _demo_banking_month_segments(today)
+    rows: list[dict[str, object]] = []
+    cnt = 0
+    last_full_month_revenue = Decimal("0")
+
+    inflow_templates = [
+        ("Incoming transfer — {cp} — {ref}", "SEPA settlement"),
+        ("Wire credit — {cp} — {ref}", "International receipt"),
+        ("SEPA Credit — {cp}", "Invoice payment"),
+        ("FPS incoming — {cp}", "UK settlement"),
+    ]
+    counterparties = [
+        "Acme Logistics S.A.",
+        "Nordic Parts AB",
+        "Atlas Cloud Services IKE",
+        "Helios Analytics OÜ",
+        "Benelux Retail BV",
+        "Mediterranean Trading SA",
+    ]
+    expense_templates = [
+        ("Payroll — semi-monthly payroll run", "Payroll"),
+        ("DEI — Electricity HQ", "Utilities"),
+        ("GITHUB INC — Enterprise renewal", "Software & SaaS"),
+        ("ATLASSIAN — Cloud seats", "Software & SaaS"),
+        ("Office rent — business centre", "Rent"),
+        ("LinkedIn Ads — campaign", "Advertising"),
+        ("EUROLIFE — insurance bundle", "Insurance"),
+        ("Legal retainer — counsel", "Professional services"),
+        ("CLOUDFLARE — network services", "Software & SaaS"),
+        ("AWS EMEA — infrastructure", "Software & SaaS"),
+        ("TRAVEL — client onsite flights", "Travel"),
+        ("Catering — team event", "Meals"),
+    ]
+    weight_out = [
+        Decimal("18"),
+        Decimal("14"),
+        Decimal("12"),
+        Decimal("11"),
+        Decimal("10"),
+        Decimal("9"),
+        Decimal("8"),
+        Decimal("7"),
+        Decimal("6"),
+        Decimal("5"),
+        Decimal("4"),
+        Decimal("3"),
+    ]
+
+    for mi, (seg_start, seg_end) in enumerate(segments):
+        rev = (
+            Decimal("392000")
+            + Decimal("52000") * Decimal(str(mi))
+            + Decimal(str(int(28000 * math.sin(mi * 1.27 + 0.4))))
+        ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        exp = (rev * Decimal("0.605")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+        if (seg_end - seg_start).days + 1 >= 26:
+            last_full_month_revenue = rev
+
+        n_in = 5 if mi % 2 == 0 else 4
+        w_in = [Decimal("0.28"), Decimal("0.24"), Decimal("0.22"), Decimal("0.16"), Decimal("0.10")][
+            :n_in
+        ]
+        in_amts = _split_total(rev, w_in)
+        in_dates = _spread_dates(seg_start, seg_end, len(in_amts))
+
+        for j, amt in enumerate(in_amts):
+            if amt <= 0:
+                continue
+            cnt += 1
+            cp = counterparties[(mi + j) % len(counterparties)]
+            tpl, cat = inflow_templates[j % len(inflow_templates)]
+            ref = f"INV-2026-{4000 + mi * 10 + j}"
+            desc = tpl.format(cp=cp, ref=ref)
+            rows.append(
+                {
+                    "id": f"demo-tx-p{cnt:04d}",
+                    "account_id": _DEMO_BANK_ACCOUNTS[j % len(_DEMO_BANK_ACCOUNTS)],
+                    "made_on": in_dates[j],
+                    "amount": amt,
+                    "category": cat,
+                    "description": desc,
+                    "status": "posted",
+                    "merchant_id": None,
+                    "mcc": None,
+                    "iban": None,
+                }
+            )
+
+        out_amts = _split_total(exp, weight_out)
+        neg = [(-a).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) for a in out_amts]
+        out_dates = _spread_dates(seg_start, seg_end, len(neg))
+
+        for j, amt in enumerate(neg):
+            cnt += 1
+            desc, cat = expense_templates[j % len(expense_templates)]
+            rows.append(
+                {
+                    "id": f"demo-tx-p{cnt:04d}",
+                    "account_id": _DEMO_BANK_ACCOUNTS[
+                        (mi + j + 1) % len(_DEMO_BANK_ACCOUNTS)
+                    ],
+                    "made_on": out_dates[j],
+                    "amount": amt,
+                    "category": cat,
+                    "description": desc,
+                    "status": "posted",
+                    "merchant_id": (f"merch_{j}" if j % 3 == 0 else None),
+                    "mcc": (str(4800 + j) if j % 3 == 0 else None),
+                    "iban": None,
+                }
+            )
+
+    recent_start = today - timedelta(days=12)
+    extras: list[tuple[str, float, str, str, str]] = [
+        ("demo-tx-p8991", -199.0, "OPENAI — API usage", "Software & SaaS", "pending"),
+        ("demo-tx-p8992", -84.5, "NOTION LABS — workspace", "Software & SaaS", "posted"),
+        ("demo-tx-p8993", 18500.0, "Stripe payout — card batch", "Incoming transfer", "posted"),
+    ]
+    for i, (tid, raw_amt, desc, cat, st) in enumerate(extras):
+        rows.append(
+            {
+                "id": tid,
+                "account_id": _DEMO_BANK_ACCOUNTS[i % len(_DEMO_BANK_ACCOUNTS)],
+                "made_on": recent_start + timedelta(days=i * 3),
+                "amount": Decimal(str(raw_amt)),
+                "category": cat,
+                "description": desc,
+                "status": st,
+                "merchant_id": None,
+                "mcc": None,
+                "iban": None,
+            }
+        )
+
+    # Exact-amount rows for reconciliation agent (must match DEMO_OPEN_INVOICES).
+    match_rows: list[tuple[str, Decimal, str]] = [
+        ("demo-tx-match01", Decimal("1200.00"), "SEPA — Acme Ltd — INV-DEMO-0001"),
+        ("demo-tx-match02", Decimal("118.40"), "SEPA — Cloud Co — INV-DEMO-0002"),
+        ("demo-tx-match03", Decimal("45280.00"), "Wire — Nordic Parts AB — PO-7781"),
+        ("demo-tx-match04", Decimal("9900.00"), "SEPA — Baltic Freight OÜ"),
+        ("demo-tx-match05", Decimal("4200.00"), "Stripe payout — card acquiring"),
+        ("demo-tx-match06", Decimal("3100.00"), "SEPA — Atlas Cloud Services IKE"),
+        ("demo-tx-match07", Decimal("8750.50"), "Incoming — Helios Analytics OÜ"),
+        ("demo-tx-match08", Decimal("26400.00"), "SEPA — Mediterranean Trading SA"),
+        ("demo-tx-match09", Decimal("5125.25"), "FPS — Benelux Retail BV"),
+        ("demo-tx-match10", Decimal("18990.00"), "Wire — Enterprise renewal pool"),
+        ("demo-tx-match11", Decimal("3333.33"), "Ambiguous pool A — misc receipt"),
+        ("demo-tx-match12", Decimal("3333.33"), "Ambiguous pool B — misc receipt"),
+    ]
+    for i, (tid, amt, desc) in enumerate(match_rows):
+        rows.append(
+            {
+                "id": tid,
+                "account_id": _DEMO_BANK_ACCOUNTS[i % len(_DEMO_BANK_ACCOUNTS)],
+                "made_on": today - timedelta(days=18 - i),
+                "amount": amt,
+                "category": "Incoming transfer",
+                "description": desc,
+                "status": "posted",
+                "merchant_id": None,
+                "mcc": None,
+                "iban": None,
+            }
+        )
+
+    if last_full_month_revenue <= 0 and segments:
+        mi = max(0, len(segments) - 2)
+        last_full_month_revenue = (
+            Decimal("392000")
+            + Decimal("52000") * Decimal(str(mi))
+            + Decimal(str(int(28000 * math.sin(mi * 1.27 + 0.4))))
+        ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    return rows, last_full_month_revenue
 
 
 async def _clear_demo_org(session: AsyncSession, org_id: str) -> None:
@@ -298,6 +509,12 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
             )
         )
 
+    today = datetime.now(timezone.utc).date()
+    tx_rows, last_month_rev = build_programmatic_demo_transactions(today)
+    balance_scale = (
+        (last_month_rev * Decimal("2.65")) / _DEMO_BASE_TOTAL_BALANCE
+    ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+
     for acc in get_demo_payload("saltedge_accounts")["data"]:
         cid = acc["connection_id"]
         session.add(
@@ -310,19 +527,18 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
                 name=acc["name"],
                 nature=str(acc.get("nature") or "account"),
                 balance=(
-                    Decimal(str(acc["balance"])) * DEMO_BANK_BALANCE_SCALE
+                    Decimal(str(acc["balance"])) * balance_scale
                 ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
                 currency_code=str(acc["currency_code"]).upper(),
                 extra=acc.get("extra") or {},
             )
         )
 
-    tx_rows = get_demo_payload("dashboard_transactions")["transactions"]
-    today = datetime.now(timezone.utc).date()
-    made_on_dates = _dashboard_seed_transaction_dates(len(tx_rows), today)
-    for idx, tx in enumerate(tx_rows):
+    for tx in tx_rows:
         st = TransactionStatus(str(tx["status"]))
-        made_on = made_on_dates[idx]
+        made_on = tx["made_on"]
+        if not isinstance(made_on, date):
+            made_on = date.fromisoformat(str(made_on))
         extra: dict = {}
         if st == TransactionStatus.posted:
             extra["posting_date"] = made_on.isoformat()
@@ -332,31 +548,35 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
             extra["mcc"] = str(tx["mcc"])
         if tx.get("iban") is not None:
             extra["iban"] = tx["iban"]
+        amt = tx["amount"]
+        if not isinstance(amt, Decimal):
+            amt = Decimal(str(amt))
         session.add(
             Transaction(
-                id=tx["id"],
+                id=str(tx["id"]),
                 organization_id=org_id,
-                account_id=tx["account_id"],
+                account_id=str(tx["account_id"]),
                 status=st,
                 mode=TransactionMode.normal,
                 duplicated=False,
                 made_on=made_on,
-                amount=(
-                    Decimal(str(tx["amount"])) * DEMO_BANK_TX_AMOUNT_SCALE
-                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
-                currency_code=str(tx["currency_code"]).upper(),
-                category=tx.get("category"),
-                description=tx.get("description"),
+                amount=amt.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+                currency_code="EUR",
+                category=tx.get("category") if isinstance(tx.get("category"), str) else None,
+                description=tx.get("description") if isinstance(tx.get("description"), str) else None,
                 extra=extra,
             )
         )
 
     logger.info(
-        "Inserted banking: 1 customer, %d connections, %d consents, %d accounts, %d transactions (dates aligned to last-30d P&L window)",
+        "Inserted banking: 1 customer, %d connections, %d consents, %d accounts, "
+        "%d transactions (~175d window; rising revenue wobble, ~60.5 pct expense ratio; "
+        "balances ~2.65× last full month revenue ≈ %s EUR)",
         len(conn_rows),
         len(conn_rows),
         len(get_demo_payload("saltedge_accounts")["data"]),
         len(tx_rows),
+        last_month_rev,
     )
 
 
