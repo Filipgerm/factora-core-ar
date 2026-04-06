@@ -14,6 +14,7 @@ from app.models.general_ledger import (
     GlFxQuoteResponse,
     GlJournalEntryCreateRequest,
     GlJournalEntryResponse,
+    GlJournalEntryReverseRequest,
     GlJournalEntryUpdateRequest,
     GlLegalEntityResponse,
     GlRecurringTemplateCreateRequest,
@@ -88,6 +89,13 @@ class GlController:
 
     async def post_journal_entry(self, entry_id: str) -> GlJournalEntryResponse:
         return await self.service.post_journal_entry(entry_id)
+
+    async def reverse_journal_entry(
+        self,
+        entry_id: str,
+        body: GlJournalEntryReverseRequest | None,
+    ) -> GlJournalEntryResponse:
+        return await self.service.reverse_journal_entry(entry_id, body)
 
     async def list_journal_audit(self, entry_id: str) -> list[GlAuditEventResponse]:
         return await self.service.list_audit_for_journal(entry_id)

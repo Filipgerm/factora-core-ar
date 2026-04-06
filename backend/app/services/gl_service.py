@@ -52,6 +52,7 @@ from app.db.models.gl import (
 from app.models.general_ledger import (
     GlAccountCreateRequest,
     GlAccountResponse,
+    GlAccountTypeEnum,
     GlAccountUpdateRequest,
     GlAccountingPeriodResponse,
     GlAccountingPeriodUpdateRequest,
@@ -62,6 +63,7 @@ from app.models.general_ledger import (
     GlFxQuoteResponse,
     GlJournalEntryCreateRequest,
     GlJournalEntryResponse,
+    GlJournalEntryReverseRequest,
     GlJournalEntryUpdateRequest,
     GlJournalLineInput,
     GlJournalLineResponse,
@@ -73,6 +75,7 @@ from app.models.general_ledger import (
     GlRecurringTemplateLineResponse,
     GlRecurringTemplateResponse,
     GlRecurringTemplateUpdateRequest,
+    GlRecognitionMethodEnum,
     GlRevenueScheduleResponse,
     GlRevenueWaterfallPoint,
     GlTrialBalanceRowResponse,
@@ -109,6 +112,15 @@ def _sum_lines(lines: Sequence[GlJournalLineInput | GlJournalLine]) -> tuple[Dec
         td += ln.debit
         tc += ln.credit
     return td, tc
+
+
+def _trial_balance_net_balance(
+    normal: GlNormalBalance, debit_total: Decimal, credit_total: Decimal
+) -> Decimal:
+    """Signed balance in the account's natural (normal-balance) direction."""
+    if normal == GlNormalBalance.DEBIT:
+        return (debit_total - credit_total).quantize(Decimal("0.0001"))
+    return (credit_total - debit_total).quantize(Decimal("0.0001"))
 
 
 class GlService:
@@ -283,6 +295,8 @@ class GlService:
             memo=entry.memo,
             reference=entry.reference,
             source_batch_id=entry.source_batch_id,
+            entry_date=entry.entry_date,
+            reversed_from_id=entry.reversed_from_id,
             posted_at=entry.posted_at,
             created_at=entry.created_at,
             updated_at=entry.updated_at,
@@ -517,6 +531,8 @@ class GlService:
             fx_rate_to_base=fx,
             memo=body.memo,
             reference=body.reference,
+            entry_date=body.entry_date,
+            reversed_from_id=None,
         )
         self.db.add(entry)
         await self.db.flush()
@@ -577,6 +593,8 @@ class GlService:
             if body.posting_period_id:
                 await self._period(body.posting_period_id)
             entry.posting_period_id = body.posting_period_id
+        if body.entry_date is not None:
+            entry.entry_date = body.entry_date
         if body.document_currency is not None:
             entry.document_currency = body.document_currency.upper()
         if body.base_currency is not None:
@@ -674,6 +692,105 @@ class GlService:
         await self.db.commit()
         return await self.get_journal_entry(entry_id)
 
+    async def reverse_journal_entry(
+        self,
+        entry_id: str,
+        body: GlJournalEntryReverseRequest | None,
+    ) -> GlJournalEntryResponse:
+        """Create a balanced draft journal that swaps debits/credits of a posted entry."""
+        await self._require_gl_for_write()
+        opts = body or GlJournalEntryReverseRequest()
+        original = await self.db.scalar(
+            select(GlJournalEntry)
+            .where(
+                GlJournalEntry.id == entry_id,
+                GlJournalEntry.organization_id == self.organization_id,
+            )
+            .options(
+                selectinload(GlJournalEntry.lines).selectinload(
+                    GlJournalLine.dimension_tags
+                )
+            )
+        )
+        if not original:
+            raise NotFoundError("Journal entry not found", code="gl.journal_not_found")
+        if original.status != GlJournalStatus.POSTED:
+            raise ValidationError(
+                "Only posted journal entries can be reversed.",
+                code="gl.journal.reverse_requires_posted",
+                fields={"status": str(original.status.value)},
+            )
+        dup = await self.db.scalar(
+            select(GlJournalEntry.id).where(
+                GlJournalEntry.organization_id == self.organization_id,
+                GlJournalEntry.reversed_from_id == original.id,
+                GlJournalEntry.status == GlJournalStatus.POSTED,
+            )
+        )
+        if dup:
+            raise ValidationError(
+                "A posted reversal already exists for this journal entry.",
+                code="gl.journal.already_reversed",
+                fields={"reversal_id": dup},
+            )
+        rev_date = opts.entry_date
+        if rev_date is None:
+            rev_date = datetime.now(timezone.utc).date()
+        memo = opts.memo
+        if memo is None:
+            ref = original.reference or original.id
+            memo = f"Reversal of journal {ref}"
+        ref_out = opts.reference
+
+        entry = GlJournalEntry(
+            organization_id=self.organization_id,
+            legal_entity_id=original.legal_entity_id,
+            posting_period_id=original.posting_period_id,
+            status=GlJournalStatus.DRAFT,
+            document_currency=original.document_currency,
+            base_currency=original.base_currency,
+            fx_rate_to_base=original.fx_rate_to_base,
+            memo=memo,
+            reference=ref_out,
+            source_batch_id=None,
+            entry_date=rev_date,
+            reversed_from_id=original.id,
+        )
+        self.db.add(entry)
+        await self.db.flush()
+        for ln in sorted(original.lines, key=lambda x: x.line_order):
+            desc = ln.description
+            if desc:
+                desc = f"Reversal: {desc}"
+            else:
+                desc = "Reversal"
+            line = GlJournalLine(
+                organization_id=self.organization_id,
+                journal_entry_id=entry.id,
+                account_id=ln.account_id,
+                description=desc,
+                debit=ln.credit,
+                credit=ln.debit,
+                line_order=ln.line_order,
+            )
+            self.db.add(line)
+            await self.db.flush()
+            for tag in ln.dimension_tags:
+                self.db.add(
+                    GlJournalLineDimensionTag(
+                        journal_line_id=line.id,
+                        dimension_value_id=tag.dimension_value_id,
+                    )
+                )
+        await self._append_audit(
+            subject_type="journal_entry",
+            subject_id=entry.id,
+            action="reversal_created",
+            payload={"reversed_from_id": original.id},
+        )
+        await self.db.commit()
+        return await self.get_journal_entry(entry.id)
+
     async def list_audit_for_journal(self, entry_id: str) -> list[GlAuditEventResponse]:
         if not await self._gl_tables_ready():
             return []
@@ -729,6 +846,7 @@ class GlService:
                     contract_name=sch.contract_name,
                     currency=sch.currency,
                     total_contract_value=sch.total_contract_value,
+                    recognition_method=GlRecognitionMethodEnum(sch.recognition_method.value),
                     lines=[
                         GlRevenueWaterfallPoint(
                             period_month=ln.period_month,
@@ -791,6 +909,7 @@ class GlService:
             a = accounts.get(aid)
             if not a:
                 continue
+            net = _trial_balance_net_balance(a.normal_balance, td, tc)
             built.append(
                 (
                     a.code,
@@ -798,8 +917,10 @@ class GlService:
                         account_id=aid,
                         account_code=a.code,
                         account_name=a.name,
+                        account_type=GlAccountTypeEnum(a.account_type.value),
                         debit_total=td,
                         credit_total=tc,
+                        net_balance=net,
                     ),
                 )
             )

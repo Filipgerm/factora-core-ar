@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 
 from app.dependencies import GlCtrl, require_auth
 from app.models.general_ledger import (
@@ -17,6 +17,7 @@ from app.models.general_ledger import (
     GlFxQuoteResponse,
     GlJournalEntryCreateRequest,
     GlJournalEntryResponse,
+    GlJournalEntryReverseRequest,
     GlJournalEntryUpdateRequest,
     GlLegalEntityResponse,
     GlRecurringTemplateCreateRequest,
@@ -108,6 +109,15 @@ async def gl_update_journal_entry(
 @router.post("/journal-entries/{entry_id}/post", response_model=GlJournalEntryResponse)
 async def gl_post_journal_entry(entry_id: str, ctl: GlCtrl):
     return await ctl.post_journal_entry(entry_id)
+
+
+@router.post("/journal-entries/{entry_id}/reverse", response_model=GlJournalEntryResponse)
+async def gl_reverse_journal_entry(
+    entry_id: str,
+    ctl: GlCtrl,
+    body: GlJournalEntryReverseRequest | None = Body(default=None),
+):
+    return await ctl.reverse_journal_entry(entry_id, body)
 
 
 @router.get(
