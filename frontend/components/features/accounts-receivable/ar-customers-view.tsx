@@ -174,7 +174,7 @@ export function ArCustomersView() {
         <FeatureEmptyState
           icon={Users}
           title="No customers yet"
-          description="Add a customer with VAT lookup from GEMI, or manage counterparties from integrations later."
+          description="Add a customer with VAT lookup from the Business Registry, or manage counterparties from integrations later."
           action={{
             label: "New customer",
             onClick: () => setNewCustomerOpen(true),
