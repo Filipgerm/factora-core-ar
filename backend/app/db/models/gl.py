@@ -65,6 +65,14 @@ class GlRecurringFrequency(str, enum.Enum):
     QUARTERLY = "quarterly"
 
 
+class GlRecognitionMethod(str, enum.Enum):
+    """How contract revenue is allocated into ``GlRevenueRecognitionScheduleLine`` rows."""
+
+    STRAIGHT_LINE = "straight_line"
+    MILESTONE = "milestone"
+    USAGE_BASED = "usage_based"
+
+
 def _enum_values(e: type[enum.Enum]) -> list[str]:
     return [x.value for x in e]
 
@@ -314,6 +322,13 @@ class GlJournalEntry(Base):
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     reference: Mapped[str | None] = mapped_column(String(128), nullable=True)
     source_batch_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    reversed_from_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("gl_journal_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
@@ -461,6 +476,16 @@ class GlRevenueRecognitionSchedule(Base):
     contract_name: Mapped[str] = mapped_column(String(255), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
     total_contract_value: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    recognition_method: Mapped[GlRecognitionMethod] = mapped_column(
+        Enum(
+            GlRecognitionMethod,
+            name="glrecognitionmethod",
+            create_type=True,
+            values_callable=_enum_values,
+        ),
+        nullable=False,
+        default=GlRecognitionMethod.STRAIGHT_LINE,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
