@@ -5,7 +5,10 @@ import { BarChart3 } from "lucide-react";
 import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
 import { ReportPageShell } from "@/components/features/reporting/report-page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboardPlMetricsQuery } from "@/lib/hooks/api/use-dashboard";
+import {
+  DASHBOARD_PL_DAYS_DEFAULT,
+  useDashboardPlMetricsQuery,
+} from "@/lib/hooks/api/use-dashboard";
 import { useResolvedSaltEdgeCustomerId } from "@/lib/hooks/api/use-saltedge";
 import { formatStatementEUR } from "@/lib/reporting/format-statement-eur";
 import type { DashboardMetricsResponse } from "@/lib/schemas/dashboard";
@@ -34,7 +37,7 @@ function buildPlRows(m: DashboardMetricsResponse): PlRow[] {
 export function IncomeStatementReport() {
   const { customerId } = useResolvedSaltEdgeCustomerId();
   const pl = useDashboardPlMetricsQuery(
-    customerId ? { customerId, days: 30 } : null
+    customerId ? { customerId, days: DASHBOARD_PL_DAYS_DEFAULT } : null
   );
 
   if (!customerId) {

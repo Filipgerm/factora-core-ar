@@ -18,6 +18,7 @@ const ROOT_SEGMENT_LABEL: Record<string, string> = {
   reconciliation: "Cash Reconciliation",
   "ar-collections": "AR Collections",
   reporting: "Reporting",
+  "general-ledger": "General ledger",
   "accounts-receivable": "Accounts receivable",
   "accounts-payable": "Accounts payable",
 };
@@ -38,6 +39,12 @@ const LEAF_LABEL: Record<string, string> = {
   "cash-flow": "Cash flow",
   "executive-metrics": "SaaS metrics",
   "vat-return": "VAT return",
+  "general-ledger": "General ledger",
+  "chart-of-accounts": "Chart of accounts",
+  "journal-entries": "Journal entries",
+  "billing-aggregations": "Billing aggregations",
+  "deferred-revenue": "Deferred revenue",
+  "recurring-templates": "Recurring entries",
 };
 
 function labelForSegment(segment: string, index: number): string {

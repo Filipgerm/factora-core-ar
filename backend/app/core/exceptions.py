@@ -90,6 +90,21 @@ class ConflictError(AppError):
         super().__init__(detail, code=code, **extra)
 
 
+class ServiceUnavailableError(AppError):
+    """Dependency or subsystem not ready (e.g. schema not migrated).  HTTP 503."""
+
+    status_code = 503
+
+    def __init__(
+        self,
+        detail: str = "Service temporarily unavailable",
+        *,
+        code: str = "service.unavailable",
+        **extra: Any,
+    ) -> None:
+        super().__init__(detail, code=code, **extra)
+
+
 class ClientBadRequestError(AppError):
     """Malformed or untrusted client input (e.g. invalid webhook signature).  HTTP 400."""
 

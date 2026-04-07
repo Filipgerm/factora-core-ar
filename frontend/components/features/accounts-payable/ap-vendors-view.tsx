@@ -133,7 +133,7 @@ export function ApVendorsView() {
         <FeatureEmptyState
           icon={Building2}
           title="No vendors yet"
-          description="Add a vendor with VAT lookup from GEMI, or use integrations for bulk setup. Balances stay at zero until AP posting is live."
+          description="Add a vendor with VAT lookup from the Business Registry, or use integrations for bulk setup. Balances stay at zero until AP posting is live."
           action={{
             label: "New vendor",
             onClick: () => setNewVendorOpen(true),

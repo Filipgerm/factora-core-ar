@@ -71,7 +71,7 @@ export function CounterpartyVatDialog({
   onOpenChange,
   counterpartyType,
   title,
-  description = "Look up a Greek VAT (AFM) via GEMI, review the fields, then save.",
+  description = "Look up a Greek VAT (AFM) via the Business Registry, review the fields, then save.",
 }: CounterpartyVatDialogProps) {
   const { toast } = useToast();
   const gemiLookup = useGemiSearchByAfmMutation();
@@ -192,7 +192,7 @@ export function CounterpartyVatDialog({
                         toast({
                           variant: "destructive",
                           title: "No company found",
-                          description: "Try a different AFM or check GEMI availability.",
+                          description: "Verify the AFM number or try again later.",
                         });
                         return;
                       }
@@ -214,7 +214,7 @@ export function CounterpartyVatDialog({
                         variant: "destructive",
                         title: "Lookup failed",
                         description:
-                          e instanceof Error ? e.message : "Could not reach GEMI search",
+                          e instanceof Error ? e.message : "Could not reach Business Registry search",
                       }),
                   });
                 }}
