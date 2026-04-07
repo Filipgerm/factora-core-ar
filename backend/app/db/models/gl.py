@@ -527,7 +527,11 @@ class GlRevenueRecognitionScheduleLine(Base):
     )
 
     __table_args__ = (
-        Index("ix_gl_rev_sched_lines_sched_month", "schedule_id", "period_month"),
+        UniqueConstraint(
+            "schedule_id",
+            "period_month",
+            name="uq_gl_rev_sched_lines_sched_month",
+        ),
     )
 
 
