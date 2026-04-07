@@ -23,11 +23,49 @@ import {
   usePatchGlJournalMutation,
   usePostGlJournalMutation,
 } from "@/lib/hooks/api/use-general-ledger";
+import { isApiError } from "@/lib/api/types";
+import { useToast } from "@/hooks/use-toast";
 import { useLedgerView } from "@/components/features/general-ledger/ledger-view-context";
 import { formatLedgerMoney } from "@/components/features/general-ledger/gl-money";
-import type { GlJournalEntry, GlJournalLine } from "@/lib/schemas/general-ledger";
+import type {
+  GlAccount,
+  GlJournalEntry,
+  GlJournalLine,
+} from "@/lib/schemas/general-ledger";
+
+/** Ensures the line's account appears in the select even when inactive or control-only. */
+function accountOptionsForJournalLine(
+  selectable: GlAccount[],
+  allAccounts: GlAccount[],
+  lineAccountId: string
+): GlAccount[] {
+  const selectableIds = new Set(selectable.map((a) => a.id));
+  const current = allAccounts.find((a) => a.id === lineAccountId);
+  if (current && !selectableIds.has(current.id)) {
+    return [current, ...selectable];
+  }
+  if (!current && lineAccountId && !selectableIds.has(lineAccountId)) {
+    return [
+      {
+        id: lineAccountId,
+        parent_account_id: null,
+        code: "—",
+        name: "Account missing from chart",
+        account_type: "expense",
+        normal_balance: "debit",
+        subledger_kind: "none",
+        is_active: false,
+        is_control_account: false,
+        sort_order: 0,
+      },
+      ...selectable,
+    ];
+  }
+  return selectable;
+}
 
 export function GlJournalsView() {
+  const { toast } = useToast();
   const { effectiveEntityId, consolidated } = useLedgerView();
   const searchParams = useSearchParams();
   const accountId = searchParams.get("accountId");
@@ -61,6 +99,10 @@ export function GlJournalsView() {
   const selectableAccounts = useMemo(
     () => accounts.filter((a) => !a.is_control_account && a.is_active),
     [accounts]
+  );
+  const selectableAccountIds = useMemo(
+    () => new Set(selectableAccounts.map((a) => a.id)),
+    [selectableAccounts]
   );
   const accLabel = useMemo(
     () => Object.fromEntries(accounts.map((a) => [a.id, `${a.code} ${a.name}`])),
@@ -206,7 +248,19 @@ export function GlJournalsView() {
                       className="h-7 text-[10px] transition-all duration-200"
                       onClick={(ev) => {
                         ev.stopPropagation();
-                        void postMut.mutateAsync(e.id);
+                        void (async () => {
+                          try {
+                            await postMut.mutateAsync(e.id);
+                          } catch (err) {
+                            toast({
+                              title: "Could not post journal",
+                              description: isApiError(err)
+                                ? err.message
+                                : "Unexpected error",
+                              variant: "destructive",
+                            });
+                          }
+                        })();
                       }}
                     >
                       Post
@@ -235,14 +289,27 @@ export function GlJournalsView() {
               Adjust amounts and accounts. Control accounts are excluded from picks.
             </p>
             <div className="mt-3 space-y-2">
-              {lineEdits.map((ln, idx) => (
+              {lineEdits.map((ln, idx) => {
+                const lineAccountOptions = accountOptionsForJournalLine(
+                  selectableAccounts,
+                  accounts,
+                  ln.account_id
+                );
+                const lineAccountNotSelectable =
+                  Boolean(ln.account_id) &&
+                  !selectableAccountIds.has(ln.account_id);
+                return (
                 <div
                   key={ln.id}
                   className="grid grid-cols-12 gap-2 border-b border-slate-50 py-2"
                 >
-                  <div className="col-span-4">
+                  <div className="col-span-4 space-y-1">
                     <select
-                      className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs transition-all duration-200"
+                      className={`h-9 w-full rounded-md border bg-white px-2 text-xs transition-all duration-200 ${
+                        lineAccountNotSelectable
+                          ? "border-amber-300"
+                          : "border-slate-200"
+                      }`}
                       value={ln.account_id}
                       onChange={(ev) => {
                         const v = ev.target.value;
@@ -253,12 +320,20 @@ export function GlJournalsView() {
                         );
                       }}
                     >
-                      {selectableAccounts.map((a) => (
+                      {lineAccountOptions.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.code} — {a.name}
+                          {!a.is_active ? " (inactive)" : ""}
+                          {a.is_control_account ? " (control)" : ""}
                         </option>
                       ))}
                     </select>
+                    {lineAccountNotSelectable && (
+                      <p className="text-[10px] leading-tight text-amber-800">
+                        This line uses an inactive, control, or missing account.
+                        Choose an active posting account before saving or posting.
+                      </p>
+                    )}
                   </div>
                   <div className="col-span-3">
                     <Input
@@ -296,7 +371,8 @@ export function GlJournalsView() {
                     {accLabel[ln.account_id]?.slice(0, 12)}…
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
             <div
               className={`mt-3 flex items-center justify-between text-sm ${balanced ? "text-slate-700" : "text-red-600"}`}
