@@ -28,6 +28,14 @@ class InvoiceStatusEnum(str, Enum):
     SYNCED = "synced"
 
 
+class InvoiceAccountingKindEnum(str, Enum):
+    """Wire format matches ``InvoiceAccountingKind`` ORM enum values."""
+
+    AP_EXPENSE = "ap_expense"
+    AR_REVENUE = "ar_revenue"
+    UNKNOWN = "unknown"
+
+
 class InvoiceCreateRequest(BaseModel):
     """Create an invoice row (dashboard manual entry by default)."""
 
@@ -88,3 +96,5 @@ class InvoiceResponse(BaseModel):
     confidence: float | None
     requires_human_review: bool
     is_recurring: bool
+    gl_journal_entry_id: str | None = None
+    accounting_kind: InvoiceAccountingKindEnum | None = None
