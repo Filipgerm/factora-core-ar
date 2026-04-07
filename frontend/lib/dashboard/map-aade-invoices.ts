@@ -99,6 +99,7 @@ export function manualInvoicesToArInvoiceRows(
           ? `Ref: ${inv.external_id.slice(0, 12)}…`
           : null,
     paidAt: null,
+    glJournalEntryId: inv.gl_journal_entry_id ?? null,
   }));
 }
 

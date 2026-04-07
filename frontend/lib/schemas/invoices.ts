@@ -19,6 +19,14 @@ export const invoiceStatusSchema = z.enum([
 
 export type InvoiceStatus = z.infer<typeof invoiceStatusSchema>;
 
+export const invoiceAccountingKindSchema = z.enum([
+  "ap_expense",
+  "ar_revenue",
+  "unknown",
+]);
+
+export type InvoiceAccountingKind = z.infer<typeof invoiceAccountingKindSchema>;
+
 export const invoiceResponseSchema = z.object({
   id: z.string(),
   organization_id: z.string(),
@@ -33,6 +41,9 @@ export const invoiceResponseSchema = z.object({
   status: invoiceStatusSchema,
   confidence: z.number().min(0).max(1).nullable(),
   requires_human_review: z.boolean(),
+  is_recurring: z.boolean().optional().default(false),
+  gl_journal_entry_id: z.string().uuid().nullish(),
+  accounting_kind: invoiceAccountingKindSchema.nullish(),
 });
 
 export type InvoiceResponse = z.infer<typeof invoiceResponseSchema>;

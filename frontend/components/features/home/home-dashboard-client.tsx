@@ -28,6 +28,7 @@ import { HomeDashboardGreeting } from "./home-dashboard-greeting";
 import { HomeKpiBento } from "./home-kpi-bento";
 import { HomeKpiBentoSkeleton } from "./home-kpi-skeleton";
 import { HomeReportsSection } from "./home-reports-section";
+import { HomeRecentGlJournals } from "./home-recent-gl-journals";
 import { RecentActivityFeed } from "./recent-activity-feed";
 
 export function HomeDashboardClient() {
@@ -178,7 +179,8 @@ export function HomeDashboardClient() {
             </div>
           ) : null}
         </div>
-        <div className="min-h-0 lg:col-span-5">
+        <div className="min-h-0 space-y-6 lg:col-span-5">
+          {hasOrg ? <HomeRecentGlJournals /> : null}
           <HomeReportsSection className="h-full" />
         </div>
       </div>

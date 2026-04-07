@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
@@ -70,6 +70,7 @@ export function GlJournalsView() {
   const searchParams = useSearchParams();
   const accountId = searchParams.get("accountId");
   const sourceBatchId = searchParams.get("source_batch_id");
+  const journalIdParam = searchParams.get("journal_id");
   const qBase = searchParams.toString();
   const clearAccountHref = useMemo(() => {
     const sp = new URLSearchParams(searchParams.toString());
@@ -95,6 +96,12 @@ export function GlJournalsView() {
   const [sheetId, setSheetId] = useState<string | null>(null);
   const [draftEdit, setDraftEdit] = useState<GlJournalEntry | null>(null);
   const [lineEdits, setLineEdits] = useState<GlJournalLine[] | null>(null);
+
+  useEffect(() => {
+    if (journalIdParam) {
+      setSheetId(journalIdParam);
+    }
+  }, [journalIdParam]);
 
   const selectableAccounts = useMemo(
     () => accounts.filter((a) => !a.is_control_account && a.is_active),

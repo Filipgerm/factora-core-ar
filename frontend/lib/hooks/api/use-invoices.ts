@@ -70,6 +70,7 @@ export function useCreateInvoiceMutation() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.invoices.all });
+      void qc.invalidateQueries({ queryKey: queryKeys.generalLedger.all });
     },
   });
 }
