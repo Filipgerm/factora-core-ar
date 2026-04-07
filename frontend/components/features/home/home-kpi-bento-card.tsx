@@ -108,13 +108,13 @@ export function HomeKpiBentoCard({
           {metric.id === NET_INCOME_METRIC_ID ? (
             <KpiMiniBarChart
               data={metric.sparkline}
-              trendPositive={positive}
+              trendPositive
               className="h-full"
             />
           ) : (
             <KpiArrAreaChart
               data={metric.sparkline}
-              trendPositive={positive}
+              trendPositive
               className="h-full"
             />
           )}
