@@ -146,7 +146,7 @@ export function JournalEntryInspectorSheet({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {entry.lines.map((ln) => {
+                      {(entry.lines ?? []).map((ln) => {
                         const a = accMap[ln.account_id];
                         return (
                           <TableRow
@@ -162,17 +162,17 @@ export function JournalEntryInspectorSheet({
                             <TableCell className="text-right text-xs tabular-nums">
                               {ln.debit > 0
                                 ? formatLedgerMoney(
-                                    ln.debit,
-                                    entry.document_currency
-                                  )
+                                  ln.debit,
+                                  entry.document_currency
+                                )
                                 : "—"}
                             </TableCell>
                             <TableCell className="text-right text-xs tabular-nums">
                               {ln.credit > 0
                                 ? formatLedgerMoney(
-                                    ln.credit,
-                                    entry.document_currency
-                                  )
+                                  ln.credit,
+                                  entry.document_currency
+                                )
                                 : "—"}
                             </TableCell>
                           </TableRow>

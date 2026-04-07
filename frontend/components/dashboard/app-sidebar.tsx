@@ -44,7 +44,7 @@ const SIMPLE_NAV = [
     label: "Cash Reconciliation",
     icon: GitMerge,
   },
-  { href: "/general-ledger", label: "General ledger", icon: ScrollText },
+  { href: "/general-ledger", label: "General Ledger", icon: ScrollText },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/reporting", label: "Reporting", icon: BarChart3 },
 ] as const;
@@ -301,7 +301,7 @@ export function AppSidebar() {
                     className={cn(
                       flyoutLink,
                       subActive &&
-                        "bg-white/85 font-semibold text-foreground shadow-sm dark:bg-teal-950/50"
+                      "bg-white/85 font-semibold text-foreground shadow-sm dark:bg-teal-950/50"
                     )}
                   >
                     {label}

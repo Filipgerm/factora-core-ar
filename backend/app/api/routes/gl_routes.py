@@ -47,9 +47,7 @@ async def gl_create_account(body: GlAccountCreateRequest, ctl: GlCtrl):
 
 
 @router.patch("/accounts/{account_id}", response_model=GlAccountResponse)
-async def gl_update_account(
-    account_id: str, body: GlAccountUpdateRequest, ctl: GlCtrl
-):
+async def gl_update_account(account_id: str, body: GlAccountUpdateRequest, ctl: GlCtrl):
     return await ctl.update_account(account_id, body)
 
 
@@ -112,7 +110,9 @@ async def gl_post_journal_entry(entry_id: str, ctl: GlCtrl):
     return await ctl.post_journal_entry(entry_id)
 
 
-@router.post("/journal-entries/{entry_id}/reverse", response_model=GlJournalEntryResponse)
+@router.post(
+    "/journal-entries/{entry_id}/reverse", response_model=GlJournalEntryResponse
+)
 async def gl_reverse_journal_entry(
     entry_id: str,
     ctl: GlCtrl,
@@ -166,7 +166,7 @@ async def gl_fx_quote(
     from_currency: str = Query(..., min_length=3, max_length=3),
     to_currency: str = Query(..., min_length=3, max_length=3),
 ):
-    return ctl.fx_quote(from_currency, to_currency)
+    return await ctl.fx_quote(from_currency, to_currency)
 
 
 @router.get("/recurring-templates", response_model=list[GlRecurringTemplateResponse])

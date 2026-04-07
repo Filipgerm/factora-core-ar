@@ -299,78 +299,77 @@ export function GlJournalsView() {
                   Boolean(ln.account_id) &&
                   !selectableAccountIds.has(ln.account_id);
                 return (
-                <div
-                  key={ln.id}
-                  className="grid grid-cols-12 gap-2 border-b border-slate-50 py-2"
-                >
-                  <div className="col-span-4 space-y-1">
-                    <select
-                      className={`h-9 w-full rounded-md border bg-white px-2 text-xs transition-all duration-200 ${
-                        lineAccountNotSelectable
+                  <div
+                    key={ln.id}
+                    className="grid grid-cols-12 gap-2 border-b border-slate-50 py-2"
+                  >
+                    <div className="col-span-4 space-y-1">
+                      <select
+                        className={`h-9 w-full rounded-md border bg-white px-2 text-xs transition-all duration-200 ${lineAccountNotSelectable
                           ? "border-amber-300"
                           : "border-slate-200"
-                      }`}
-                      value={ln.account_id}
-                      onChange={(ev) => {
-                        const v = ev.target.value;
-                        setLineEdits((prev) =>
-                          prev?.map((x, i) =>
-                            i === idx ? { ...x, account_id: v } : x
-                          ) ?? null
-                        );
-                      }}
-                    >
-                      {lineAccountOptions.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.code} — {a.name}
-                          {!a.is_active ? " (inactive)" : ""}
-                          {a.is_control_account ? " (control)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    {lineAccountNotSelectable && (
-                      <p className="text-[10px] leading-tight text-amber-800">
-                        This line uses an inactive, control, or missing account.
-                        Choose an active posting account before saving or posting.
-                      </p>
-                    )}
+                          }`}
+                        value={ln.account_id}
+                        onChange={(ev) => {
+                          const v = ev.target.value;
+                          setLineEdits((prev) =>
+                            prev?.map((x, i) =>
+                              i === idx ? { ...x, account_id: v } : x
+                            ) ?? null
+                          );
+                        }}
+                      >
+                        {lineAccountOptions.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.code} — {a.name}
+                            {!a.is_active ? " (inactive)" : ""}
+                            {a.is_control_account ? " (control)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      {lineAccountNotSelectable && (
+                        <p className="text-[10px] leading-tight text-amber-800">
+                          This line uses an inactive, control, or missing account.
+                          Choose an active posting account before saving or posting.
+                        </p>
+                      )}
+                    </div>
+                    <div className="col-span-3">
+                      <Input
+                        type="number"
+                        className="h-9 text-xs tabular-nums"
+                        value={ln.debit || ""}
+                        placeholder="Debit"
+                        onChange={(ev) => {
+                          const n = parseFloat(ev.target.value) || 0;
+                          setLineEdits((prev) =>
+                            prev?.map((x, i) =>
+                              i === idx ? { ...x, debit: n, credit: 0 } : x
+                            ) ?? null
+                          );
+                        }}
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <Input
+                        type="number"
+                        className="h-9 text-xs tabular-nums"
+                        value={ln.credit || ""}
+                        placeholder="Credit"
+                        onChange={(ev) => {
+                          const n = parseFloat(ev.target.value) || 0;
+                          setLineEdits((prev) =>
+                            prev?.map((x, i) =>
+                              i === idx ? { ...x, credit: n, debit: 0 } : x
+                            ) ?? null
+                          );
+                        }}
+                      />
+                    </div>
+                    <div className="col-span-2 flex items-center text-[10px] text-muted-foreground">
+                      {accLabel[ln.account_id]?.slice(0, 12)}…
+                    </div>
                   </div>
-                  <div className="col-span-3">
-                    <Input
-                      type="number"
-                      className="h-9 text-xs tabular-nums"
-                      value={ln.debit || ""}
-                      placeholder="Debit"
-                      onChange={(ev) => {
-                        const n = parseFloat(ev.target.value) || 0;
-                        setLineEdits((prev) =>
-                          prev?.map((x, i) =>
-                            i === idx ? { ...x, debit: n, credit: 0 } : x
-                          ) ?? null
-                        );
-                      }}
-                    />
-                  </div>
-                  <div className="col-span-3">
-                    <Input
-                      type="number"
-                      className="h-9 text-xs tabular-nums"
-                      value={ln.credit || ""}
-                      placeholder="Credit"
-                      onChange={(ev) => {
-                        const n = parseFloat(ev.target.value) || 0;
-                        setLineEdits((prev) =>
-                          prev?.map((x, i) =>
-                            i === idx ? { ...x, credit: n, debit: 0 } : x
-                          ) ?? null
-                        );
-                      }}
-                    />
-                  </div>
-                  <div className="col-span-2 flex items-center text-[10px] text-muted-foreground">
-                    {accLabel[ln.account_id]?.slice(0, 12)}…
-                  </div>
-                </div>
                 );
               })}
             </div>

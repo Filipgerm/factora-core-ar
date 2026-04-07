@@ -4,7 +4,10 @@ import { z } from "zod";
 const money = z.union([z.number(), z.string()]).transform((v) => {
   if (typeof v === "number") return v;
   const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+  if (!Number.isFinite(n)) {
+    throw new Error(`Invalid monetary value: "${v}"`);
+  }
+  return n;
 });
 
 export const glLegalEntitySchema = z.object({
@@ -139,7 +142,7 @@ export const glRecurringTemplateSchema = z.object({
   name: z.string(),
   memo: z.string().nullable(),
   frequency: z.enum(["monthly", "quarterly"]),
-  day_of_month: z.number(),
+  day_of_month: z.number().int().min(1).max(31),
   is_active: z.boolean(),
   template_lines: z.array(glRecurringTemplateLineSchema),
 });
@@ -184,9 +187,7 @@ export const glJournalLineInputSchema = z.object({
 });
 export type GlJournalLineInput = z.infer<typeof glJournalLineInputSchema>;
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 
 export const glJournalEntryCreateSchema = z.object({
   legal_entity_id: z.string().uuid(),

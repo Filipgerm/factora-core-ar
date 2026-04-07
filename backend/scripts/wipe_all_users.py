@@ -33,6 +33,18 @@ async def _run() -> None:
             "Refusing to run: set CONFIRM_WIPE_ALL_USERS=1 to delete all users."
         )
 
+    env = os.environ.get("ENVIRONMENT", "").lower()
+    if env in ("production", "prod"):
+        raise SystemExit(
+            "Refusing to run in production environment. This script is for local/dev use only."
+        )
+
+    env = os.environ.get("ENVIRONMENT", "").lower()
+    if env in ("production", "prod"):
+        raise SystemExit(
+            "Refusing to run in production environment. This script is for local/dev use only."
+        )
+
     from sqlalchemy import delete
 
     from app.db.models.identity import User

@@ -192,7 +192,7 @@ export function CounterpartyVatDialog({
                         toast({
                           variant: "destructive",
                           title: "No company found",
-                          description: "Try a different AFM or check registry availability.",
+                          description: "Verify the AFM number or try again later.",
                         });
                         return;
                       }
