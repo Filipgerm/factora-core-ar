@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -391,6 +392,11 @@ class GlJournalLine(Base):
 
     __table_args__ = (
         Index("ix_gl_journal_lines_org_account", "organization_id", "account_id"),
+        CheckConstraint(
+            "debit >= 0 AND credit >= 0 AND NOT (debit = 0 AND credit = 0) "
+            "AND NOT (debit > 0 AND credit > 0)",
+            name="ck_gl_journal_lines_debit_credit_line",
+        ),
     )
 
 
@@ -615,6 +621,14 @@ class GlRecurringEntryTemplateLine(Base):
 
     template: Mapped["GlRecurringEntryTemplate"] = relationship(
         "GlRecurringEntryTemplate", back_populates="template_lines"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "debit >= 0 AND credit >= 0 AND NOT (debit = 0 AND credit = 0) "
+            "AND NOT (debit > 0 AND credit > 0)",
+            name="ck_gl_recurring_template_lines_debit_credit_line",
+        ),
     )
 
 
