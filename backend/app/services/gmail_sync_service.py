@@ -34,6 +34,7 @@ from app.models.invoices import (
 )
 from app.services.embeddings.vector_store import VectorStoreService
 from app.services.ingestion_service import IngestionService
+from app.services.invoice_gl_bridge_service import InvoiceGlBridgeService
 from app.services.invoice_service import InvoiceService
 
 logger = logging.getLogger(__name__)
@@ -316,6 +317,19 @@ class GmailSyncService:
                         outcome="skipped_duplicate_invoice",
                     )
                 raise
+
+            bridge = InvoiceGlBridgeService(self._db, organization_id)
+            try:
+                await bridge.create_draft_journal_for_invoice(
+                    inv.id,
+                    ambiguous_incoming_document=True,
+                )
+            except AppValidationError as bridge_err:
+                logger.warning(
+                    "invoice GL bridge skipped for invoice %s: %s",
+                    inv.id,
+                    bridge_err,
+                )
 
             vec = result.get("embedding")
             if isinstance(vec, list) and vec:

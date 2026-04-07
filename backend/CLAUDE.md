@@ -77,6 +77,13 @@ SaltEdge transactions, and **AADE document snapshots**—not the system of recor
 invoice rows. Keeping invoice writes out of the dashboard service avoids a god-object
 service and matches how reconciliation and future agents will reference invoice IDs.
 
+**Gmail ingest → GL (MVP):** After a unified ``Invoice`` is created from Gmail,
+``InvoiceGlBridgeService`` may create a **draft** journal via ``GlService`` using
+non-control CoA codes **2110** (vendor accrual) and **1110** (AR detail), with default
+**6100** expense / **4000** revenue. Control accounts **2100** / **1100** stay reserved
+for subledger rollups; automated lines must not post to them. The worker logs and
+continues if the chart is missing those codes.
+
 ### Module Documentation Standards
 
 Every new or refactored Service and Controller file must open with a Google-style
