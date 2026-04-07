@@ -295,3 +295,97 @@ body.discreet [data-sensitive="true"]:hover {
 .sensitive-blur {
   filter: blur(6px);
 }
+
+/* -----------------------------------------------------------------------------
+   Auth experience — ambient canvas (slate-scale grid + soft motion; no page hex)
+   ----------------------------------------------------------------------------- */
+.auth-canvas-grid {
+  background-image:
+    linear-gradient(to right, rgb(148 163 184 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(148 163 184 / 0.07) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, black 20%, transparent 75%);
+}
+
+.dark .auth-canvas-grid {
+  background-image:
+    linear-gradient(to right, rgb(71 85 105 / 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(71 85 105 / 0.12) 1px, transparent 1px);
+}
+
+@keyframes auth-orb-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(2%, -3%) scale(1.03);
+  }
+  66% {
+    transform: translate(-2%, 2%) scale(0.98);
+  }
+}
+
+@keyframes auth-shimmer {
+  0% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0.35;
+  }
+}
+
+.auth-orb {
+  animation: auth-orb-drift 28s ease-in-out infinite;
+}
+
+.auth-orb-delayed {
+  animation: auth-orb-drift 34s ease-in-out infinite;
+  animation-delay: -8s;
+}
+
+.auth-aurora-shimmer {
+  animation: auth-shimmer 14s ease-in-out infinite;
+}
+
+@keyframes auth-brand-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1.06);
+  }
+}
+
+.auth-brand-halo {
+  animation: auth-brand-breathe 14s ease-in-out infinite;
+}
+
+.auth-brand-halo-delayed {
+  animation: auth-brand-breathe 18s ease-in-out infinite;
+  animation-delay: -5s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-brand-halo,
+  .auth-brand-halo-delayed {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
+/* Sheen on auth form hover — blue / purple (Tailwind palette scale), no arbitrary hex in TSX */
+.auth-form-sheen {
+  background: linear-gradient(
+    135deg,
+    rgb(59 130 246 / 0.12),
+    rgb(147 51 234 / 0.08),
+    transparent 55%
+  );
+}
