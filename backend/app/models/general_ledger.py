@@ -140,6 +140,13 @@ class GlAccountingPeriodResponse(BaseModel):
 
 class GlAccountingPeriodUpdateRequest(BaseModel):
     status: GlPeriodStatusEnum
+    acknowledge_break_hard_close: bool = Field(
+        default=False,
+        description=(
+            "Owner only: set true together with a weaker status to break a hard close "
+            "after controlled review (audited)."
+        ),
+    )
 
 
 # --- Journal ---

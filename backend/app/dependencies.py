@@ -441,7 +441,12 @@ def get_gl_service(
     org_id: CurrentOrgId,
     user: AuthUser,
 ) -> GlService:
-    return GlService(db, org_id, actor_user_id=user.get("sub"))
+    return GlService(
+        db,
+        org_id,
+        actor_user_id=user.get("sub"),
+        actor_role=user.get("role"),
+    )
 
 
 def get_gl_controller(

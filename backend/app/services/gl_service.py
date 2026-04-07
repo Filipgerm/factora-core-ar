@@ -9,6 +9,10 @@ Flow:
     1. List/get operations filter by ``organization_id``.
     2. Journal draft save validates balance, line sides, and control-account rules.
     3. Posting checks period status and immutability.
+    4. ``_journal_to_response`` maps ORM fields including ``entry_date`` and
+       ``reversed_from_id`` to API DTOs.
+    5. Trial balance rows include ``account_type`` and natural ``net_balance``.
+    6. Hard-closed periods reject status weakening unless owner + explicit ack.
 
 Architectural Notes:
     Consolidated reporting omits ``legal_entity_id`` filter on queries that
@@ -27,6 +31,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from app.db.models.identity import UserRole
 from app.services.gl_schema_check import gl_ledger_schema_installed
 from app.db.models.gl import (
     GlAccount,
@@ -130,10 +135,12 @@ class GlService:
         organization_id: str,
         *,
         actor_user_id: str | None = None,
+        actor_role: str | None = None,
     ) -> None:
         self.db = db
         self.organization_id = organization_id
         self.actor_user_id = actor_user_id
+        self._actor_role = actor_role
         self._gl_schema_confirmed: bool = False
 
     async def _gl_tables_ready(self) -> bool:
@@ -266,6 +273,7 @@ class GlService:
         )
 
     def _journal_to_response(self, entry: GlJournalEntry) -> GlJournalEntryResponse:
+        """Map journal ORM row (including ``entry_date``, ``reversed_from_id``) to API DTO."""
         line_res: list[GlJournalLineResponse] = []
         td = Decimal("0")
         tc = Decimal("0")
@@ -411,7 +419,38 @@ class GlService:
     ) -> GlAccountingPeriodResponse:
         await self._require_gl_for_write()
         row = await self._period(period_id)
-        row.status = GlPeriodStatus(body.status.value)
+        previous = row.status
+        new_status = GlPeriodStatus(body.status.value)
+        if previous == GlPeriodStatus.HARD_CLOSE and new_status != GlPeriodStatus.HARD_CLOSE:
+            if not body.acknowledge_break_hard_close:
+                raise ValidationError(
+                    "A hard-closed period cannot be moved to a weaker status without "
+                    "explicit acknowledgment (acknowledge_break_hard_close).",
+                    code="gl.period.hard_close_locked",
+                    fields={
+                        "status": "Hard close is irreversible for routine users; "
+                        "set acknowledge_break_hard_close after controlled review."
+                    },
+                )
+            if (self._actor_role or "") != UserRole.OWNER.value:
+                raise ValidationError(
+                    "Reopening or relaxing a hard-closed period requires the "
+                    "organization owner role.",
+                    code="gl.period.hard_close_reopen_forbidden",
+                    fields={"role": self._actor_role or "none"},
+                )
+        row.status = new_status
+        await self._append_audit(
+            subject_type="gl_accounting_period",
+            subject_id=period_id,
+            action="period_status_updated",
+            payload={
+                "previous_status": previous.value,
+                "new_status": new_status.value,
+                "broke_hard_close": previous == GlPeriodStatus.HARD_CLOSE
+                and new_status != GlPeriodStatus.HARD_CLOSE,
+            },
+        )
         await self.db.commit()
         await self.db.refresh(row)
         return GlAccountingPeriodResponse.model_validate(row)
@@ -867,6 +906,7 @@ class GlService:
         consolidated: bool,
         posting_period_id: str | None,
     ) -> list[GlTrialBalanceRowResponse]:
+        """Aggregate posted lines per account; includes ``account_type`` and signed ``net_balance``."""
         if not await self._gl_tables_ready():
             return []
         if posting_period_id:
