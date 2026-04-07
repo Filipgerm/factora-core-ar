@@ -322,6 +322,18 @@ class GlRecurringTemplateUpdateRequest(BaseModel):
     template_lines: list[GlRecurringTemplateLineInput] | None = None
 
 
+class GlRecurringTemplateGenerateJournalRequest(BaseModel):
+    """Optional overrides when materializing a draft journal from a template."""
+
+    posting_period_id: str | None = None
+    entry_date: date | None = Field(
+        default=None,
+        description="Economic event date; UTC calendar date when omitted.",
+    )
+    memo: str | None = None
+    reference: str | None = None
+
+
 # --- Trial balance ---
 
 

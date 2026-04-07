@@ -21,6 +21,7 @@ from app.models.general_ledger import (
     GlJournalEntryUpdateRequest,
     GlLegalEntityResponse,
     GlRecurringTemplateCreateRequest,
+    GlRecurringTemplateGenerateJournalRequest,
     GlRecurringTemplateResponse,
     GlRecurringTemplateUpdateRequest,
     GlRevenueScheduleResponse,
@@ -195,3 +196,15 @@ async def gl_update_recurring_template(
     template_id: str, body: GlRecurringTemplateUpdateRequest, ctl: GlCtrl
 ):
     return await ctl.update_recurring_template(template_id, body)
+
+
+@router.post(
+    "/recurring-templates/{template_id}/generate-journal",
+    response_model=GlJournalEntryResponse,
+)
+async def gl_generate_journal_from_recurring_template(
+    template_id: str,
+    ctl: GlCtrl,
+    body: GlRecurringTemplateGenerateJournalRequest | None = Body(default=None),
+):
+    return await ctl.generate_journal_from_recurring_template(template_id, body)

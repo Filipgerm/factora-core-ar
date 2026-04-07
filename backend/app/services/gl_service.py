@@ -13,6 +13,7 @@ Flow:
        ``reversed_from_id`` to API DTOs.
     5. Trial balance rows include ``account_type`` and natural ``net_balance``.
     6. Hard-closed periods reject status weakening unless owner + explicit ack.
+    7. Recurring templates can spawn draft journals via ``generate_journal_from_recurring_template``.
 
 Architectural Notes:
     Consolidated reporting omits ``legal_entity_id`` filter on queries that
@@ -21,7 +22,7 @@ Architectural Notes:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Sequence
 
@@ -77,6 +78,7 @@ from app.models.general_ledger import (
     GlRecurringFrequencyEnum,
     GlRecurringTemplateCreateRequest,
     GlRecurringTemplateLineInput,
+    GlRecurringTemplateGenerateJournalRequest,
     GlRecurringTemplateLineResponse,
     GlRecurringTemplateResponse,
     GlRecurringTemplateUpdateRequest,
@@ -1139,6 +1141,79 @@ class GlService:
         )
         assert loaded is not None
         return self._recurring_to_response(loaded)
+
+    async def generate_journal_from_recurring_template(
+        self,
+        template_id: str,
+        body: GlRecurringTemplateGenerateJournalRequest | None,
+    ) -> GlJournalEntryResponse:
+        """Create a draft journal by copying template lines (scheduler / manual fire)."""
+        await self._require_gl_for_write()
+        opts = body or GlRecurringTemplateGenerateJournalRequest()
+        t = await self.db.scalar(
+            select(GlRecurringEntryTemplate)
+            .where(
+                GlRecurringEntryTemplate.id == template_id,
+                GlRecurringEntryTemplate.organization_id == self.organization_id,
+            )
+            .options(selectinload(GlRecurringEntryTemplate.template_lines))
+        )
+        if not t:
+            raise NotFoundError("Template not found", code="gl.template_not_found")
+        if not t.is_active:
+            raise ValidationError(
+                "Cannot generate a journal from an inactive template.",
+                code="gl.template.inactive",
+                fields={"is_active": "false"},
+            )
+        tls = sorted(t.template_lines, key=lambda x: x.line_order)
+        if not tls:
+            raise ValidationError(
+                "Template has no lines to post.",
+                code="gl.template.empty",
+                fields={"template_lines": "Add at least two balanced lines"},
+            )
+        entity = await self._entity(t.legal_entity_id)
+        entry_d: date = opts.entry_date or datetime.now(timezone.utc).date()
+        if opts.posting_period_id:
+            await self._period(opts.posting_period_id)
+        ccy = entity.functional_currency.strip().upper() or "EUR"
+        lines = [
+            GlJournalLineInput(
+                account_id=tl.account_id,
+                description=tl.description,
+                debit=tl.debit,
+                credit=tl.credit,
+                line_order=tl.line_order,
+                dimension_value_ids=[],
+            )
+            for tl in tls
+        ]
+        memo = (
+            opts.memo
+            if opts.memo is not None
+            else f"Recurring template: {t.name}"
+        )
+        create_body = GlJournalEntryCreateRequest(
+            legal_entity_id=t.legal_entity_id,
+            posting_period_id=opts.posting_period_id,
+            entry_date=entry_d,
+            document_currency=ccy,
+            base_currency=ccy,
+            fx_rate_to_base=None,
+            memo=memo,
+            reference=opts.reference,
+            lines=lines,
+        )
+        entry = await self.create_journal_entry(create_body)
+        await self._append_audit(
+            subject_type="recurring_template",
+            subject_id=template_id,
+            action="journal_generated",
+            payload={"journal_entry_id": entry.id},
+        )
+        await self.db.commit()
+        return entry
 
     def _recurring_to_response(
         self, t: GlRecurringEntryTemplate
