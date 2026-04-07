@@ -68,6 +68,7 @@ class InvoiceService:
             status=self._to_orm_status(body.status),
             confidence=body.confidence,
             requires_human_review=body.requires_human_review,
+            is_recurring=body.is_recurring,
         )
         self.db.add(inv)
         await self.db.commit()

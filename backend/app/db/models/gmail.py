@@ -11,8 +11,8 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 from app.db.base import Base
 from app.db.models._utils import utcnow
@@ -90,6 +90,21 @@ class GmailProcessedMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    ingest_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        server_default="completed",
+    )
+    celery_task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+        server_default=func.now(),
+    )
+    mailbox_google_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

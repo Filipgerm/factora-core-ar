@@ -27,7 +27,13 @@ from app.core.security.cookies import (
     clear_refresh_token_cookie,
     set_refresh_token_cookie,
 )
-from app.dependencies import AuthSvc, AuthUser, require_auth
+from app.dependencies import (
+    AuthSvc,
+    AuthUser,
+    enforce_login_rate_limit,
+    enforce_signup_rate_limit,
+    require_auth,
+)
 from app.models.auth import (
     AuthPublicResponse,
     ChangePasswordRequest,
@@ -59,6 +65,7 @@ router = APIRouter(tags=["Auth"])
     response_model=UserProfileResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user account",
+    dependencies=[Depends(enforce_signup_rate_limit)],
 )
 async def sign_up(
     req: SignUpRequest,
@@ -81,6 +88,7 @@ async def sign_up(
     "/login",
     response_model=AuthPublicResponse,
     summary="Authenticate with email and password",
+    dependencies=[Depends(enforce_login_rate_limit)],
 )
 async def login(
     req: LoginRequest,

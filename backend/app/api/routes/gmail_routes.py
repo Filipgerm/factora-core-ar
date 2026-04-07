@@ -56,6 +56,7 @@ async def gmail_oauth_callback(
 
 @router.post(
     "/integrations/gmail/sync",
+    status_code=202,
     dependencies=[
         Depends(require_auth),
         Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
@@ -113,7 +114,7 @@ async def ingestion_preview(
 pubsub_router = APIRouter()
 
 
-@pubsub_router.post("/webhooks/gmail/pubsub")
+@pubsub_router.post("/webhooks/gmail/pubsub", status_code=202)
 async def gmail_pubsub_push(request: Request, ctl: GmailCtrl):
     """Google Pub/Sub push endpoint for Gmail watch notifications."""
     return await ctl.pubsub_push(request)

@@ -22,6 +22,8 @@ class GmailOAuthCallbackQuery(BaseModel):
 
 GmailSyncOutcome = Literal[
     "ingested",
+    "queued",
+    "queued_pending",
     "skipped_already_processed",
     "skipped_duplicate_invoice",
     "ingestion_failed",
@@ -35,6 +37,7 @@ class GmailSyncMessageDetail(BaseModel):
     gmail_message_id: str
     subject: str = ""
     outcome: GmailSyncOutcome
+    celery_task_id: str | None = None
     error: str | None = None
     invoice_id: str | None = None
     confidence: float | None = None
@@ -46,7 +49,16 @@ class GmailSyncMessageDetail(BaseModel):
 class GmailSyncResponse(BaseModel):
     """Result of a manual or webhook-triggered sync."""
 
-    ingested: int = Field(ge=0, description="Number of messages newly ingested as invoices")
+    queued: int = Field(
+        default=0,
+        ge=0,
+        description="Messages enqueued to Celery for worker ingest + invoice creation",
+    )
+    ingested: int = Field(
+        default=0,
+        ge=0,
+        description="Deprecated alias for ``queued``; API sets both to the same value",
+    )
     skipped: int = Field(ge=0, description="Messages skipped (already processed or no attachment)")
     errors: list[str] = Field(default_factory=list)
     mailbox: str

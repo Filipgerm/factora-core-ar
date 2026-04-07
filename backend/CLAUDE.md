@@ -324,6 +324,13 @@ field on `Settings` (required = no default in code; optional = has a default, of
 | `FRONTEND_BASE_URL` | ✅       | Canonical frontend origin for email links.         |
 | `ENVIRONMENT`       | optional | `production` (default) \| `development` \| `demo`. |
 
+### Task queue (Celery + Redis)
+
+| Variable                  | Required | Description                                                                 |
+| ------------------------- | -------- | --------------------------------------------------------------------------- |
+| `CELERY_BROKER_URL`       | optional | Redis broker (default `redis://localhost:6379/0`).                          |
+| `CELERY_RESULT_BACKEND`   | optional | Redis for task results (default `…6379/1`). Enqueue via `TaskQueueService`. |
+
 ### HTTP middleware
 
 | Variable          | Required | Description                                               |

@@ -44,6 +44,8 @@ from app.services.file_service import FileService
 from app.services.invoice_service import InvoiceService
 from app.services.gl_service import GlService
 from app.services.ingestion_service import IngestionService
+from app.services.rate_limit_service import RateLimitService, get_rate_limit_service
+from app.services.task_queue_service import TaskQueueService, get_task_queue_service
 from app.services.gmail_oauth_service import GmailOAuthService
 from app.services.gmail_sync_service import GmailSyncService
 from app.controllers.gmail_controller import GmailController
@@ -359,6 +361,39 @@ def get_ingestion_service(
 IngSvc = Annotated[IngestionService, Depends(get_ingestion_service)]
 
 
+def get_task_queue() -> TaskQueueService:
+    """Stateless Celery enqueue facade — inject where background ingestion is queued."""
+    return get_task_queue_service()
+
+
+TaskQ = Annotated[TaskQueueService, Depends(get_task_queue)]
+
+
+def get_rate_limit() -> RateLimitService:
+    return get_rate_limit_service()
+
+
+RateLim = Annotated[RateLimitService, Depends(get_rate_limit)]
+
+
+async def enforce_login_rate_limit(request: Request, rl: RateLim) -> None:
+    ip = request.client.host if request.client else "unknown"
+    if not rl.allow(f"auth:login:{ip}", limit=40, window_sec=900):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again later.",
+        )
+
+
+async def enforce_signup_rate_limit(request: Request, rl: RateLim) -> None:
+    ip = request.client.host if request.client else "unknown"
+    if not rl.allow(f"auth:signup:{ip}", limit=25, window_sec=900):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many signup attempts. Try again later.",
+        )
+
+
 def get_gmail_oauth_service(db: DB) -> GmailOAuthService:
     return GmailOAuthService(db)
 
@@ -491,7 +526,9 @@ def get_stripe_sync_service(
 def get_stripe_controller(
     db: DB,
     org_id: CurrentOrgId,
-    webhook_service: Annotated[StripeWebhookService, Depends(get_stripe_webhook_service)],
+    webhook_service: Annotated[
+        StripeWebhookService, Depends(get_stripe_webhook_service)
+    ],
     stripe_client: Annotated[StripeClient, Depends(get_stripe_client)],
 ) -> StripeController:
     return StripeController(
@@ -501,7 +538,9 @@ def get_stripe_controller(
 
 def get_stripe_controller_for_webhook(
     db: DB,
-    webhook_service: Annotated[StripeWebhookService, Depends(get_stripe_webhook_service)],
+    webhook_service: Annotated[
+        StripeWebhookService, Depends(get_stripe_webhook_service)
+    ],
     stripe_client: Annotated[StripeClient, Depends(get_stripe_client)],
 ) -> StripeController:
     return StripeController(
@@ -510,4 +549,6 @@ def get_stripe_controller_for_webhook(
 
 
 StripeCtrl = Annotated[StripeController, Depends(get_stripe_controller)]
-StripeWebhookCtrl = Annotated[StripeController, Depends(get_stripe_controller_for_webhook)]
+StripeWebhookCtrl = Annotated[
+    StripeController, Depends(get_stripe_controller_for_webhook)
+]

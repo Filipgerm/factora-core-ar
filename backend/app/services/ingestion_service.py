@@ -17,12 +17,14 @@ multi-tenancy is enforced because the factory always binds the JWT org id.
 
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.ingestion import ingestion_graph
+from app.clients.storage_client import download_bytes
 from app.agents.ingestion.state import IngestionState, VectorStoreFactory
 from app.services.embeddings.vector_store import VectorStoreService
 
@@ -46,6 +48,7 @@ class IngestionService:
         raw_text: str = "",
         attachment_base64: str | None = None,
         attachment_mime_type: str | None = None,
+        attachment_storage_path: str | None = None,
         email_subject: str | None = None,
         email_from: str | None = None,
         include_vector_hints: bool = True,
@@ -67,9 +70,15 @@ class IngestionService:
             state["email_subject"] = email_subject
         if email_from is not None:
             state["email_from"] = email_from
-        if attachment_base64 and attachment_mime_type:
-            state["attachment_base64"] = attachment_base64
-            state["attachment_mime_type"] = attachment_mime_type
+        eff_b64 = attachment_base64
+        eff_mime = attachment_mime_type
+        if attachment_storage_path:
+            raw = await download_bytes(attachment_storage_path)
+            eff_b64 = base64.standard_b64encode(raw).decode("ascii")
+            eff_mime = eff_mime or "application/octet-stream"
+        if eff_b64 and eff_mime:
+            state["attachment_base64"] = eff_b64
+            state["attachment_mime_type"] = eff_mime
         if include_vector_hints:
             state["vector_store_factory"] = self._vector_store_factory()
 

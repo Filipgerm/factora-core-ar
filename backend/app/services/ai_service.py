@@ -37,13 +37,32 @@ class AIService:
         suggested_label: str,
         corrected_label: str,
         source: str,
+        original_confidence: float | None = None,
+        was_auto_applied: bool = False,
+        correction_count: int = 1,
+        counterparty_id: str | None = None,
     ) -> str:
-        """Store human correction in pgvector; returns new embedding row id."""
+        """Store human correction in pgvector; returns new embedding row id.
+
+        Args:
+            content_text: The original document text that was mis-categorized.
+            suggested_label: Category the AI originally predicted.
+            corrected_label: Category the human confirmed as correct.
+            source: Ingestion channel label (e.g. ``"human_feedback"``).
+            original_confidence: AI confidence score at the time of correction.
+            was_auto_applied: True if the correction bypassed human review.
+            correction_count: Running count of corrections for this document type.
+            counterparty_id: Optional FK to link the correction to a vendor.
+        """
         vs = VectorStoreService(self._db, self._organization_id)
         row = await vs.record_category_feedback(
             content_text=content_text,
             suggested_label=suggested_label,
             corrected_label=corrected_label,
             source=source,
+            original_confidence=original_confidence,
+            was_auto_applied=was_auto_applied,
+            correction_count=correction_count,
+            counterparty_id=counterparty_id,
         )
         return str(row.id)

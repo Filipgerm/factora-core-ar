@@ -8,6 +8,7 @@ import json
 import logging
 
 from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 from google.auth.transport import requests as greq
 from google.oauth2 import id_token
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,7 +64,7 @@ class GmailController:
         *,
         organization_id: str,
         google_email: str | None = None,
-    ) -> GmailSyncResponse:
+    ) -> JSONResponse:
         try:
             out = await self._sync.sync_mailbox(
                 organization_id=organization_id,
@@ -71,7 +72,8 @@ class GmailController:
             )
         except AppError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
-        return GmailSyncResponse(**out)
+        body = GmailSyncResponse(**out).model_dump()
+        return JSONResponse(status_code=202, content=body)
 
     async def preview_ingestion(
         self,
@@ -94,10 +96,10 @@ class GmailController:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         return IngestionPreviewResponse(result=result)
 
-    async def pubsub_push(self, request: Request) -> dict[str, str]:
-        """Verify OIDC (when configured) and trigger sync for notified mailbox."""
+    async def pubsub_push(self, request: Request) -> JSONResponse:
+        """Verify OIDC (when configured), enqueue Gmail sync work, return 202 quickly."""
         if settings.demo_mode:
-            return {"status": "ignored_demo"}
+            return JSONResponse(content={"status": "ignored_demo"})
 
         auth = request.headers.get("Authorization")
         aud = (settings.GMAIL_PUBSUB_VERIFICATION_AUDIENCE or "").strip()
@@ -130,7 +132,7 @@ class GmailController:
 
         data_b64 = (body.get("message") or {}).get("data")
         if not data_b64:
-            return {"status": "no_data"}
+            return JSONResponse(content={"status": "no_data"})
 
         try:
             inner = json.loads(base64.b64decode(data_b64).decode("utf-8"))
@@ -145,10 +147,13 @@ class GmailController:
             history_id = str(history_id)
 
         if not email_address:
-            return {"status": "no_email"}
+            return JSONResponse(content={"status": "no_email"})
 
-        await self._sync.sync_for_email_address(
+        out = await self._sync.sync_for_email_address(
             email_address=email_address,
             history_id=history_id,
         )
-        return {"status": "ok"}
+        return JSONResponse(
+            status_code=202,
+            content=GmailSyncResponse(**out).model_dump(),
+        )
