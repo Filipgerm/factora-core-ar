@@ -1,10 +1,15 @@
-"""General ledger API routes."""
+"""General ledger API routes.
+
+Read endpoints require authentication only. Mutations require owner, admin, or
+external_accountant (viewers are read-only per org RBAC).
+"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, Query
 
-from app.dependencies import GlCtrl, require_auth
+from app.db.models.identity import UserRole
+from app.dependencies import GlCtrl, require_auth, require_role
 from app.models.general_ledger import (
     GlAccountCreateRequest,
     GlAccountResponse,
@@ -30,6 +35,16 @@ from app.models.general_ledger import (
 
 router = APIRouter(dependencies=[Depends(require_auth)])
 
+_GL_WRITE_DEPS = [
+    Depends(
+        require_role(
+            UserRole.OWNER,
+            UserRole.ADMIN,
+            UserRole.EXTERNAL_ACCOUNTANT,
+        )
+    )
+]
+
 
 @router.get("/entities", response_model=list[GlLegalEntityResponse])
 async def gl_list_entities(ctl: GlCtrl):
@@ -41,12 +56,20 @@ async def gl_list_accounts(ctl: GlCtrl):
     return await ctl.list_accounts()
 
 
-@router.post("/accounts", response_model=GlAccountResponse)
+@router.post(
+    "/accounts",
+    response_model=GlAccountResponse,
+    dependencies=_GL_WRITE_DEPS,
+)
 async def gl_create_account(body: GlAccountCreateRequest, ctl: GlCtrl):
     return await ctl.create_account(body)
 
 
-@router.patch("/accounts/{account_id}", response_model=GlAccountResponse)
+@router.patch(
+    "/accounts/{account_id}",
+    response_model=GlAccountResponse,
+    dependencies=_GL_WRITE_DEPS,
+)
 async def gl_update_account(account_id: str, body: GlAccountUpdateRequest, ctl: GlCtrl):
     return await ctl.update_account(account_id, body)
 
@@ -56,7 +79,11 @@ async def gl_list_periods(ctl: GlCtrl):
     return await ctl.list_periods()
 
 
-@router.patch("/periods/{period_id}", response_model=GlAccountingPeriodResponse)
+@router.patch(
+    "/periods/{period_id}",
+    response_model=GlAccountingPeriodResponse,
+    dependencies=_GL_WRITE_DEPS,
+)
 async def gl_update_period(
     period_id: str, body: GlAccountingPeriodUpdateRequest, ctl: GlCtrl
 ):
@@ -93,25 +120,39 @@ async def gl_get_journal_entry(entry_id: str, ctl: GlCtrl):
     return await ctl.get_journal_entry(entry_id)
 
 
-@router.post("/journal-entries", response_model=GlJournalEntryResponse)
+@router.post(
+    "/journal-entries",
+    response_model=GlJournalEntryResponse,
+    dependencies=_GL_WRITE_DEPS,
+)
 async def gl_create_journal_entry(body: GlJournalEntryCreateRequest, ctl: GlCtrl):
     return await ctl.create_journal_entry(body)
 
 
-@router.patch("/journal-entries/{entry_id}", response_model=GlJournalEntryResponse)
+@router.patch(
+    "/journal-entries/{entry_id}",
+    response_model=GlJournalEntryResponse,
+    dependencies=_GL_WRITE_DEPS,
+)
 async def gl_update_journal_entry(
     entry_id: str, body: GlJournalEntryUpdateRequest, ctl: GlCtrl
 ):
     return await ctl.update_journal_entry(entry_id, body)
 
 
-@router.post("/journal-entries/{entry_id}/post", response_model=GlJournalEntryResponse)
+@router.post(
+    "/journal-entries/{entry_id}/post",
+    response_model=GlJournalEntryResponse,
+    dependencies=_GL_WRITE_DEPS,
+)
 async def gl_post_journal_entry(entry_id: str, ctl: GlCtrl):
     return await ctl.post_journal_entry(entry_id)
 
 
 @router.post(
-    "/journal-entries/{entry_id}/reverse", response_model=GlJournalEntryResponse
+    "/journal-entries/{entry_id}/reverse",
+    response_model=GlJournalEntryResponse,
+    dependencies=_GL_WRITE_DEPS,
 )
 async def gl_reverse_journal_entry(
     entry_id: str,
@@ -181,7 +222,11 @@ async def gl_list_recurring_templates(
     )
 
 
-@router.post("/recurring-templates", response_model=GlRecurringTemplateResponse)
+@router.post(
+    "/recurring-templates",
+    response_model=GlRecurringTemplateResponse,
+    dependencies=_GL_WRITE_DEPS,
+)
 async def gl_create_recurring_template(
     body: GlRecurringTemplateCreateRequest, ctl: GlCtrl
 ):
@@ -191,6 +236,7 @@ async def gl_create_recurring_template(
 @router.patch(
     "/recurring-templates/{template_id}",
     response_model=GlRecurringTemplateResponse,
+    dependencies=_GL_WRITE_DEPS,
 )
 async def gl_update_recurring_template(
     template_id: str, body: GlRecurringTemplateUpdateRequest, ctl: GlCtrl
@@ -201,6 +247,7 @@ async def gl_update_recurring_template(
 @router.post(
     "/recurring-templates/{template_id}/generate-journal",
     response_model=GlJournalEntryResponse,
+    dependencies=_GL_WRITE_DEPS,
 )
 async def gl_generate_journal_from_recurring_template(
     template_id: str,
