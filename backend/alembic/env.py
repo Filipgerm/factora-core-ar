@@ -19,6 +19,7 @@ import app.db.models.embeddings     # noqa: F401
 import app.db.models.stripe_billing # noqa: F401
 import app.db.models.invoices  # noqa: F401
 import app.db.models.gmail  # noqa: F401
+import app.db.models.gl  # noqa: F401
 
 target_metadata = Base.metadata
 

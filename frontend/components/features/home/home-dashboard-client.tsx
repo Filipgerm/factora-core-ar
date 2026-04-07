@@ -12,6 +12,7 @@ import {
 import { transactionsToActivityItems } from "@/lib/dashboard/transactions-to-activity";
 import { useAuthSession } from "@/lib/hooks/api/use-auth";
 import {
+  DASHBOARD_PL_DAYS_DEFAULT,
   useDashboardPlMetricsQuery,
   useDashboardSellerMetricsQuery,
   useDashboardTransactionsQuery,
@@ -34,11 +35,11 @@ export function HomeDashboardClient() {
   const { toast } = useToast();
   const { customerId } = useResolvedSaltEdgeCustomerId();
   const pl = useDashboardPlMetricsQuery(
-    customerId ? { customerId, days: 30 } : null
+    customerId ? { customerId, days: DASHBOARD_PL_DAYS_DEFAULT } : null
   );
   const seller = useDashboardSellerMetricsQuery();
   const txs = useDashboardTransactionsQuery(
-    customerId ? { customerId, limit: 12 } : null
+    customerId ? { customerId, limit: 24 } : null
   );
 
   const lastToastKey = useRef<string | null>(null);

@@ -28,7 +28,7 @@ import {
 
 export function IntegrationsPageClient() {
   const { toast } = useToast();
-  const { customerId, ambiguous, source } = useResolvedSaltEdgeCustomerId();
+  const { customerId, ambiguous } = useResolvedSaltEdgeCustomerId();
   const customers = useSaltEdgeCustomersQuery();
   const connections = useSaltEdgeConnectionsQuery(customerId);
   const refreshConn = useSaltEdgeRefreshMutation();
@@ -45,8 +45,8 @@ export function IntegrationsPageClient() {
         <CardHeader>
           <CardTitle>SaltEdge banking</CardTitle>
           <CardDescription>
-            Connections for the resolved SaltEdge customer id
-            {source ? ` (source: ${source})` : ""}.
+            Linked accounts and refresh actions for your organization&apos;s banking
+            customer.
             {ambiguous ? (
               <span className="mt-1 block text-amber-700 dark:text-amber-400">
                 Multiple customers returned — set{" "}
@@ -154,10 +154,10 @@ export function IntegrationsPageClient() {
 
       <Card className="border-slate-200 shadow-sm transition-all duration-200">
         <CardHeader>
-          <CardTitle>GEMI lookup</CardTitle>
+          <CardTitle>Business Registry</CardTitle>
           <CardDescription>
-            Live company search (AFM mode, ≥3 digits). Document fetch calls the
-            backend storage pipeline.
+            Search Greek companies by AFM (at least 3 digits). Fetch stores registry
+            PDFs on the backend for review.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -181,7 +181,7 @@ export function IntegrationsPageClient() {
                 >
                   <p className="font-medium">{item.company_name}</p>
                   <p className="text-xs text-muted-foreground">
-                    AFM {item.afm} · GEMI {item.ar_gemi}
+                    AFM {item.afm} · Registry {item.ar_gemi}
                   </p>
                   <Button
                     type="button"
@@ -195,7 +195,7 @@ export function IntegrationsPageClient() {
                           toast({ title: r.message, description: r.company }),
                         onError: (e) =>
                           toast({
-                            title: "GEMI fetch failed",
+                            title: "Registry fetch failed",
                             description: isApiError(e) ? e.message : "Error",
                             variant: "destructive",
                           }),
@@ -217,12 +217,9 @@ export function IntegrationsPageClient() {
         <CardHeader>
           <CardTitle>myDATA</CardTitle>
           <CardDescription>
-            {/* TODO: Phase 2 Backend/UI — expose AADE mark & date range in a guided form; hook is useMydataDocsQuery({ mark, ... }). */}
-            Document sync requires a valid <code className="text-xs">mark</code>{" "}
-            query parameter per the myDATA API. Use{" "}
-            <code className="text-xs">useMydataDocsQuery</code> from{" "}
-            <code className="text-xs">@/lib/hooks/api/use-mydata</code> once you
-            have marks from operations.
+            Greek tax document sync from AADE. A guided mark and date-range flow
+            will ship in a later phase; until then, use developer tools or support
+            to run document pulls.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -231,8 +228,8 @@ export function IntegrationsPageClient() {
         <CardHeader>
           <CardTitle>Stored files</CardTitle>
           <CardDescription>
-            Download a file by storage key (same as{" "}
-            <code className="text-xs">GET /v1/files/{"{filename}"}</code>).
+            Download a previously uploaded or fetched file when you know its storage
+            filename.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-2">

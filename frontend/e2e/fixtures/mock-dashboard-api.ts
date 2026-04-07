@@ -14,7 +14,7 @@ export const MOCK_PL_METRICS = {
   average_margin: null,
   balance: 11_250_000,
   currency: "EUR",
-  period_days: 30,
+  period_days: 90,
   monthly_revenue: [
     { month: "2025-11", value: 2_400_000 },
     { month: "2025-12", value: 2_550_000 },
@@ -50,7 +50,9 @@ export const MOCK_SALTEDGE_CUSTOMERS = {
   data: [{ customer_id: "demo-customer-1", identifier: "e2e" }],
 };
 
-export async function installDashboardHappyPathMocks(page: Page): Promise<void> {
+export async function installDashboardHappyPathMocks(
+  page: Page,
+): Promise<void> {
   await Promise.all([
     page.route("**/v1/dashboard/seller-metrics**", async (route) => {
       await route.fulfill({
@@ -87,7 +89,9 @@ export async function installDashboardHappyPathMocks(page: Page): Promise<void> 
   ]);
 }
 
-export async function installCounterpartiesEmptyMock(page: Page): Promise<void> {
+export async function installCounterpartiesEmptyMock(
+  page: Page,
+): Promise<void> {
   await page.route("**/v1/organization/counterparties**", async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();

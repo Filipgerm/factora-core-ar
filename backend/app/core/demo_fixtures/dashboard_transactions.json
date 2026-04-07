@@ -1,5 +1,5 @@
 {
-  "_comment": "Bank rows for dashboard seed; made_on dates are overwritten in seed_demo_db to sit inside the last 30 days.",
+  "_comment": "Legacy fixture — seed_demo_db now builds multi-month banking programmatically (rising revenue wobble, ~60.5% expense ratio). Kept for reference only.",
   "transactions": [
     {
       "id": "demo-tx-001",

@@ -21,6 +21,9 @@ import {
 } from "@/lib/schemas/dashboard";
 import { useAuthSession } from "@/lib/hooks/api/use-auth";
 
+/** Default window for home / reporting P&amp;L charts (multi-month trend). */
+export const DASHBOARD_PL_DAYS_DEFAULT = 180;
+
 async function parseJson<T>(
   res: Response,
   schema: { safeParse: (data: unknown) => z.SafeParseReturnType<unknown, T> }
@@ -81,7 +84,7 @@ export function useDashboardPlMetricsQuery(params: PlMetricsParams | null) {
   return useQuery({
     queryKey: queryKeys.dashboard.plMetrics({
       customer_id: params?.customerId ?? "",
-      days: params?.days ?? 30,
+      days: params?.days ?? DASHBOARD_PL_DAYS_DEFAULT,
       start: params?.start_date ?? "",
       end: params?.end_date ?? "",
       currency: params?.currency ?? "EUR",
@@ -92,7 +95,7 @@ export function useDashboardPlMetricsQuery(params: PlMetricsParams | null) {
       }
       const sp = new URLSearchParams();
       sp.set("customer_id", params.customerId);
-      sp.set("days", String(params.days ?? 30));
+      sp.set("days", String(params.days ?? DASHBOARD_PL_DAYS_DEFAULT));
       if (params.start_date) sp.set("start_date", params.start_date);
       if (params.end_date) sp.set("end_date", params.end_date);
       sp.set("currency", params.currency ?? "EUR");

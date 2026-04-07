@@ -32,7 +32,7 @@ test.describe("Dashboard sad path (network faults)", () => {
             net_income: 0,
             balance: 0,
             currency: "EUR",
-            period_days: 30,
+            period_days: 180,
           }),
         });
       }),
