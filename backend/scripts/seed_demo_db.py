@@ -824,16 +824,38 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
 
     acc_cash = "00000000-0000-6000-8000-000000000030"
     acc_ar = "00000000-0000-6000-8000-000000000031"
+    acc_ar_detail = "00000000-0000-6000-8000-000000000037"
     acc_def = "00000000-0000-6000-8000-000000000032"
     acc_rev = "00000000-0000-6000-8000-000000000033"
     acc_cogs = "00000000-0000-6000-8000-000000000034"
     acc_ap = "00000000-0000-6000-8000-000000000035"
+    acc_ap_accrual = "00000000-0000-6000-8000-000000000038"
     acc_opex = "00000000-0000-6000-8000-000000000036"
+    # 1100/2100 remain **control** subledger accounts; 1110/2110 are non-control
+    # detail targets for ``InvoiceGlBridgeService`` (manual journals forbid control lines).
     for aid, code, name, atype, nb, ctrl, sub in [
         (acc_cash, "1000", "Cash and cash equivalents", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
         (acc_ar, "1100", "Trade receivables (control)", GlAccountType.ASSET, GlNormalBalance.DEBIT, True, GlSubledgerKind.AR),
+        (
+            acc_ar_detail,
+            "1110",
+            "Trade receivables — invoiced (detail)",
+            GlAccountType.ASSET,
+            GlNormalBalance.DEBIT,
+            False,
+            GlSubledgerKind.NONE,
+        ),
         (acc_def, "2000", "Deferred contract liability", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
         (acc_ap, "2100", "Trade payables (control)", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, True, GlSubledgerKind.AP),
+        (
+            acc_ap_accrual,
+            "2110",
+            "Vendor invoices — accrued (detail)",
+            GlAccountType.LIABILITY,
+            GlNormalBalance.CREDIT,
+            False,
+            GlSubledgerKind.NONE,
+        ),
         (acc_rev, "4000", "Subscription revenue", GlAccountType.REVENUE, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
         (acc_cogs, "5000", "Cost of subscription services", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
         (acc_opex, "6100", "General & administrative", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
