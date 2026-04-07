@@ -9,7 +9,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.core.exceptions import NotFoundError, ValidationError
-from app.models.general_ledger import GlJournalLineInput
+from app.models.general_ledger import (
+    GlAccountUpdateRequest,
+    GlJournalEntryUpdateRequest,
+    GlJournalLineInput,
+    GlRecurringTemplateUpdateRequest,
+)
 from app.services.gl_service import GlService, _trial_balance_net_balance
 from app.db.models.gl import GlNormalBalance
 
@@ -122,3 +127,22 @@ def test_trial_balance_net_balance_credit_normal() -> None:
     assert _trial_balance_net_balance(
         GlNormalBalance.CREDIT, Decimal("100"), Decimal("250")
     ) == Decimal("150.0000")
+
+
+def test_gl_patch_requests_model_fields_set_distinguishes_omit_vs_explicit_null() -> None:
+    """GlService PATCH uses model_fields_set so JSON null clears nullable columns."""
+    empty = GlAccountUpdateRequest.model_validate({})
+    assert "parent_account_id" not in empty.model_fields_set
+
+    clear_parent = GlAccountUpdateRequest.model_validate({"parent_account_id": None})
+    assert "parent_account_id" in clear_parent.model_fields_set
+
+    je_empty = GlJournalEntryUpdateRequest.model_validate({})
+    assert "memo" not in je_empty.model_fields_set
+    je_memo_null = GlJournalEntryUpdateRequest.model_validate({"memo": None})
+    assert "memo" in je_memo_null.model_fields_set
+
+    rt_empty = GlRecurringTemplateUpdateRequest.model_validate({})
+    assert "template_lines" not in rt_empty.model_fields_set
+    rt_lines_null = GlRecurringTemplateUpdateRequest.model_validate({"template_lines": None})
+    assert "template_lines" in rt_lines_null.model_fields_set

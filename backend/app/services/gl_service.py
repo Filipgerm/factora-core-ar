@@ -121,6 +121,14 @@ def _sum_lines(lines: Sequence[GlJournalLineInput | GlJournalLine]) -> tuple[Dec
     return td, tc
 
 
+def _reject_explicit_null_for_required_field(
+    field_name: str, value: object, *, code: str, message: str
+) -> None:
+    """Raise when a PATCH body explicitly sets a field to null but the column is NOT NULL."""
+    if value is None:
+        raise ValidationError(message, code=code, fields={field_name: "cannot be null"})
+
+
 def _trial_balance_net_balance(
     normal: GlNormalBalance, debit_total: Decimal, credit_total: Decimal
 ) -> Decimal:
@@ -378,30 +386,76 @@ class GlService:
     ) -> GlAccountResponse:
         await self._require_gl_for_write()
         row = await self._account(account_id)
-        if body.name is not None:
-            row.name = body.name.strip()
-        if body.parent_account_id is not None:
-            if body.parent_account_id == account_id:
-                raise ValidationError(
-                    "Account cannot be its own parent.",
-                    code="gl.account.invalid_parent",
-                    fields={"parent_account_id": "Self-reference"},
-                )
-            if body.parent_account_id:
-                await self._account(body.parent_account_id)
-            row.parent_account_id = body.parent_account_id
-        if body.account_type is not None:
-            row.account_type = GlAccountType(body.account_type.value)
-        if body.normal_balance is not None:
-            row.normal_balance = GlNormalBalance(body.normal_balance.value)
-        if body.subledger_kind is not None:
-            row.subledger_kind = GlSubledgerKind(body.subledger_kind.value)
-        if body.is_active is not None:
-            row.is_active = body.is_active
-        if body.is_control_account is not None:
-            row.is_control_account = body.is_control_account
-        if body.sort_order is not None:
-            row.sort_order = body.sort_order
+        fs = body.model_fields_set
+        if "name" in fs:
+            _reject_explicit_null_for_required_field(
+                "name",
+                body.name,
+                code="gl.account.name_required",
+                message="Account name is required",
+            )
+            row.name = body.name.strip()  # type: ignore[union-attr]
+        if "parent_account_id" in fs:
+            pid = body.parent_account_id
+            if pid is None:
+                row.parent_account_id = None
+            else:
+                if pid == account_id:
+                    raise ValidationError(
+                        "Account cannot be its own parent.",
+                        code="gl.account.invalid_parent",
+                        fields={"parent_account_id": "Self-reference"},
+                    )
+                await self._account(pid)
+                row.parent_account_id = pid
+        if "account_type" in fs:
+            _reject_explicit_null_for_required_field(
+                "account_type",
+                body.account_type,
+                code="gl.account.type_required",
+                message="Account type is required",
+            )
+            row.account_type = GlAccountType(body.account_type.value)  # type: ignore[union-attr]
+        if "normal_balance" in fs:
+            _reject_explicit_null_for_required_field(
+                "normal_balance",
+                body.normal_balance,
+                code="gl.account.normal_balance_required",
+                message="Normal balance is required",
+            )
+            row.normal_balance = GlNormalBalance(body.normal_balance.value)  # type: ignore[union-attr]
+        if "subledger_kind" in fs:
+            _reject_explicit_null_for_required_field(
+                "subledger_kind",
+                body.subledger_kind,
+                code="gl.account.subledger_required",
+                message="Subledger kind is required",
+            )
+            row.subledger_kind = GlSubledgerKind(body.subledger_kind.value)  # type: ignore[union-attr]
+        if "is_active" in fs:
+            _reject_explicit_null_for_required_field(
+                "is_active",
+                body.is_active,
+                code="gl.account.is_active_required",
+                message="is_active is required",
+            )
+            row.is_active = body.is_active  # type: ignore[assignment]
+        if "is_control_account" in fs:
+            _reject_explicit_null_for_required_field(
+                "is_control_account",
+                body.is_control_account,
+                code="gl.account.is_control_required",
+                message="is_control_account is required",
+            )
+            row.is_control_account = body.is_control_account  # type: ignore[assignment]
+        if "sort_order" in fs:
+            _reject_explicit_null_for_required_field(
+                "sort_order",
+                body.sort_order,
+                code="gl.account.sort_order_required",
+                message="sort_order is required",
+            )
+            row.sort_order = body.sort_order  # type: ignore[assignment]
         await self.db.commit()
         await self.db.refresh(row)
         return GlAccountResponse.model_validate(row)
@@ -630,23 +684,49 @@ class GlService:
                 code="gl.journal.immutable",
                 fields={"status": "posted"},
             )
-        if body.posting_period_id is not None:
-            if body.posting_period_id:
-                await self._period(body.posting_period_id)
-            entry.posting_period_id = body.posting_period_id
-        if body.entry_date is not None:
-            entry.entry_date = body.entry_date
-        if body.document_currency is not None:
-            entry.document_currency = body.document_currency.upper()
-        if body.base_currency is not None:
-            entry.base_currency = body.base_currency.upper()
-        if body.fx_rate_to_base is not None:
+        fs = body.model_fields_set
+        if "posting_period_id" in fs:
+            pid = body.posting_period_id
+            if pid:
+                await self._period(pid)
+            entry.posting_period_id = pid
+        if "entry_date" in fs:
+            _reject_explicit_null_for_required_field(
+                "entry_date",
+                body.entry_date,
+                code="gl.journal.entry_date_required",
+                message="entry_date is required",
+            )
+            entry.entry_date = body.entry_date  # type: ignore[assignment]
+        if "document_currency" in fs:
+            _reject_explicit_null_for_required_field(
+                "document_currency",
+                body.document_currency,
+                code="gl.journal.document_currency_required",
+                message="document_currency is required",
+            )
+            entry.document_currency = body.document_currency.upper()  # type: ignore[union-attr]
+        if "base_currency" in fs:
+            _reject_explicit_null_for_required_field(
+                "base_currency",
+                body.base_currency,
+                code="gl.journal.base_currency_required",
+                message="base_currency is required",
+            )
+            entry.base_currency = body.base_currency.upper()  # type: ignore[union-attr]
+        if "fx_rate_to_base" in fs:
             entry.fx_rate_to_base = body.fx_rate_to_base
-        if body.memo is not None:
+        if "memo" in fs:
             entry.memo = body.memo
-        if body.reference is not None:
+        if "reference" in fs:
             entry.reference = body.reference
-        if body.lines is not None:
+        if "lines" in fs:
+            if body.lines is None:
+                raise ValidationError(
+                    "Journal lines cannot be null; omit the field or send a full line list.",
+                    code="gl.journal.lines_required",
+                    fields={"lines": "cannot be null"},
+                )
             await self._validate_manual_lines(body.lines)
             for ln in body.lines:
                 await self._dimension_values_owned(ln.dimension_value_ids)
@@ -1103,17 +1183,48 @@ class GlService:
         )
         if not t:
             raise NotFoundError("Template not found", code="gl.template_not_found")
-        if body.name is not None:
-            t.name = body.name.strip()
-        if body.memo is not None:
+        fs = body.model_fields_set
+        if "name" in fs:
+            _reject_explicit_null_for_required_field(
+                "name",
+                body.name,
+                code="gl.template.name_required",
+                message="Template name is required",
+            )
+            t.name = body.name.strip()  # type: ignore[union-attr]
+        if "memo" in fs:
             t.memo = body.memo
-        if body.frequency is not None:
-            t.frequency = GlRecurringFrequency(body.frequency.value)
-        if body.day_of_month is not None:
-            t.day_of_month = body.day_of_month
-        if body.is_active is not None:
-            t.is_active = body.is_active
-        if body.template_lines is not None:
+        if "frequency" in fs:
+            _reject_explicit_null_for_required_field(
+                "frequency",
+                body.frequency,
+                code="gl.template.frequency_required",
+                message="frequency is required",
+            )
+            t.frequency = GlRecurringFrequency(body.frequency.value)  # type: ignore[union-attr]
+        if "day_of_month" in fs:
+            _reject_explicit_null_for_required_field(
+                "day_of_month",
+                body.day_of_month,
+                code="gl.template.day_required",
+                message="day_of_month is required",
+            )
+            t.day_of_month = body.day_of_month  # type: ignore[assignment]
+        if "is_active" in fs:
+            _reject_explicit_null_for_required_field(
+                "is_active",
+                body.is_active,
+                code="gl.template.is_active_required",
+                message="is_active is required",
+            )
+            t.is_active = body.is_active  # type: ignore[assignment]
+        if "template_lines" in fs:
+            if body.template_lines is None:
+                raise ValidationError(
+                    "Template lines cannot be null; omit the field or send a full line list.",
+                    code="gl.template.lines_required",
+                    fields={"template_lines": "cannot be null"},
+                )
             await self._validate_template_lines(body.template_lines)
             await self.db.execute(
                 delete(GlRecurringEntryTemplateLine).where(
