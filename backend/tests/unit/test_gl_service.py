@@ -54,6 +54,40 @@ async def test_validate_manual_lines_rejects_unbalanced() -> None:
 
 
 @pytest.mark.asyncio
+async def test_validate_manual_lines_rejects_zero_zero_line() -> None:
+    db = AsyncMock()
+    org_id = str(uuid.uuid4())
+    svc = GlService(db, org_id)
+    lines = [
+        GlJournalLineInput(
+            account_id="a1",
+            debit=Decimal("0"),
+            credit=Decimal("0"),
+            line_order=0,
+        ),
+        GlJournalLineInput(
+            account_id="a2",
+            debit=Decimal("0"),
+            credit=Decimal("100"),
+            line_order=1,
+        ),
+    ]
+    acc1 = MagicMock()
+    acc1.id = "a1"
+    acc1.is_control_account = False
+    acc2 = MagicMock()
+    acc2.id = "a2"
+    acc2.is_control_account = False
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [acc1, acc2]
+    db.execute = AsyncMock(return_value=result)
+
+    with pytest.raises(ValidationError) as exc:
+        await svc._validate_manual_lines(lines)
+    assert exc.value.code == "gl.journal.invalid_line_sides"
+
+
+@pytest.mark.asyncio
 async def test_validate_manual_lines_rejects_control_account() -> None:
     db = AsyncMock()
     org_id = str(uuid.uuid4())

@@ -105,9 +105,12 @@ def _static_fx_rate(from_ccy: str, to_ccy: str) -> Decimal:
 
 
 def _line_sides_valid(debit: Decimal, credit: Decimal) -> bool:
+    """Non-negative amounts; exactly one of debit or credit must be strictly positive."""
     if debit < 0 or credit < 0:
         return False
     if debit > 0 and credit > 0:
+        return False
+    if debit == 0 and credit == 0:
         return False
     return True
 
