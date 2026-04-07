@@ -58,12 +58,14 @@ async def test_validate_manual_lines_rejects_zero_zero_line() -> None:
     db = AsyncMock()
     org_id = str(uuid.uuid4())
     svc = GlService(db, org_id)
+    # Bypass Pydantic to assert GlService still rejects bad sides (e.g. ORM rows).
     lines = [
-        GlJournalLineInput(
+        GlJournalLineInput.model_construct(
             account_id="a1",
             debit=Decimal("0"),
             credit=Decimal("0"),
             line_order=0,
+            dimension_value_ids=[],
         ),
         GlJournalLineInput(
             account_id="a2",

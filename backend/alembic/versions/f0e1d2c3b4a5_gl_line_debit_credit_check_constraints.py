@@ -5,7 +5,7 @@ Revises: e8f9a0b1c2d3
 Create Date: 2026-04-05
 
 Enforces non-negative amounts and single-sided lines (no both zero, no both
-positive), matching GlService._line_sides_valid.
+positive), matching ``app.core.gl_journal_line.debit_credit_line_sides_valid``.
 """
 
 from typing import Sequence, Union

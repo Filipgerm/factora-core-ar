@@ -6,7 +6,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.core.gl_journal_line import debit_credit_line_sides_valid
 
 
 class GlAccountTypeEnum(StrEnum):
@@ -151,6 +153,11 @@ class GlAccountingPeriodUpdateRequest(BaseModel):
 
 # --- Journal ---
 
+_GL_LINE_DEBIT_CREDIT_MSG = (
+    "Each line must have only debit or only credit "
+    "(non-negative amounts, one side positive)."
+)
+
 
 class GlJournalLineInput(BaseModel):
     account_id: str
@@ -159,6 +166,12 @@ class GlJournalLineInput(BaseModel):
     credit: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
     line_order: int = 0
     dimension_value_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_debit_credit_sides(self) -> GlJournalLineInput:
+        if not debit_credit_line_sides_valid(self.debit, self.credit):
+            raise ValueError(_GL_LINE_DEBIT_CREDIT_MSG)
+        return self
 
 
 class GlJournalLineResponse(BaseModel):
@@ -216,7 +229,7 @@ class GlJournalEntryUpdateRequest(BaseModel):
     fx_rate_to_base: Decimal | None = Field(None, gt=Decimal("0"))
     memo: str | None = None
     reference: str | None = None
-    lines: list[GlJournalLineInput] | None = None
+    lines: list[GlJournalLineInput] | None = Field(None, min_length=2)
 
 
 class GlJournalEntryReverseRequest(BaseModel):
@@ -278,6 +291,12 @@ class GlRecurringTemplateLineInput(BaseModel):
     credit: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
     line_order: int = 0
 
+    @model_validator(mode="after")
+    def _validate_debit_credit_sides(self) -> GlRecurringTemplateLineInput:
+        if not debit_credit_line_sides_valid(self.debit, self.credit):
+            raise ValueError(_GL_LINE_DEBIT_CREDIT_MSG)
+        return self
+
 
 class GlRecurringTemplateLineResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -319,7 +338,9 @@ class GlRecurringTemplateUpdateRequest(BaseModel):
     frequency: GlRecurringFrequencyEnum | None = None
     day_of_month: int | None = Field(None, ge=1, le=28)
     is_active: bool | None = None
-    template_lines: list[GlRecurringTemplateLineInput] | None = None
+    template_lines: list[GlRecurringTemplateLineInput] | None = Field(
+        None, min_length=2
+    )
 
 
 class GlRecurringTemplateGenerateJournalRequest(BaseModel):
@@ -353,7 +374,7 @@ class GlTrialBalanceRowResponse(BaseModel):
 class GlFxQuoteResponse(BaseModel):
     from_currency: str
     to_currency: str
-    rate: Decimal
+    rate: Decimal = Field(..., gt=Decimal("0"))
 
 
 # --- Audit ---

@@ -32,6 +32,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from app.core.gl_journal_line import debit_credit_line_sides_valid
 from app.db.models.identity import UserRole
 from app.services.gl_schema_check import gl_ledger_schema_installed
 from app.db.models.gl import (
@@ -102,17 +103,6 @@ def _static_fx_rate(from_ccy: str, to_ccy: str) -> Decimal:
     fe = rates_to_eur[f]
     te = rates_to_eur[t]
     return (fe / te).quantize(Decimal("0.00000001"))
-
-
-def _line_sides_valid(debit: Decimal, credit: Decimal) -> bool:
-    """Non-negative amounts; exactly one of debit or credit must be strictly positive."""
-    if debit < 0 or credit < 0:
-        return False
-    if debit > 0 and credit > 0:
-        return False
-    if debit == 0 and credit == 0:
-        return False
-    return True
 
 
 def _sum_lines(lines: Sequence[GlJournalLineInput | GlJournalLine]) -> tuple[Decimal, Decimal]:
@@ -209,7 +199,7 @@ class GlService:
 
     async def _validate_manual_lines(self, lines: Sequence[GlJournalLineInput]) -> None:
         for i, ln in enumerate(lines):
-            if not _line_sides_valid(ln.debit, ln.credit):
+            if not debit_credit_line_sides_valid(ln.debit, ln.credit):
                 raise ValidationError(
                     "Each journal line must have only debit or only credit (non-negative).",
                     code="gl.journal.invalid_line_sides",
@@ -1101,7 +1091,7 @@ class GlService:
 
     async def _validate_template_lines(self, lines: Sequence[GlRecurringTemplateLineInput]) -> None:
         for i, ln in enumerate(lines):
-            if not _line_sides_valid(ln.debit, ln.credit):
+            if not debit_credit_line_sides_valid(ln.debit, ln.credit):
                 raise ValidationError(
                     "Each template line must have only debit or only credit.",
                     code="gl.template.invalid_line_sides",
