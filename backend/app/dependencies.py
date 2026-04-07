@@ -42,6 +42,7 @@ from app.services.mydata_service import MyDataService
 from app.services.ai_service import AIService
 from app.services.file_service import FileService
 from app.services.invoice_service import InvoiceService
+from app.services.gl_service import GlService
 from app.services.ingestion_service import IngestionService
 from app.services.gmail_oauth_service import GmailOAuthService
 from app.services.gmail_sync_service import GmailSyncService
@@ -58,6 +59,7 @@ from app.controllers.mydata_controller import MyDataController
 from app.controllers.ai_controller import AIController
 from app.controllers.file_controller import FileController
 from app.controllers.invoice_controller import InvoiceController
+from app.controllers.gl_controller import GlController
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -427,6 +429,33 @@ def get_invoice_controller(
 
 
 InvoiceCtrl = Annotated[InvoiceController, Depends(get_invoice_controller)]
+
+
+# ---------------------------------------------------------------------------
+# General ledger
+# ---------------------------------------------------------------------------
+
+
+def get_gl_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+    user: AuthUser,
+) -> GlService:
+    return GlService(
+        db,
+        org_id,
+        actor_user_id=user.get("sub"),
+        actor_role=user.get("role"),
+    )
+
+
+def get_gl_controller(
+    service: Annotated[GlService, Depends(get_gl_service)],
+) -> GlController:
+    return GlController(service)
+
+
+GlCtrl = Annotated[GlController, Depends(get_gl_controller)]
 
 
 # ---------------------------------------------------------------------------

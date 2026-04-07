@@ -26,6 +26,10 @@ import type {
   ReconciliationBankId,
   ReconciliationPendingPair,
 } from "@/lib/views/reconciliation";
+import {
+  demoReconciliationAutoMatchedPairs,
+  demoReconciliationPendingPairs,
+} from "@/lib/views/reconciliation-demo-fixtures";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { isApiError } from "@/lib/api/types";
@@ -36,9 +40,6 @@ import {
 } from "@/lib/hooks/api/use-saltedge";
 
 const HIGH_CONFIDENCE_THRESHOLD = 80;
-
-const mockReconciliationPendingPairs: ReconciliationPendingPair[] = [];
-const mockReconciliationAutoMatchedPairs: ReconciliationAutoMatchedPair[] = [];
 
 const LEDGER_TH =
   "text-[10px] font-bold uppercase tracking-wider text-muted-foreground";
@@ -100,14 +101,24 @@ export function ReconciliationView() {
   useEffect(() => {
     const f = searchParams.get("filter");
     if (f === "unmatched") {
+      // Deep-link ?filter=unmatched should open the action queue; tab is URL-driven.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab to query param
       setMainTab("action");
     }
   }, [searchParams]);
 
+  const pendingSource = useMemo(
+    () => (customerId ? demoReconciliationPendingPairs : []),
+    [customerId]
+  );
+  const autoMatchedSource = useMemo(
+    () => (customerId ? demoReconciliationAutoMatchedPairs : []),
+    [customerId]
+  );
+
   const pendingVisible = useMemo(
-    () =>
-      mockReconciliationPendingPairs.filter((p) => !dismissedIds.has(p.id)),
-    [dismissedIds]
+    () => pendingSource.filter((p) => !dismissedIds.has(p.id)),
+    [pendingSource, dismissedIds]
   );
 
   const bankFeedReady = !customerIdLoading && !txQuery.isLoading;
@@ -126,10 +137,8 @@ export function ReconciliationView() {
 
   const matchedFiltered = useMemo(
     () =>
-      mockReconciliationAutoMatchedPairs.filter((p) =>
-        matchesAccount(p, accountFilter)
-      ),
-    [accountFilter]
+      autoMatchedSource.filter((p) => matchesAccount(p, accountFilter)),
+    [autoMatchedSource, accountFilter]
   );
 
   const highConfidencePending = useMemo(
@@ -252,7 +261,7 @@ export function ReconciliationView() {
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Matched ({mockReconciliationAutoMatchedPairs.length})
+                Matched ({autoMatchedSource.length})
               </button>
             </div>
 
@@ -284,7 +293,7 @@ export function ReconciliationView() {
               title="Agent-confirmed auto matches (demo aggregate)"
             >
               <span className="text-[11px] font-semibold tabular-nums tracking-tight text-foreground">
-                {mockReconciliationAutoMatchedPairs.length} Auto-Matched
+                {autoMatchedSource.length} Auto-Matched
               </span>
               <Bot
                 className="size-4 shrink-0 text-violet-600 dark:text-violet-400"
