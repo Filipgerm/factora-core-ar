@@ -1,274 +1,647 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useState, type FormEvent } from "react";
+import { motion } from "framer-motion";
+import { Blocks, Building2, Layers, Search } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
-import { downloadStoredFile } from "@/lib/api/files";
-import { isApiError } from "@/lib/api/types";
-import { useGemiFetchDocumentsMutation, useGemiSearchQuery } from "@/lib/hooks/api/use-gemi";
-import type { SaltEdgeConnection } from "@/lib/schemas/saltedge/connections";
-import type { SaltEdgeCustomer } from "@/lib/schemas/saltedge/customers";
 import {
-  useSaltEdgeConnectionsQuery,
-  useSaltEdgeCustomersQuery,
-  useSaltEdgeRefreshMutation,
-  useResolvedSaltEdgeCustomerId,
-} from "@/lib/hooks/api/use-saltedge";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+
+const SNAP_SPRING = { type: "spring" as const, stiffness: 640, damping: 44 };
+
+type TileCategory = "integration" | "bank";
+
+type Accent =
+  | "teal"
+  | "violet"
+  | "orange"
+  | "sky"
+  | "emerald"
+  | "green"
+  | "rose"
+  | "amber"
+  | "slate"
+  | "indigo";
+
+interface Tile {
+  id: string;
+  name: string;
+  category: TileCategory;
+  subcategory: string;
+  logo?: {
+    src: string;
+    shape: "mark" | "wordmark";
+  };
+  accent: Accent;
+}
+
+const INTEGRATION_TILES: ReadonlyArray<Tile> = [
+  {
+    id: "stripe",
+    name: "Stripe",
+    category: "integration",
+    subcategory: "Payments",
+    logo: {
+      src: "/images/integrations/Stripe_Logo,_revised_2016.svg",
+      shape: "wordmark",
+    },
+    accent: "violet",
+  },
+  {
+    id: "hubspot",
+    name: "Hubspot",
+    category: "integration",
+    subcategory: "CRM",
+    logo: {
+      src: "/images/integrations/HubSpot_Logo.svg",
+      shape: "wordmark",
+    },
+    accent: "orange",
+  },
+  {
+    id: "salesforce",
+    name: "Salesforce",
+    category: "integration",
+    subcategory: "CRM",
+    logo: {
+      src: "/images/integrations/salesforce.svg",
+      shape: "wordmark",
+    },
+    accent: "sky",
+  },
+  {
+    id: "google-sheets",
+    name: "Google Sheets",
+    category: "integration",
+    subcategory: "Spreadsheets",
+    logo: {
+      src: "/images/integrations/google-sheets.svg",
+      shape: "mark",
+    },
+    accent: "emerald",
+  },
+  {
+    id: "excel",
+    name: "Excel",
+    category: "integration",
+    subcategory: "Spreadsheets",
+    logo: {
+      src: "/images/integrations/excel.svg",
+      shape: "mark",
+    },
+    accent: "green",
+  },
+  {
+    id: "gmail",
+    name: "Gmail",
+    category: "integration",
+    subcategory: "Mail",
+    logo: {
+      src: "/images/integrations/gmail.svg",
+      shape: "mark",
+    },
+    accent: "rose",
+  },
+  {
+    id: "snowflake",
+    name: "Snowflake",
+    category: "integration",
+    subcategory: "Data warehouse",
+    logo: {
+      src: "/images/integrations/Snowflake_Logo.svg",
+      shape: "wordmark",
+    },
+    accent: "sky",
+  },
+  {
+    id: "redshift",
+    name: "Amazon Redshift",
+    category: "integration",
+    subcategory: "Data warehouse",
+    logo: {
+      src: "/images/integrations/redshift.svg",
+      shape: "mark",
+    },
+    accent: "amber",
+  },
+];
+
+const BANK_TILES: ReadonlyArray<Tile> = [
+  {
+    id: "alpha",
+    name: "Alpha Bank",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/alpha-bank.jpg", shape: "mark" },
+    accent: "rose",
+  },
+  {
+    id: "attica",
+    name: "Attica Bank",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/attica-bank.png", shape: "mark" },
+    accent: "sky",
+  },
+  {
+    id: "bnp-paribas",
+    name: "BNP Paribas",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/bnp-paribas.png", shape: "mark" },
+    accent: "emerald",
+  },
+  {
+    id: "credia",
+    name: "Credia Bank",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/credia-bank.png", shape: "mark" },
+    accent: "amber",
+  },
+  {
+    id: "deutsche",
+    name: "Deutsche Bank",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/deutsche-bank.png", shape: "mark" },
+    accent: "slate",
+  },
+  {
+    id: "epirus",
+    name: "Epirus Bank",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/epirus-bank.png", shape: "mark" },
+    accent: "indigo",
+  },
+  {
+    id: "eurobank",
+    name: "Eurobank",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/euro-bank.png", shape: "mark" },
+    accent: "violet",
+  },
+  {
+    id: "ing",
+    name: "ING",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/ing-bank.png", shape: "mark" },
+    accent: "orange",
+  },
+  {
+    id: "n26",
+    name: "N26",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/n26-bank.png", shape: "mark" },
+    accent: "slate",
+  },
+  {
+    id: "nbg",
+    name: "National Bank of Greece",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/nbg-bank.png", shape: "mark" },
+    accent: "sky",
+  },
+  {
+    id: "optima",
+    name: "Optima Bank",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/optima-bank.jpg", shape: "mark" },
+    accent: "teal",
+  },
+  {
+    id: "piraeus",
+    name: "Piraeus Bank",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/piraeus-bank.png", shape: "mark" },
+    accent: "emerald",
+  },
+  {
+    id: "revolut",
+    name: "Revolut",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/revolut-bank.svg", shape: "wordmark" },
+    accent: "slate",
+  },
+  {
+    id: "santander",
+    name: "Santander",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/santander-bank.png", shape: "mark" },
+    accent: "rose",
+  },
+  {
+    id: "triodos",
+    name: "Triodos Bank",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/triodos-bank.png", shape: "mark" },
+    accent: "green",
+  },
+  {
+    id: "viva",
+    name: "Viva",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/viva-bank.png", shape: "mark" },
+    accent: "amber",
+  },
+  {
+    id: "wise",
+    name: "Wise",
+    category: "bank",
+    subcategory: "Banking",
+    logo: { src: "/images/banks/wise-bank.svg", shape: "wordmark" },
+    accent: "emerald",
+  },
+];
+
+const ACCENT_CLASSES: Record<
+  Accent,
+  { tile: string; ring: string; text: string; glow: string }
+> = {
+  teal: {
+    tile: "bg-[var(--brand-primary-subtle)]",
+    ring: "ring-teal-200/70",
+    text: "text-[color:var(--brand-primary)]",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(47,154,138,0.35)]",
+  },
+  violet: {
+    tile: "bg-violet-50",
+    ring: "ring-violet-200/70",
+    text: "text-violet-700",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(139,92,246,0.35)]",
+  },
+  orange: {
+    tile: "bg-orange-50",
+    ring: "ring-orange-200/70",
+    text: "text-orange-700",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(249,115,22,0.3)]",
+  },
+  sky: {
+    tile: "bg-sky-50",
+    ring: "ring-sky-200/70",
+    text: "text-sky-700",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(14,165,233,0.3)]",
+  },
+  emerald: {
+    tile: "bg-emerald-50",
+    ring: "ring-emerald-200/70",
+    text: "text-emerald-700",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(16,185,129,0.3)]",
+  },
+  green: {
+    tile: "bg-green-50",
+    ring: "ring-green-200/70",
+    text: "text-green-700",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(34,197,94,0.3)]",
+  },
+  rose: {
+    tile: "bg-rose-50",
+    ring: "ring-rose-200/70",
+    text: "text-rose-700",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(244,63,94,0.3)]",
+  },
+  amber: {
+    tile: "bg-amber-50",
+    ring: "ring-amber-200/70",
+    text: "text-amber-700",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(245,158,11,0.3)]",
+  },
+  slate: {
+    tile: "bg-slate-100",
+    ring: "ring-slate-200/80",
+    text: "text-slate-700",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(15,23,42,0.2)]",
+  },
+  indigo: {
+    tile: "bg-indigo-50",
+    ring: "ring-indigo-200/70",
+    text: "text-indigo-700",
+    glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(99,102,241,0.3)]",
+  },
+};
+
+type CategoryFilter = "all" | "integration" | "bank";
+
+interface TileLogoProps {
+  name: string;
+  accent: Accent;
+  logo: Tile["logo"];
+}
+
+function TileLogo({ name, accent, logo }: TileLogoProps) {
+  const [errored, setErrored] = useState(false);
+  const classes = ACCENT_CLASSES[accent];
+  const initials = name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  if (!logo || errored) {
+    return (
+      <div
+        className={cn(
+          "flex h-12 w-full items-center justify-center rounded-xl ring-1 ring-inset",
+          classes.tile,
+          classes.ring
+        )}
+        aria-hidden
+      >
+        <span className={cn("text-sm font-bold tracking-tight", classes.text)}>
+          {initials}
+        </span>
+      </div>
+    );
+  }
+
+  const isWordmark = logo.shape === "wordmark";
+  return (
+    <div
+      className={cn(
+        "flex h-12 w-full items-center justify-center overflow-hidden rounded-xl px-3 ring-1 ring-inset",
+        classes.tile,
+        classes.ring
+      )}
+      aria-hidden
+    >
+      <Image
+        src={logo.src}
+        alt={`${name} logo`}
+        width={isWordmark ? 120 : 40}
+        height={32}
+        className={cn(
+          "h-auto w-auto object-contain",
+          isWordmark ? "max-h-6 max-w-[105px]" : "max-h-7 max-w-7"
+        )}
+        onError={() => setErrored(true)}
+        unoptimized
+      />
+    </div>
+  );
+}
+
+function TileCard({ tile, delay }: { tile: Tile; delay: number }) {
+  const classes = ACCENT_CLASSES[tile.accent];
+  return (
+    <motion.button
+      type="button"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...SNAP_SPRING, delay }}
+      className={cn(
+        "group flex cursor-default flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-[1px] hover:border-slate-200",
+        classes.glow
+      )}
+    >
+      <TileLogo name={tile.name} accent={tile.accent} logo={tile.logo} />
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold tracking-tight text-slate-900">
+          {tile.name}
+        </div>
+        <div className="mt-0.5 text-[11px] tracking-tight text-muted-foreground">
+          {tile.subcategory}
+        </div>
+      </div>
+    </motion.button>
+  );
+}
+
+function SectionHeader({
+  icon,
+  label,
+  count,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <span
+        className="flex size-6 items-center justify-center rounded-md bg-[var(--brand-primary-subtle)] text-[color:var(--brand-primary)] ring-1 ring-inset ring-teal-200/60"
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-700">
+        {label}
+      </h2>
+      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold tabular-nums tracking-tight text-slate-600">
+        {count}
+      </span>
+    </div>
+  );
+}
 
 export function IntegrationsPageClient() {
-  const { toast } = useToast();
-  const { customerId, ambiguous } = useResolvedSaltEdgeCustomerId();
-  const customers = useSaltEdgeCustomersQuery();
-  const connections = useSaltEdgeConnectionsQuery(customerId);
-  const refreshConn = useSaltEdgeRefreshMutation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [gemiQ, setGemiQ] = useState("");
-  const gemiSearch = useGemiSearchQuery(gemiQ.replace(/\D/g, ""), "afm");
-  const gemiFetch = useGemiFetchDocumentsMutation();
+  const q = searchParams.get("q")?.toLowerCase() ?? "";
+  const category = (searchParams.get("category") ?? "all") as CategoryFilter;
 
-  const [fileName, setFileName] = useState("");
+  const [queryInput, setQueryInput] = useState(q);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const matchesCategory = (t: Tile) =>
+      category === "all" ? true : t.category === category;
+    const matchesQuery = (t: Tile) =>
+      !needle ||
+      t.name.toLowerCase().includes(needle) ||
+      t.subcategory.toLowerCase().includes(needle);
+
+    return {
+      integrations: INTEGRATION_TILES.filter(
+        (t) => matchesCategory(t) && matchesQuery(t)
+      ),
+      banks: BANK_TILES.filter((t) => matchesCategory(t) && matchesQuery(t)),
+    };
+  }, [q, category]);
+
+  const pushParam = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null || v === "") next.delete(k);
+      else next.set(k, v);
+    }
+    const s = next.toString();
+    router.replace(s ? `?${s}` : "?", { scroll: false });
+  };
+
+  const handleSearchSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    pushParam({ q: queryInput.trim() || null });
+  };
+
+  const showIntegrations = filtered.integrations.length > 0;
+  const showBanks = filtered.banks.length > 0;
+  const nothingFound = !showIntegrations && !showBanks;
 
   return (
-    <div className="space-y-6">
-      <Card className="border-slate-200 shadow-sm transition-all duration-200">
-        <CardHeader>
-          <CardTitle>SaltEdge banking</CardTitle>
-          <CardDescription>
-            Linked accounts and refresh actions for your organization&apos;s banking
-            customer.
-            {ambiguous ? (
-              <span className="mt-1 block text-amber-700 dark:text-amber-400">
-                Multiple customers returned — set{" "}
-                <code className="text-xs">NEXT_PUBLIC_SALTEDGE_CUSTOMER_ID</code>{" "}
-                to disambiguate.
-              </span>
-            ) : null}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          {customers.isLoading ? (
-            <p className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-              Loading SaltEdge customers…
-            </p>
-          ) : customers.isError ? (
-            <p className="text-destructive">
-              {isApiError(customers.error)
-                ? customers.error.message
-                : "Failed to load customers"}
-            </p>
-          ) : (
-            <div>
-              <p className="font-medium text-foreground">Customers</p>
-              <ul className="mt-2 list-inside list-disc text-muted-foreground">
-                {(customers.data?.data ?? []).map((c: SaltEdgeCustomer, i: number) => (
-                  <li
-                    key={
-                      c.customer_id ??
-                      c.identifier ??
-                      `customer-row-${i}`
-                    }
-                  >
-                    {c.customer_id ?? "—"} {c.identifier ? `(${c.identifier})` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+    <div className="flex min-h-0 flex-1 flex-col gap-6 p-4 md:p-6">
+      <header className="flex flex-col gap-1 border-b border-slate-100 pb-5">
+        <h1 className="text-lg font-semibold tracking-tight text-foreground">
+          Integrations
+        </h1>
+        <p className="text-xs text-muted-foreground">
+          Connect Factora to the accounting, banking, and data tools your team
+          already uses.
+        </p>
+      </header>
 
-          {!customerId ? (
-            <p className="text-muted-foreground">
-              No SaltEdge customer id available — complete org setup and create a
-              SaltEdge customer, or set{" "}
-              <code className="text-xs">NEXT_PUBLIC_SALTEDGE_CUSTOMER_ID</code>.
-            </p>
-          ) : connections.isLoading ? (
-            <p className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-              Loading connections…
-            </p>
-          ) : connections.isError ? (
-            <p className="text-destructive">
-              {isApiError(connections.error)
-                ? connections.error.message
-                : "Failed to load connections"}
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <p className="font-medium text-foreground">Connections</p>
-              <ul className="space-y-2">
-                {(connections.data?.data ?? []).map((conn: SaltEdgeConnection) => (
-                  <li
-                    key={conn.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/30"
-                  >
-                    <div>
-                      <p className="font-medium">{conn.provider_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {conn.status} · {conn.id}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={refreshConn.isPending}
-                      onClick={() =>
-                        refreshConn.mutate(conn.id, {
-                          onSuccess: () =>
-                            toast({ title: "Refresh started", description: conn.id }),
-                          onError: (e) =>
-                            toast({
-                              title: "Refresh failed",
-                              description: isApiError(e) ? e.message : "Error",
-                              variant: "destructive",
-                            }),
-                        })
-                      }
-                    >
-                      {refreshConn.isPending ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="size-4" />
-                      )}
-                      <span className="sr-only">Refresh connection</span>
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="border-slate-200 shadow-sm transition-all duration-200">
-        <CardHeader>
-          <CardTitle>Business Registry</CardTitle>
-          <CardDescription>
-            Search Greek companies by AFM (at least 3 digits). Fetch stores registry
-            PDFs on the backend for review.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="gemi-q">AFM / digits</Label>
-            <Input
-              id="gemi-q"
-              value={gemiQ}
-              onChange={(e) => setGemiQ(e.target.value)}
-              placeholder="e.g. 998888888"
-            />
-          </div>
-          {gemiSearch.isFetching ? (
-            <p className="text-sm text-muted-foreground">Searching…</p>
-          ) : gemiSearch.data?.items.length ? (
-            <ul className="space-y-2 text-sm">
-              {gemiSearch.data.items.map((item) => (
-                <li
-                  key={`${item.afm}-${item.ar_gemi}`}
-                  className="rounded-md border border-slate-100 p-2"
-                >
-                  <p className="font-medium">{item.company_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    AFM {item.afm} · Registry {item.ar_gemi}
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="mt-2"
-                    disabled={gemiFetch.isPending || !item.afm}
-                    onClick={() =>
-                      gemiFetch.mutate(item.afm, {
-                        onSuccess: (r) =>
-                          toast({ title: r.message, description: r.company }),
-                        onError: (e) =>
-                          toast({
-                            title: "Registry fetch failed",
-                            description: isApiError(e) ? e.message : "Error",
-                            variant: "destructive",
-                          }),
-                      })
-                    }
-                  >
-                    Fetch documents
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          ) : gemiSearch.isSuccess ? (
-            <p className="text-sm text-muted-foreground">No matches.</p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card className="border-slate-200 shadow-sm transition-all duration-200">
-        <CardHeader>
-          <CardTitle>myDATA</CardTitle>
-          <CardDescription>
-            Greek tax document sync from AADE. A guided mark and date-range flow
-            will ship in a later phase; until then, use developer tools or support
-            to run document pulls.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-
-      <Card className="border-slate-200 shadow-sm transition-all duration-200">
-        <CardHeader>
-          <CardTitle>Stored files</CardTitle>
-          <CardDescription>
-            Download a previously uploaded or fetched file when you know its storage
-            filename.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-2">
-          <div className="min-w-[200px] flex-1 space-y-2">
-            <Label htmlFor="file-key">Filename / key</Label>
-            <Input
-              id="file-key"
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              placeholder="stored filename"
-            />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!fileName.trim()}
-            onClick={async () => {
-              try {
-                const blob = await downloadStoredFile(fileName.trim());
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = fileName.trim();
-                a.click();
-                URL.revokeObjectURL(url);
-                toast({ title: "Download started" });
-              } catch (e) {
-                toast({
-                  title: "Download failed",
-                  description: isApiError(e) ? e.message : "Error",
-                  variant: "destructive",
-                });
-              }
-            }}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
+        <aside className="lg:col-span-3">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...SNAP_SPRING, delay: 0.04 }}
+            className="sticky top-4 flex flex-col gap-5 rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-14px_rgba(15,23,42,0.08)]"
           >
-            Download
-          </Button>
-        </CardContent>
-      </Card>
+            <form onSubmit={handleSearchSubmit} className="space-y-2">
+              <Label
+                htmlFor="integrations-search"
+                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600"
+              >
+                Search
+              </Label>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400"
+                  aria-hidden
+                />
+                <Input
+                  id="integrations-search"
+                  value={queryInput}
+                  onChange={(e) => setQueryInput(e.target.value)}
+                  onBlur={() => pushParam({ q: queryInput.trim() || null })}
+                  placeholder="Type"
+                  className="h-9 rounded-lg border-slate-200 bg-white pl-8 text-xs"
+                />
+              </div>
+            </form>
+
+            <div className="space-y-2">
+              <Label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                Filter by category
+              </Label>
+              <Select
+                value={category}
+                onValueChange={(v) =>
+                  pushParam({ category: v === "all" ? null : v })
+                }
+              >
+                <SelectTrigger className="h-9 rounded-lg border-slate-200 bg-white text-xs">
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  <SelectItem value="integration">Integrations</SelectItem>
+                  <SelectItem value="bank">Banks</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 opacity-60">
+              <Label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                Filter by segment
+              </Label>
+              <Select disabled>
+                <SelectTrigger className="h-9 rounded-lg border-slate-200 bg-white text-xs">
+                  <SelectValue placeholder="Please select" />
+                </SelectTrigger>
+                <SelectContent />
+              </Select>
+            </div>
+
+            <div className="space-y-2 opacity-60">
+              <Label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                Filter by use case
+              </Label>
+              <Select disabled>
+                <SelectTrigger className="h-9 rounded-lg border-slate-200 bg-white text-xs">
+                  <SelectValue placeholder="Please select" />
+                </SelectTrigger>
+                <SelectContent />
+              </Select>
+            </div>
+          </motion.div>
+        </aside>
+
+        <main className="space-y-8 lg:col-span-9">
+          {showIntegrations ? (
+            <section>
+              <SectionHeader
+                icon={<Blocks className="size-3.5" aria-hidden />}
+                label="Integrations"
+                count={filtered.integrations.length}
+              />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filtered.integrations.map((tile, i) => (
+                  <TileCard
+                    key={tile.id}
+                    tile={tile}
+                    delay={0.06 + i * 0.03}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {showBanks ? (
+            <section>
+              <SectionHeader
+                icon={<Building2 className="size-3.5" aria-hidden />}
+                label="Banks"
+                count={filtered.banks.length}
+              />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filtered.banks.map((tile, i) => (
+                  <TileCard
+                    key={tile.id}
+                    tile={tile}
+                    delay={0.06 + i * 0.03}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {nothingFound ? (
+            <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center">
+              <Layers className="size-8 text-slate-300" aria-hidden />
+              <p className="text-sm font-medium text-slate-700">
+                No integrations match “{q}”
+              </p>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Try a different keyword or reset the category filter.
+              </p>
+            </div>
+          ) : null}
+        </main>
+      </div>
     </div>
   );
 }
