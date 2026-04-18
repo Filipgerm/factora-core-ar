@@ -5,15 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/query-keys";
 import { apiErrorFromResponse } from "@/lib/api/error";
+import { connectionActionResponseSchema } from "@/lib/schemas/saltedge/connections";
 import {
-  connectionActionResponseSchema,
-  connectionSchema,
-  connectionsResponseSchema,
-  type ConnectionsResponse,
-  type SaltEdgeConnection,
-} from "@/lib/schemas/saltedge/connections";
-import {
-  customerResponseSchema,
   customersResponseSchema,
   type CustomersResponse,
   type SaltEdgeCustomer,
@@ -81,49 +74,6 @@ export function useSaltEdgeCustomersQuery() {
   });
 }
 
-export function useSaltEdgeCustomerQuery(customerId: string | null) {
-  const hasOrg = useHasOrg();
-  return useQuery({
-    queryKey: queryKeys.saltedge.customer(customerId ?? ""),
-    queryFn: async () => {
-      if (!customerId) throw new Error("customerId required");
-      const res = await apiFetch(`/v1/saltedge/customers/${customerId}`);
-      if (!res.ok) throw await apiErrorFromResponse(res);
-      return parseJson(res, customerResponseSchema);
-    },
-    enabled: Boolean(hasOrg && customerId),
-  });
-}
-
-export function useSaltEdgeConnectionsQuery(customerId: string | null) {
-  const hasOrg = useHasOrg();
-  return useQuery({
-    queryKey: queryKeys.saltedge.connections(customerId ?? "", {}),
-    queryFn: async (): Promise<ConnectionsResponse> => {
-      if (!customerId) throw new Error("customerId required");
-      const sp = new URLSearchParams({ customer_id: customerId });
-      const res = await apiFetch(`/v1/saltedge/connections?${sp.toString()}`);
-      if (!res.ok) throw await apiErrorFromResponse(res);
-      return parseJson(res, connectionsResponseSchema);
-    },
-    enabled: Boolean(hasOrg && customerId),
-  });
-}
-
-export function useSaltEdgeConnectionQuery(connectionId: string | null) {
-  const hasOrg = useHasOrg();
-  return useQuery({
-    queryKey: queryKeys.saltedge.connection(connectionId ?? ""),
-    queryFn: async (): Promise<SaltEdgeConnection> => {
-      if (!connectionId) throw new Error("connectionId required");
-      const res = await apiFetch(`/v1/saltedge/connections/${connectionId}`);
-      if (!res.ok) throw await apiErrorFromResponse(res);
-      return parseJson(res, connectionSchema);
-    },
-    enabled: Boolean(hasOrg && connectionId),
-  });
-}
-
 export function useSaltEdgeConnectMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -141,45 +91,3 @@ export function useSaltEdgeConnectMutation() {
   });
 }
 
-export function useSaltEdgeReconnectMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      connectionId,
-      payload,
-    }: {
-      connectionId: string;
-      payload?: Record<string, unknown> | null;
-    }) => {
-      const res = await apiFetch(
-        `/v1/saltedge/connections/${connectionId}/reconnect`,
-        {
-          method: "POST",
-          body: payload ? JSON.stringify(payload) : undefined,
-        }
-      );
-      if (!res.ok) throw await apiErrorFromResponse(res);
-      return parseJson(res, connectionActionResponseSchema);
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.saltedge.all });
-    },
-  });
-}
-
-export function useSaltEdgeRefreshMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (connectionId: string) => {
-      const res = await apiFetch(
-        `/v1/saltedge/connections/${connectionId}/refresh`,
-        { method: "POST" }
-      );
-      if (!res.ok) throw await apiErrorFromResponse(res);
-      return parseJson(res, connectionActionResponseSchema);
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.saltedge.all });
-    },
-  });
-}
