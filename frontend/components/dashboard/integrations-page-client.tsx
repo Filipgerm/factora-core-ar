@@ -74,7 +74,7 @@ const INTEGRATION_TILES: ReadonlyArray<Tile> = [
     category: "integration",
     subcategory: "CRM",
     logo: {
-      src: "/images/integrations/salesforce.svg",
+      src: "/images/integrations/Salesforce.com_logo.svg",
       shape: "wordmark",
     },
     accent: "sky",
@@ -85,8 +85,8 @@ const INTEGRATION_TILES: ReadonlyArray<Tile> = [
     category: "integration",
     subcategory: "Spreadsheets",
     logo: {
-      src: "/images/integrations/google-sheets.svg",
-      shape: "mark",
+      src: "/images/integrations/Google_Sheets_logo_(2014-2020).svg",
+      shape: "wordmark",
     },
     accent: "emerald",
   },
@@ -96,8 +96,8 @@ const INTEGRATION_TILES: ReadonlyArray<Tile> = [
     category: "integration",
     subcategory: "Spreadsheets",
     logo: {
-      src: "/images/integrations/excel.svg",
-      shape: "mark",
+      src: "/images/integrations/Microsoft_Office_Excel_(2019–2025).svg",
+      shape: "wordmark",
     },
     accent: "green",
   },
@@ -107,8 +107,8 @@ const INTEGRATION_TILES: ReadonlyArray<Tile> = [
     category: "integration",
     subcategory: "Mail",
     logo: {
-      src: "/images/integrations/gmail.svg",
-      shape: "mark",
+      src: "/images/integrations/Gmail_icon_(2020).svg",
+      shape: "wordmark",
     },
     accent: "rose",
   },
@@ -129,8 +129,8 @@ const INTEGRATION_TILES: ReadonlyArray<Tile> = [
     category: "integration",
     subcategory: "Data warehouse",
     logo: {
-      src: "/images/integrations/redshift.svg",
-      shape: "mark",
+      src: "/images/integrations/Amazon-Redshift-Logo.svg",
+      shape: "wordmark",
     },
     accent: "amber",
   },
@@ -178,14 +178,6 @@ const BANK_TILES: ReadonlyArray<Tile> = [
     accent: "slate",
   },
   {
-    id: "epirus",
-    name: "Epirus Bank",
-    category: "bank",
-    subcategory: "Banking",
-    logo: { src: "/images/banks/epirus-bank.png", shape: "mark" },
-    accent: "indigo",
-  },
-  {
     id: "eurobank",
     name: "Eurobank",
     category: "bank",
@@ -200,14 +192,6 @@ const BANK_TILES: ReadonlyArray<Tile> = [
     subcategory: "Banking",
     logo: { src: "/images/banks/ing-bank.png", shape: "mark" },
     accent: "orange",
-  },
-  {
-    id: "n26",
-    name: "N26",
-    category: "bank",
-    subcategory: "Banking",
-    logo: { src: "/images/banks/n26-bank.png", shape: "mark" },
-    accent: "slate",
   },
   {
     id: "nbg",
@@ -275,67 +259,44 @@ const BANK_TILES: ReadonlyArray<Tile> = [
   },
 ];
 
-const ACCENT_CLASSES: Record<
-  Accent,
-  { tile: string; ring: string; text: string; glow: string }
-> = {
+const ACCENT_CLASSES: Record<Accent, { text: string; glow: string }> = {
   teal: {
-    tile: "bg-[var(--brand-primary-subtle)]",
-    ring: "ring-teal-200/70",
     text: "text-[color:var(--brand-primary)]",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(47,154,138,0.35)]",
   },
   violet: {
-    tile: "bg-violet-50",
-    ring: "ring-violet-200/70",
     text: "text-violet-700",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(139,92,246,0.35)]",
   },
   orange: {
-    tile: "bg-orange-50",
-    ring: "ring-orange-200/70",
     text: "text-orange-700",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(249,115,22,0.3)]",
   },
   sky: {
-    tile: "bg-sky-50",
-    ring: "ring-sky-200/70",
     text: "text-sky-700",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(14,165,233,0.3)]",
   },
   emerald: {
-    tile: "bg-emerald-50",
-    ring: "ring-emerald-200/70",
     text: "text-emerald-700",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(16,185,129,0.3)]",
   },
   green: {
-    tile: "bg-green-50",
-    ring: "ring-green-200/70",
     text: "text-green-700",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(34,197,94,0.3)]",
   },
   rose: {
-    tile: "bg-rose-50",
-    ring: "ring-rose-200/70",
     text: "text-rose-700",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(244,63,94,0.3)]",
   },
   amber: {
-    tile: "bg-amber-50",
-    ring: "ring-amber-200/70",
     text: "text-amber-700",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(245,158,11,0.3)]",
   },
   slate: {
-    tile: "bg-slate-100",
-    ring: "ring-slate-200/80",
     text: "text-slate-700",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(15,23,42,0.2)]",
   },
   indigo: {
-    tile: "bg-indigo-50",
-    ring: "ring-indigo-200/70",
     text: "text-indigo-700",
     glow: "group-hover:shadow-[0_12px_32px_-16px_rgba(99,102,241,0.3)]",
   },
@@ -362,14 +323,12 @@ function TileLogo({ name, accent, logo }: TileLogoProps) {
   if (!logo || errored) {
     return (
       <div
-        className={cn(
-          "flex h-12 w-full items-center justify-center rounded-xl ring-1 ring-inset",
-          classes.tile,
-          classes.ring
-        )}
+        className="flex h-20 w-full items-center justify-start"
         aria-hidden
       >
-        <span className={cn("text-sm font-bold tracking-tight", classes.text)}>
+        <span
+          className={cn("text-3xl font-bold tracking-tight", classes.text)}
+        >
           {initials}
         </span>
       </div>
@@ -378,22 +337,15 @@ function TileLogo({ name, accent, logo }: TileLogoProps) {
 
   const isWordmark = logo.shape === "wordmark";
   return (
-    <div
-      className={cn(
-        "flex h-12 w-full items-center justify-center overflow-hidden rounded-xl px-3 ring-1 ring-inset",
-        classes.tile,
-        classes.ring
-      )}
-      aria-hidden
-    >
+    <div className="flex h-20 w-full items-center justify-start" aria-hidden>
       <Image
         src={logo.src}
         alt={`${name} logo`}
-        width={isWordmark ? 120 : 40}
-        height={32}
+        width={isWordmark ? 220 : 80}
+        height={80}
         className={cn(
-          "h-auto w-auto object-contain",
-          isWordmark ? "max-h-6 max-w-[105px]" : "max-h-7 max-w-7"
+          "h-auto w-auto object-contain object-left",
+          isWordmark ? "max-h-14 max-w-[220px]" : "max-h-16 max-w-[160px]"
         )}
         onError={() => setErrored(true)}
         unoptimized
@@ -411,16 +363,16 @@ function TileCard({ tile, delay }: { tile: Tile; delay: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ ...SNAP_SPRING, delay }}
       className={cn(
-        "group flex cursor-default flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-[1px] hover:border-slate-200",
+        "group flex h-[200px] cursor-default flex-col items-start justify-between gap-4 rounded-2xl border border-slate-100 bg-white px-6 py-6 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-[1px] hover:border-slate-200",
         classes.glow
       )}
     >
       <TileLogo name={tile.name} accent={tile.accent} logo={tile.logo} />
-      <div className="min-w-0">
-        <div className="truncate text-sm font-semibold tracking-tight text-slate-900">
+      <div className="min-w-0 space-y-0.5">
+        <div className="truncate text-[15px] font-semibold tracking-tight text-slate-900">
           {tile.name}
         </div>
-        <div className="mt-0.5 text-[11px] tracking-tight text-muted-foreground">
+        <div className="text-[11px] tracking-tight text-muted-foreground">
           {tile.subcategory}
         </div>
       </div>
@@ -598,7 +550,7 @@ export function IntegrationsPageClient() {
                 label="Integrations"
                 count={filtered.integrations.length}
               />
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {filtered.integrations.map((tile, i) => (
                   <TileCard
                     key={tile.id}
@@ -617,7 +569,7 @@ export function IntegrationsPageClient() {
                 label="Banks"
                 count={filtered.banks.length}
               />
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {filtered.banks.map((tile, i) => (
                   <TileCard
                     key={tile.id}
