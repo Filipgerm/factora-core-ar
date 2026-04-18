@@ -54,6 +54,9 @@ from app.models.auth import (
 
 router = APIRouter(tags=["Auth"])
 
+# Mounted by main.py only when settings.demo_mode is True.
+demo_router = APIRouter(tags=["Auth"])
+
 
 # ---------------------------------------------------------------------------
 # Registration
@@ -291,3 +294,31 @@ async def confirm_phone_verification(
     return await auth_service.confirm_phone_verification(
         user["sub"], req.verification_id, req.code
     )
+
+
+# ---------------------------------------------------------------------------
+# Demo-only endpoint — registered by main.py only when ENVIRONMENT=demo
+# ---------------------------------------------------------------------------
+
+
+@demo_router.post(
+    "/demo-login",
+    response_model=AuthPublicResponse,
+    summary="One-click login for the seeded demo user (demo mode only)",
+)
+async def demo_login(
+    request: Request,
+    response: Response,
+    auth_service: AuthSvc,
+) -> AuthPublicResponse:
+    """Issue tokens for ``demo-dashboard@example.org`` without password validation.
+
+    This route is not mounted in ``production`` or ``development``; the guard
+    inside ``AuthService.demo_login`` provides an additional layer of protection.
+    """
+    auth = await auth_service.demo_login(
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+    set_refresh_token_cookie(response, auth.refresh_token)
+    return AuthPublicResponse.model_validate(auth.model_dump(exclude={"refresh_token"}))
