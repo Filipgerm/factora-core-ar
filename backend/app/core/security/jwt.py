@@ -9,7 +9,12 @@ Access token payload:
 
 Refresh token: opaque ``secrets.token_urlsafe(48)``, 7-day TTL.
 Its SHA-256 hash is stored in ``user_sessions.token_hash``.
+
+When ``ENVIRONMENT=demo`` (``settings.demo_mode``), access tokens use a longer TTL
+(``ACCESS_TOKEN_TTL_MINUTES_DEMO``) so idle demo sessions rarely hit expiry; production
+and development keep the short default for tighter revocation windows.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -30,9 +35,17 @@ from app.core.security.hashing import now_utc
 # ---------------------------------------------------------------------------
 
 ACCESS_TOKEN_TTL_MINUTES: int = 30
+ACCESS_TOKEN_TTL_MINUTES_DEMO: int = 8 * 60  # 8h — demo UX; refresh still caps at 7d
 REFRESH_TOKEN_TTL_DAYS: int = 7
 
 _ALGORITHM = "HS256"
+
+
+def _access_token_ttl_minutes() -> int:
+    """Return access-token lifetime; extended in demo only."""
+    if settings.demo_mode:
+        return ACCESS_TOKEN_TTL_MINUTES_DEMO
+    return ACCESS_TOKEN_TTL_MINUTES
 
 
 # ---------------------------------------------------------------------------
@@ -56,11 +69,11 @@ def encode_access_token(
     Returns:
         A tuple of ``(raw_jwt_string, jti_hex)`` where ``jti_hex`` is stored
         as ``SHA-256(jti_hex)`` in ``user_sessions.jti_hash`` to enable forced
-        revocation before the 30-minute TTL expires.
+        revocation before the access-token TTL expires (30 min, or longer in demo).
     """
     now = now_utc()
     jti = uuid.uuid4().hex
-    expires_at = now + timedelta(minutes=ACCESS_TOKEN_TTL_MINUTES)
+    expires_at = now + timedelta(minutes=_access_token_ttl_minutes())
     payload: dict[str, Any] = {
         "sub": user_id,
         "role": role,
@@ -157,9 +170,15 @@ def decode_gmail_oauth_state(token: str) -> dict[str, Any]:
             options={"require": ["sub", "exp", "iat", "typ", "organization_id"]},
         )
     except ExpiredSignatureError:
-        raise AuthError("Gmail OAuth state has expired", code="auth.gmail_state_expired")
+        raise AuthError(
+            "Gmail OAuth state has expired", code="auth.gmail_state_expired"
+        )
     except InvalidTokenError as exc:
-        raise AuthError(f"Invalid Gmail OAuth state: {exc}", code="auth.gmail_state_invalid")
+        raise AuthError(
+            f"Invalid Gmail OAuth state: {exc}", code="auth.gmail_state_invalid"
+        )
     if payload.get("typ") != "gmail_oauth":
-        raise AuthError("Invalid Gmail OAuth state type", code="auth.gmail_state_invalid")
+        raise AuthError(
+            "Invalid Gmail OAuth state type", code="auth.gmail_state_invalid"
+        )
     return payload
