@@ -25,6 +25,7 @@ const SessionStateContext = createContext<{
   accessToken: string | null;
   profile: StoredAuthProfile | null;
   bootstrapDone: boolean;
+  isDemoMode: boolean;
 } | null>(null);
 
 export function useAuthBootstrapReady(): boolean {
@@ -38,6 +39,11 @@ export function useAuthSessionState() {
     throw new Error("useAuthSessionState must be used within AuthSessionProvider");
   }
   return ctx;
+}
+
+/** True when the backend is running with ENVIRONMENT=demo. */
+export function useIsDemoMode(): boolean {
+  return useAuthSessionState().isDemoMode;
 }
 
 function profileFromPublic(res: {
@@ -73,7 +79,13 @@ function isE2EAuthBridgeEnabled(): boolean {
   return process.env.NEXT_PUBLIC_ENABLE_E2E_AUTH_BRIDGE === "true";
 }
 
-async function postRefreshCookie(): Promise<boolean> {
+/**
+ * Attempt to silently restore the session from the httpOnly refresh cookie.
+ * Returns whether the backend is running in demo mode (X-Demo-Mode: true header),
+ * regardless of whether the refresh succeeded — demo mode is a backend concern
+ * and the header is present on every response including 401s.
+ */
+async function postRefreshCookie(): Promise<{ ok: boolean; isDemoMode: boolean }> {
   const res = await fetch(`${getApiOrigin()}/v1/auth/refresh`, {
     method: "POST",
     credentials: "include",
@@ -83,19 +95,22 @@ async function postRefreshCookie(): Promise<boolean> {
     },
     body: JSON.stringify({}),
   });
-  if (!res.ok) return false;
+
+  const isDemoMode = res.headers.get("X-Demo-Mode") === "true";
+
+  if (!res.ok) return { ok: false, isDemoMode };
   let body: unknown;
   try {
     body = await res.json();
   } catch {
-    return false;
+    return { ok: false, isDemoMode };
   }
   try {
     const data = authPublicResponseSchema.parse(body);
     setSessionBridge(data.access_token, profileFromPublic(data));
-    return true;
+    return { ok: true, isDemoMode };
   } catch {
-    return false;
+    return { ok: false, isDemoMode };
   }
 }
 
@@ -103,6 +118,7 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<StoredAuthProfile | null>(null);
   const [bootstrapDone, setBootstrapDone] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const accessRef = useRef<string | null>(null);
   const profileRef = useRef<StoredAuthProfile | null>(null);
@@ -162,8 +178,11 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
         if (!cancelled) setBootstrapDone(true);
         return;
       }
-      await postRefreshCookie();
-      if (!cancelled) setBootstrapDone(true);
+      const { isDemoMode: demo } = await postRefreshCookie();
+      if (!cancelled) {
+        setIsDemoMode(demo);
+        setBootstrapDone(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -175,8 +194,9 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
       accessToken,
       profile,
       bootstrapDone,
+      isDemoMode,
     }),
-    [accessToken, profile, bootstrapDone]
+    [accessToken, profile, bootstrapDone, isDemoMode]
   );
 
   return (
