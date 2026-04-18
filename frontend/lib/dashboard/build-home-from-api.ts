@@ -22,18 +22,24 @@ function monthlyToSpark(rows: Record<string, unknown>[]): HomeKpiSparkPoint[] {
   });
 }
 
-function pickFormatForAmount(
-  amount: number
-): HomeKpiMetric["formatKey"] {
+function pickFormatForAmount(amount: number): HomeKpiMetric["formatKey"] {
   if (Math.abs(amount) >= 1_000_000) return "eur_millions";
   return "eur_integer";
+}
+
+/** Value passed to Tremor / animated formatter: millions scale when using eur_millions. */
+function animateTargetForEurFormat(
+  amountAbs: number,
+  formatKey: HomeKpiMetric["formatKey"],
+): number {
+  return formatKey === "eur_millions" ? amountAbs / 1_000_000 : amountAbs;
 }
 
 /**
  * Maps P&L dashboard metrics into home KPI cards. Labels are aligned with banking P&L, not legacy ARR copy.
  */
 export function buildHomeKpiMetricsFromPlMetrics(
-  m: DashboardMetricsResponse
+  m: DashboardMetricsResponse,
 ): HomeKpiMetric[] {
   const revSpark = monthlyToSpark(m.monthly_revenue);
   const expSpark = monthlyToSpark(m.monthly_expenses);
@@ -42,7 +48,9 @@ export function buildHomeKpiMetricsFromPlMetrics(
 
   const revenueFmt = pickFormatForAmount(m.total_revenue);
   const revenueTarget =
-    revenueFmt === "eur_millions" ? m.total_revenue / 1_000_000 : m.total_revenue;
+    revenueFmt === "eur_millions"
+      ? m.total_revenue / 1_000_000
+      : m.total_revenue;
 
   const niFmt = pickFormatForAmount(m.net_income);
   const niTarget =
@@ -80,13 +88,20 @@ export function buildHomeKpiMetricsFromPlMetrics(
     sparkline: niSpark.length ? niSpark : [{ i: 0, v: m.net_income }],
   };
 
+  const cfFmt = pickFormatForAmount(m.net_cash_flow);
+  const expFmt = pickFormatForAmount(m.total_expenses);
+  const balFmt = pickFormatForAmount(m.balance);
+
   const compact: HomeKpiMetric[] = [
     {
       id: "kpi-cf",
       title: "Net cash flow",
       tier: "secondary",
-      animateTarget: Math.abs(m.net_cash_flow),
-      formatKey: pickFormatForAmount(m.net_cash_flow),
+      animateTarget: animateTargetForEurFormat(
+        Math.abs(m.net_cash_flow),
+        cfFmt,
+      ),
+      formatKey: cfFmt,
       changePercent: 0,
       comparisonLabel: "period total",
       sparkline: [{ i: 0, v: m.net_cash_flow }],
@@ -95,8 +110,11 @@ export function buildHomeKpiMetricsFromPlMetrics(
       id: "kpi-exp",
       title: "Total expenses",
       tier: "secondary",
-      animateTarget: Math.abs(m.total_expenses),
-      formatKey: pickFormatForAmount(m.total_expenses),
+      animateTarget: animateTargetForEurFormat(
+        Math.abs(m.total_expenses),
+        expFmt,
+      ),
+      formatKey: expFmt,
       changePercent: changeFromSeries(expSpark),
       comparisonLabel: `last ${m.period_days} days`,
       sparkline: expSpark.length ? expSpark : [{ i: 0, v: m.total_expenses }],
@@ -105,15 +123,22 @@ export function buildHomeKpiMetricsFromPlMetrics(
       id: "kpi-bal",
       title: "Balance",
       tier: "secondary",
-      animateTarget: Math.abs(m.balance),
-      formatKey: pickFormatForAmount(m.balance),
+      animateTarget: animateTargetForEurFormat(Math.abs(m.balance), balFmt),
+      formatKey: balFmt,
       changePercent: 0,
       comparisonLabel: "snapshot",
       sparkline: [{ i: 0, v: m.balance }],
     },
   ];
 
-  if (marginSpark.length > 1) {
+  const hasNumericMonthlyMargin = m.monthly_margin.some(
+    (row) => typeof (row as { value?: unknown }).value === "number",
+  );
+  const showMarginTrend =
+    marginSpark.length > 1 &&
+    (typeof m.average_margin === "number" || hasNumericMonthlyMargin);
+
+  if (showMarginTrend) {
     compact.push({
       id: "kpi-margin",
       title: "Margin trend",
@@ -130,7 +155,7 @@ export function buildHomeKpiMetricsFromPlMetrics(
 }
 
 export function buildActionItemsFromSellerMetrics(
-  s: SellerMetricsResponse
+  s: SellerMetricsResponse,
 ): HomeActionItem[] {
   const items: HomeActionItem[] = [];
 
