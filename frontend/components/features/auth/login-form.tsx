@@ -65,10 +65,6 @@ export function LoginForm() {
         <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
           Access your workspace
         </h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-          Use your Factora credentials. Your session stays in memory — refresh tokens remain in an
-          httpOnly cookie.
-        </p>
       </header>
 
       <Form {...form}>
