@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
@@ -234,6 +235,32 @@ export function ArInvoicesView() {
             {mydataCell(row.original)}
           </div>
         ),
+      },
+      {
+        id: "gl",
+        header: () => (
+          <span className="inline-flex min-h-10 items-center">GL</span>
+        ),
+        cell: ({ row }) => {
+          const jid = row.original.glJournalEntryId;
+          if (!jid) {
+            return (
+              <span className="inline-flex min-h-10 items-center text-xs text-muted-foreground">
+                —
+              </span>
+            );
+          }
+          return (
+            <div className="flex min-h-10 items-center">
+              <Link
+                href={`/general-ledger/journal-entries?journal_id=${encodeURIComponent(jid)}&consolidated=1`}
+                className="text-xs font-medium text-blue-700 underline-offset-2 hover:underline dark:text-blue-400"
+              >
+                Journal
+              </Link>
+            </div>
+          );
+        },
       },
       {
         accessorKey: "pipeline",

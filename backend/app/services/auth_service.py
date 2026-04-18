@@ -237,6 +237,69 @@ class AuthService:
             logger.error("DB error during login: %s", e)
             raise ExternalServiceError("Database error during login.", code="db.error")
 
+    async def demo_login(
+        self,
+        *,
+        user_agent: str | None = None,
+        ip_address: str | None = None,
+    ) -> AuthResponse:
+        """Issue tokens for the seeded demo user without password validation.
+
+        Only callable when ``ENVIRONMENT=demo``.  The endpoint that calls this
+        is not mounted in production or development, but this guard provides
+        defence-in-depth.
+
+        Returns:
+            ``AuthResponse`` — access token, refresh token, and demo user profile.
+
+        Raises:
+            AuthError: If called outside demo mode or the demo user is missing.
+        """
+        from app.core.demo_constants import DEMO_USER_EMAIL
+
+        if not settings.demo_mode:
+            raise AuthError("Demo login is not available.", code="auth.forbidden")
+
+        try:
+            result = await self.db.execute(select(User).where(User.email == DEMO_USER_EMAIL))
+            user: Optional[User] = result.scalar_one_or_none()
+            if not user:
+                raise AuthError(
+                    "Demo user not found. Run scripts/seed_demo_db.py first.",
+                    code="demo.user_not_seeded",
+                )
+
+            access_token, jti = encode_access_token(
+                user.id,
+                role=user.role.value if hasattr(user.role, "value") else str(user.role),
+                organization_id=user.organization_id,
+            )
+            raw_refresh, refresh_hash = generate_refresh_token()
+            now = now_utc()
+
+            session = UserSession(
+                user_id=user.id,
+                token_hash=refresh_hash,
+                jti_hash=hash_jti(jti),
+                expires_at=now + timedelta(days=REFRESH_TOKEN_TTL_DAYS),
+                created_at=now,
+                last_used_at=now,
+                user_agent=user_agent,
+                ip_address=ip_address,
+            )
+            self.db.add(session)
+            await self.db.commit()
+            await self.db.refresh(user)
+
+            return await self._build_auth_response(user, access_token, raw_refresh)
+
+        except AuthError:
+            raise
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error("DB error during demo_login: %s", e)
+            raise ExternalServiceError("Database error during demo login.", code="db.error")
+
     async def sign_up_with_google(
         self,
         id_token: str,

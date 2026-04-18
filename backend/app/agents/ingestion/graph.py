@@ -7,7 +7,7 @@
     2. ``validate`` — reject empty input (no text and no image).
     3. ``context`` — pgvector similarity hints fetched BEFORE extraction so the LLM
        can use historical organisation context (including human corrections).
-    4. ``extract`` — LLM JSON with ERP fields, confidence, summary; receives
+    4. ``extract`` — LLM JSON with ERP fields, concufidence, summary; receives
        ``neighbors`` from ``context`` as prompt hints.
     5. ``resolve_counterparty`` — maps the extracted vendor name/VAT number to an
        existing ``Counterparty`` row; Phase 1 exact VAT lookup, Phase 2 embedding
@@ -20,6 +20,7 @@
 call ``ainvoke`` with ``organization_id``, ``raw_text`` and/or attachment fields,
 ``db``, and optionally ``vector_store_factory`` / ``llm`` (tests).
 """
+
 from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph

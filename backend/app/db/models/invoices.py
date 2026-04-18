@@ -45,6 +45,14 @@ class InvoiceStatus(str, enum.Enum):
     SYNCED = "synced"
 
 
+class InvoiceAccountingKind(str, enum.Enum):
+    """How automated posting classified this invoice for GL (MVP: Gmail ingest)."""
+
+    AP_EXPENSE = "ap_expense"
+    AR_REVENUE = "ar_revenue"
+    UNKNOWN = "unknown"
+
+
 class Invoice(Base):
     """Organization-scoped invoice across all ingestion channels."""
 
@@ -107,6 +115,21 @@ class Invoice(Base):
         nullable=False,
         default=False,
         server_default=text("false"),
+    )
+    gl_journal_entry_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("gl_journal_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    accounting_kind: Mapped[InvoiceAccountingKind | None] = mapped_column(
+        Enum(
+            InvoiceAccountingKind,
+            name="invoiceaccountingkind",
+            create_type=False,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=True,
     )
 
     created_at: Mapped[str] = mapped_column(

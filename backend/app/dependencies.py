@@ -41,6 +41,7 @@ from app.services.gemi_service import GemiService
 from app.services.mydata_service import MyDataService
 from app.services.ai_service import AIService
 from app.services.file_service import FileService
+from app.services.invoice_gl_bridge_service import InvoiceGlBridgeService
 from app.services.invoice_service import InvoiceService
 from app.services.gl_service import GlService
 from app.services.ingestion_service import IngestionService
@@ -464,6 +465,19 @@ def get_invoice_controller(
 
 
 InvoiceCtrl = Annotated[InvoiceController, Depends(get_invoice_controller)]
+
+
+def get_invoice_gl_bridge_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: CurrentOrgId,
+) -> InvoiceGlBridgeService:
+    """System GL bridge for invoice ingestion (no JWT actor; audit uses null user)."""
+    return InvoiceGlBridgeService(db, org_id)
+
+
+InvoiceGlBridgeSvc = Annotated[
+    InvoiceGlBridgeService, Depends(get_invoice_gl_bridge_service)
+]
 
 
 # ---------------------------------------------------------------------------

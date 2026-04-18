@@ -154,6 +154,26 @@ export function useRefreshMutation() {
   });
 }
 
+export function useDemoLoginMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch("/v1/auth/demo-login", {
+        method: "POST",
+        skipAuth: true,
+      });
+      if (!res.ok) throw await apiErrorFromResponse(res);
+      const data = await parseJson(res, authPublicResponseSchema);
+      setSession(data.access_token, profileFromAuth(data));
+      return data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.organization.all });
+      void qc.invalidateQueries({ queryKey: queryKeys.organizations.all });
+    },
+  });
+}
+
 export function useForgotPasswordMutation() {
   return useMutation({
     mutationFn: async (email: string) => {

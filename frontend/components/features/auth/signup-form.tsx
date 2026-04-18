@@ -66,12 +66,8 @@ export function SignupForm() {
           Create account
         </p>
         <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-          Join your finance stack
+          Join the intelligent accounting era
         </h2>
-        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-          Use your work email. After signup you&apos;ll sign in once to reach onboarding and banking
-          connections.
-        </p>
       </header>
 
       <Form {...form}>

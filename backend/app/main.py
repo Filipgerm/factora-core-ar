@@ -32,6 +32,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.api.routes.ai_routes import router as ai_router
+from app.api.routes.auth_routes import demo_router as auth_demo_router
 from app.api.routes.auth_routes import router as auth_router
 from app.api.routes.dashboard_routes import router as dashboard_router
 from app.api.routes.file_routes import router as file_router
@@ -206,6 +207,8 @@ else:
 _V1 = "/v1"
 
 app.include_router(auth_router, prefix=f"{_V1}/auth", tags=["Auth"])
+if settings.demo_mode:
+    app.include_router(auth_demo_router, prefix=f"{_V1}/auth", tags=["Auth"])
 app.include_router(organization_router, prefix=f"{_V1}/organization", tags=["Organization"])
 app.include_router(organizations_router, prefix=f"{_V1}/organizations", tags=["Organizations"])
 app.include_router(companies_router, prefix=f"{_V1}/companies", tags=["External APIs"])

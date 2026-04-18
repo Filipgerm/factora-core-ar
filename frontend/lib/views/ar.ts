@@ -28,6 +28,8 @@ export interface ArInvoiceRow {
   mydataStatus: ArMydataTransmission;
   mydataMark: string | null;
   paidAt?: string | null;
+  /** Unified invoice GL draft link (``gl_journal_entry_id``) when present */
+  glJournalEntryId?: string | null;
 }
 
 export interface ArCustomer {
