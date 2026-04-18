@@ -9,7 +9,7 @@ required accounts are missing (callers may catch and log).
 Flow:
     1. Skip if GL schema not installed or invoice already linked.
     2. Load counterparty type; infer ``InvoiceAccountingKind``.
-    3. Resolve account UUIDs by code (2110/1110 accrual detail, 6100/4000).
+    3. Resolve account UUIDs by code (2110/1211 accrual detail, 6500/4100 defaults).
     4. Build balanced lines, primary legal entity, ``GlJournalEntryCreateRequest``.
     5. ``GlService.create_journal_entry`` (commits), then update invoice row + commit.
 
@@ -33,11 +33,11 @@ from app.models.general_ledger import GlJournalEntryCreateRequest, GlJournalLine
 from app.services.gl_schema_check import gl_ledger_schema_installed
 from app.services.gl_service import GlService
 
-# Demo seed / runbook: non-control posting targets (2100/1100 remain control subledgers).
+# Demo seed / runbook: non-control posting targets (2100/1200 remain control subledgers).
 CODE_AP_ACCRUAL = "2110"
-CODE_AR_DETAIL = "1110"
-CODE_DEFAULT_EXPENSE = "6100"
-CODE_DEFAULT_REVENUE = "4000"
+CODE_AR_DETAIL = "1211"
+CODE_DEFAULT_EXPENSE = "6500"
+CODE_DEFAULT_REVENUE = "4100"
 
 
 def infer_invoice_accounting_kind(

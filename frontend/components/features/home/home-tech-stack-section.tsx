@@ -12,14 +12,14 @@ type TechStackItem = {
   id: string;
   label: string;
   logo:
-    | {
-        kind: "image";
-        src: string;
-        alt: string;
-        /** Wordmark logos get a wider tile so the glyph stays legible. */
-        shape?: "mark" | "wordmark";
-      }
-    | { kind: "lucide"; className: string };
+  | {
+    kind: "image";
+    src: string;
+    alt: string;
+    /** Wordmark logos get a wider tile so the glyph stays legible. */
+    shape?: "mark" | "wordmark";
+  }
+  | { kind: "lucide"; className: string };
   tint: string;
 };
 
@@ -79,9 +79,6 @@ export function HomeTechStackSection({ className }: { className?: string }) {
           <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
             Tech stack monitoring
           </h2>
-          <p className="mt-1 text-[11px] leading-snug tracking-tight text-muted-foreground">
-            Live status of your connected finance integrations.
-          </p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 ring-1 ring-inset ring-emerald-200/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/60">
           <span

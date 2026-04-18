@@ -42,6 +42,7 @@ Invalidate any previous refresh sessions for that user on each seed run.
 
 Then sign in with the demo email below (JWT ``organization_id`` will be the fixed demo UUID).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -110,7 +111,9 @@ def _parse_date(value: str | date | None) -> date | None:
     return date.fromisoformat(str(value))
 
 
-def _demo_banking_month_segments(today: date, days_back: int = 175) -> list[tuple[date, date]]:
+def _demo_banking_month_segments(
+    today: date, days_back: int = 175
+) -> list[tuple[date, date]]:
     """Calendar month slices overlapping ``[today - days_back, today]``, oldest first."""
     ws = today - timedelta(days=days_back)
     segments: list[tuple[date, date]] = []
@@ -148,7 +151,8 @@ def _split_total(total: Decimal, weights: list[Decimal]) -> list[Decimal]:
     if tw <= 0 or total <= 0:
         return []
     raw = [
-        (total * w / tw).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) for w in weights
+        (total * w / tw).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        for w in weights
     ]
     diff = total - sum(raw, Decimal("0"))
     if raw and diff != 0:
@@ -224,9 +228,13 @@ def build_programmatic_demo_transactions(
             last_full_month_revenue = rev
 
         n_in = 5 if mi % 2 == 0 else 4
-        w_in = [Decimal("0.28"), Decimal("0.24"), Decimal("0.22"), Decimal("0.16"), Decimal("0.10")][
-            :n_in
-        ]
+        w_in = [
+            Decimal("0.28"),
+            Decimal("0.24"),
+            Decimal("0.22"),
+            Decimal("0.16"),
+            Decimal("0.10"),
+        ][:n_in]
         in_amts = _split_total(rev, w_in)
         in_dates = _spread_dates(seg_start, seg_end, len(in_amts))
 
@@ -280,8 +288,20 @@ def build_programmatic_demo_transactions(
     recent_start = today - timedelta(days=12)
     extras: list[tuple[str, float, str, str, str]] = [
         ("demo-tx-p8991", -199.0, "OPENAI — API usage", "Software & SaaS", "pending"),
-        ("demo-tx-p8992", -84.5, "NOTION LABS — workspace", "Software & SaaS", "posted"),
-        ("demo-tx-p8993", 18500.0, "Stripe payout — card batch", "Incoming transfer", "posted"),
+        (
+            "demo-tx-p8992",
+            -84.5,
+            "NOTION LABS — workspace",
+            "Software & SaaS",
+            "posted",
+        ),
+        (
+            "demo-tx-p8993",
+            18500.0,
+            "Stripe payout — card batch",
+            "Incoming transfer",
+            "posted",
+        ),
     ]
     for i, (tid, raw_amt, desc, cat, st) in enumerate(extras):
         rows.append(
@@ -365,31 +385,57 @@ async def _clear_demo_org(session: AsyncSession, org_id: str) -> None:
     demo_acc_subq = select(BankAccountModel.id).where(
         BankAccountModel.connection_id.in_(demo_conn_subq)
     )
-    await session.execute(delete(Transaction).where(Transaction.account_id.in_(demo_acc_subq)))
     await session.execute(
-        delete(BankAccountModel).where(BankAccountModel.connection_id.in_(demo_conn_subq))
+        delete(Transaction).where(Transaction.account_id.in_(demo_acc_subq))
+    )
+    await session.execute(
+        delete(BankAccountModel).where(
+            BankAccountModel.connection_id.in_(demo_conn_subq)
+        )
     )
     await session.execute(
         delete(ConsentModel).where(ConsentModel.connection_id.in_(demo_conn_subq))
     )
     await session.execute(
-        delete(ConnectionModel).where(ConnectionModel.customer_id == DEMO_SALTEDGE_CUSTOMER_ID)
+        delete(ConnectionModel).where(
+            ConnectionModel.customer_id == DEMO_SALTEDGE_CUSTOMER_ID
+        )
     )
-    await session.execute(delete(CustomerModel).where(CustomerModel.id == DEMO_SALTEDGE_CUSTOMER_ID))
+    await session.execute(
+        delete(CustomerModel).where(CustomerModel.id == DEMO_SALTEDGE_CUSTOMER_ID)
+    )
 
     cust_subq = select(CustomerModel.id).where(CustomerModel.organization_id == org_id)
-    conn_subq = select(ConnectionModel.id).where(ConnectionModel.customer_id.in_(cust_subq))
+    conn_subq = select(ConnectionModel.id).where(
+        ConnectionModel.customer_id.in_(cust_subq)
+    )
 
-    await session.execute(delete(Transaction).where(Transaction.organization_id == org_id))
-    await session.execute(delete(BankAccountModel).where(BankAccountModel.organization_id == org_id))
-    await session.execute(delete(ConsentModel).where(ConsentModel.connection_id.in_(conn_subq)))
-    await session.execute(delete(ConnectionModel).where(ConnectionModel.customer_id.in_(cust_subq)))
-    await session.execute(delete(CustomerModel).where(CustomerModel.organization_id == org_id))
+    await session.execute(
+        delete(Transaction).where(Transaction.organization_id == org_id)
+    )
+    await session.execute(
+        delete(BankAccountModel).where(BankAccountModel.organization_id == org_id)
+    )
+    await session.execute(
+        delete(ConsentModel).where(ConsentModel.connection_id.in_(conn_subq))
+    )
+    await session.execute(
+        delete(ConnectionModel).where(ConnectionModel.customer_id.in_(cust_subq))
+    )
+    await session.execute(
+        delete(CustomerModel).where(CustomerModel.organization_id == org_id)
+    )
     await session.execute(delete(Invoice).where(Invoice.organization_id == org_id))
-    await session.execute(delete(AadeInvoiceModel).where(AadeInvoiceModel.organization_id == org_id))
-    await session.execute(delete(AadeDocumentModel).where(AadeDocumentModel.organization_id == org_id))
+    await session.execute(
+        delete(AadeInvoiceModel).where(AadeInvoiceModel.organization_id == org_id)
+    )
+    await session.execute(
+        delete(AadeDocumentModel).where(AadeDocumentModel.organization_id == org_id)
+    )
     await session.execute(delete(Alert).where(Alert.organization_id == org_id))
-    await session.execute(delete(Counterparty).where(Counterparty.organization_id == org_id))
+    await session.execute(
+        delete(Counterparty).where(Counterparty.organization_id == org_id)
+    )
     await session.execute(
         delete(UserOrganizationMembership).where(
             UserOrganizationMembership.organization_id == org_id
@@ -405,7 +451,11 @@ async def _insert_demo_org(session: AsyncSession, org_id: str) -> None:
 
     gemi = get_demo_payload("gemi_company")
     data = gemi.get("data") or gemi
-    name = data.get("company_name") or data.get("trade_name") or "Factora Demo Organization"
+    name = (
+        data.get("company_name")
+        or data.get("trade_name")
+        or "Factora Demo Organization"
+    )
     vat = str(data.get("vat_number") or "123456789")
     session.add(
         Organization(
@@ -526,9 +576,9 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
                 connection_id=cid,
                 name=acc["name"],
                 nature=str(acc.get("nature") or "account"),
-                balance=(
-                    Decimal(str(acc["balance"])) * balance_scale
-                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+                balance=(Decimal(str(acc["balance"])) * balance_scale).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                ),
                 currency_code=str(acc["currency_code"]).upper(),
                 extra=acc.get("extra") or {},
             )
@@ -562,8 +612,14 @@ async def _insert_banking(session: AsyncSession, org_id: str) -> None:
                 made_on=made_on,
                 amount=amt.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
                 currency_code="EUR",
-                category=tx.get("category") if isinstance(tx.get("category"), str) else None,
-                description=tx.get("description") if isinstance(tx.get("description"), str) else None,
+                category=(
+                    tx.get("category") if isinstance(tx.get("category"), str) else None
+                ),
+                description=(
+                    tx.get("description")
+                    if isinstance(tx.get("description"), str)
+                    else None
+                ),
                 extra=extra,
             )
         )
@@ -617,20 +673,29 @@ async def _insert_aade(session: AsyncSession, org_id: str) -> None:
                 issue_date=_parse_date(inv.get("issue_date")),
                 invoice_type=inv.get("invoice_type"),
                 currency=inv.get("currency"),
-                total_net_value=Decimal(str(inv["total_net_value"]))
-                if inv.get("total_net_value") is not None
-                else None,
-                total_vat_amount=Decimal(str(inv["total_vat_amount"]))
-                if inv.get("total_vat_amount") is not None
-                else None,
-                total_gross_value=Decimal(str(inv["total_gross_value"]))
-                if inv.get("total_gross_value") is not None
-                else None,
+                total_net_value=(
+                    Decimal(str(inv["total_net_value"]))
+                    if inv.get("total_net_value") is not None
+                    else None
+                ),
+                total_vat_amount=(
+                    Decimal(str(inv["total_vat_amount"]))
+                    if inv.get("total_vat_amount") is not None
+                    else None
+                ),
+                total_gross_value=(
+                    Decimal(str(inv["total_gross_value"]))
+                    if inv.get("total_gross_value") is not None
+                    else None
+                ),
                 normalized_data={},
-                created_at=_parse_dt(inv.get("created_at")) or datetime.now(timezone.utc),
+                created_at=_parse_dt(inv.get("created_at"))
+                or datetime.now(timezone.utc),
             )
         )
-    logger.info("Inserted %d AADE documents and %d invoices", len(doc_ids), len(invoices))
+    logger.info(
+        "Inserted %d AADE documents and %d invoices", len(doc_ids), len(invoices)
+    )
 
 
 def _demo_invoice_status(raw: str | None):
@@ -662,7 +727,9 @@ async def _insert_invoices(session: AsyncSession, org_id: str) -> None:
                 organization_id=org_id,
                 source=InvoiceSource(str(inv["source"])),
                 external_id=inv.get("external_id"),
-                counterparty_id=str(inv["counterparty_id"]) if inv.get("counterparty_id") else None,
+                counterparty_id=(
+                    str(inv["counterparty_id"]) if inv.get("counterparty_id") else None
+                ),
                 counterparty_display_name=inv.get("counterparty_display_name"),
                 amount=Decimal(str(inv["amount"])),
                 currency=str(inv.get("currency") or "EUR").upper(),
@@ -692,7 +759,12 @@ async def _insert_alerts(session: AsyncSession, org_id: str) -> None:
 
 
 async def _insert_gl(session: AsyncSession, org_id: str) -> None:
-    """Seed SaaS-style general ledger data (IFRS 15 wording, multi-entity, usage batches)."""
+    """Seed SaaS-style general ledger (IFRS 15 schedules, multi-entity, full demo CoA).
+
+    Chart codes follow the product SaaS reference (10xx–72xx). Journal and
+    ``InvoiceGlBridgeService`` use 1010 / 2300 / 4100 / 5100 / 2200 plus posting
+    targets **1211** (AR detail) and **2110** (AP accrual detail).
+    """
     from app.db.models._utils import utcnow
     from app.db.models.gl import (
         GlAccount,
@@ -822,44 +894,70 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
         )
     )
 
-    acc_cash = "00000000-0000-6000-8000-000000000030"
-    acc_ar = "00000000-0000-6000-8000-000000000031"
-    acc_ar_detail = "00000000-0000-6000-8000-000000000037"
-    acc_def = "00000000-0000-6000-8000-000000000032"
-    acc_rev = "00000000-0000-6000-8000-000000000033"
-    acc_cogs = "00000000-0000-6000-8000-000000000034"
-    acc_ap = "00000000-0000-6000-8000-000000000035"
-    acc_ap_accrual = "00000000-0000-6000-8000-000000000038"
-    acc_opex = "00000000-0000-6000-8000-000000000036"
-    # 1100/2100 remain **control** subledger accounts; 1110/2110 are non-control
-    # detail targets for ``InvoiceGlBridgeService`` (manual journals forbid control lines).
-    for aid, code, name, atype, nb, ctrl, sub in [
-        (acc_cash, "1000", "Cash and cash equivalents", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
-        (acc_ar, "1100", "Trade receivables (control)", GlAccountType.ASSET, GlNormalBalance.DEBIT, True, GlSubledgerKind.AR),
-        (
-            acc_ar_detail,
-            "1110",
-            "Trade receivables — invoiced (detail)",
-            GlAccountType.ASSET,
-            GlNormalBalance.DEBIT,
-            False,
-            GlSubledgerKind.NONE,
-        ),
-        (acc_def, "2000", "Deferred contract liability", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
-        (acc_ap, "2100", "Trade payables (control)", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, True, GlSubledgerKind.AP),
-        (
-            acc_ap_accrual,
-            "2110",
-            "Vendor invoices — accrued (detail)",
-            GlAccountType.LIABILITY,
-            GlNormalBalance.CREDIT,
-            False,
-            GlSubledgerKind.NONE,
-        ),
-        (acc_rev, "4000", "Subscription revenue", GlAccountType.REVENUE, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
-        (acc_cogs, "5000", "Cost of subscription services", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
-        (acc_opex, "6100", "General & administrative", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
-    ]:
+    def _demo_gl_account_id(idx: int) -> str:
+        """Stable UUIDs for demo CoA rows (high suffix range avoids journal/dimension ids)."""
+        return f"00000000-0000-6000-8000-{0xC00 + idx:012x}"
+
+    # SaaS-style chart (assets → liabilities → equity → revenue → COGS → OpEx).
+    # 2100/1200 = control subledgers; 2110/1211 = non-control targets for ``InvoiceGlBridgeService``.
+    demo_coa: list[
+        tuple[str, str, str, GlAccountType, GlNormalBalance, bool, GlSubledgerKind]
+    ] = [
+        (_demo_gl_account_id(0), "1010", "Cash — Operating", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(1), "1020", "Cash — Payroll", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(2), "1200", "Accounts receivable", GlAccountType.ASSET, GlNormalBalance.DEBIT, True, GlSubledgerKind.AR),
+        (_demo_gl_account_id(3), "1210", "Allowance for doubtful accounts", GlAccountType.ASSET, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(4), "1211", "Accounts receivable — invoiced (detail)", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(5), "1300", "Prepaid expenses", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(6), "1400", "Accrued revenue (unbilled AR)", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(7), "1500", "Property & equipment", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(8), "1510", "Accumulated depreciation", GlAccountType.ASSET, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(9), "1600", "Intangible assets", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(10), "1700", "Security deposits", GlAccountType.ASSET, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(11), "2100", "Accounts payable", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, True, GlSubledgerKind.AP),
+        (_demo_gl_account_id(12), "2110", "Vendor invoices — accrued (detail)", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(13), "2200", "Accrued liabilities", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(14), "2300", "Deferred revenue", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(15), "2400", "VAT / GST payable", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(16), "2500", "Payroll liabilities", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(17), "2600", "Credit card payable", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(18), "2700", "Long-term debt", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(19), "2800", "Deferred revenue — long-term", GlAccountType.LIABILITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(20), "3100", "Common stock", GlAccountType.EQUITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(21), "3200", "Additional paid-in capital", GlAccountType.EQUITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(22), "3300", "Retained earnings", GlAccountType.EQUITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(23), "3400", "Current year earnings", GlAccountType.EQUITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(24), "3500", "Other comprehensive income", GlAccountType.EQUITY, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(25), "4100", "SaaS subscription revenue", GlAccountType.REVENUE, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(26), "4200", "Usage-based revenue", GlAccountType.REVENUE, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(27), "4300", "Professional services revenue", GlAccountType.REVENUE, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(28), "4400", "One-time fee revenue", GlAccountType.REVENUE, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(29), "4500", "Other revenue", GlAccountType.REVENUE, GlNormalBalance.CREDIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(30), "5100", "Infrastructure / hosting", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(31), "5200", "Third-party API costs", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(32), "5300", "Customer support staff (COGS)", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(33), "5400", "Payment processing fees", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(34), "6100", "Salaries — engineering", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(35), "6200", "Salaries — sales & marketing", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(36), "6300", "Salaries — G&A", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(37), "6400", "Contractor / freelancer", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(38), "6500", "Software & subscriptions", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(39), "6600", "Marketing & advertising", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(40), "6700", "Travel & entertainment", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(41), "6800", "Legal & professional", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(42), "6900", "Rent & facilities", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(43), "7000", "Depreciation", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(44), "7100", "Bank fees", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+        (_demo_gl_account_id(45), "7200", "Interest expense", GlAccountType.EXPENSE, GlNormalBalance.DEBIT, False, GlSubledgerKind.NONE),
+    ]
+
+    acc_cash_operating = _demo_gl_account_id(0)
+    acc_deferred_revenue = _demo_gl_account_id(14)
+    acc_saas_revenue = _demo_gl_account_id(25)
+    acc_infra_hosting = _demo_gl_account_id(30)
+    acc_accrued_liabilities = _demo_gl_account_id(13)
+
+    for aid, code, name, atype, nb, ctrl, sub in demo_coa:
         session.add(
             GlAccount(
                 id=aid,
@@ -923,7 +1021,7 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             document_currency="EUR",
             base_currency="EUR",
             fx_rate_to_base=Decimal("1"),
-            memo="Cash invoicing — performance obligation satisfied over time (IFRS 15)",
+            memo="Cash receipt — deferred revenue (IFRS 15 contract balance)",
             reference="INV-GL-001",
             source_batch_id="batch-stripe-usage-001",
             entry_date=date(2026, 1, 14),
@@ -938,7 +1036,7 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             id=jl_p1,
             organization_id=org_id,
             journal_entry_id=je_posted,
-            account_id=acc_cash,
+            account_id=acc_cash_operating,
             description="Cash receipt from enterprise contract",
             debit=Decimal("12000.00"),
             credit=Decimal("0"),
@@ -950,8 +1048,8 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             id=jl_p2,
             organization_id=org_id,
             journal_entry_id=je_posted,
-            account_id=acc_def,
-            description="Deferred contract liability — unearned portion",
+            account_id=acc_deferred_revenue,
+            description="Deferred revenue — unearned portion",
             debit=Decimal("0"),
             credit=Decimal("12000.00"),
             line_order=1,
@@ -989,8 +1087,8 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             id=jl_d1,
             organization_id=org_id,
             journal_entry_id=je_draft,
-            account_id=acc_def,
-            description="Release deferred liability",
+            account_id=acc_deferred_revenue,
+            description="Release deferred revenue",
             debit=Decimal("5000.00"),
             credit=Decimal("0"),
             line_order=0,
@@ -1001,7 +1099,7 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             id=jl_d2,
             organization_id=org_id,
             journal_entry_id=je_draft,
-            account_id=acc_rev,
+            account_id=acc_saas_revenue,
             description="Revenue recognized in period",
             debit=Decimal("0"),
             credit=Decimal("5000.00"),
@@ -1027,8 +1125,8 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             id="00000000-0000-6000-8000-000000000071",
             organization_id=org_id,
             legal_entity_id=e2,
-            external_batch_id="batch-metronome-hourly-us",
-            source_system="metronome",
+            external_batch_id="batch-stripe-usage-002",
+            source_system="stripe_billing",
             event_count=9_102_334,
             total_amount=Decimal("48000.00"),
             currency="USD",
@@ -1120,7 +1218,7 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             id="00000000-0000-6000-8000-000000000091",
             organization_id=org_id,
             template_id=tmpl_id,
-            account_id=acc_cogs,
+            account_id=acc_infra_hosting,
             description="Hosting COGS accrual",
             debit=Decimal("2500.00"),
             credit=Decimal("0"),
@@ -1132,8 +1230,8 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             id="00000000-0000-6000-8000-000000000092",
             organization_id=org_id,
             template_id=tmpl_id,
-            account_id=acc_ap,
-            description="Accrued hosting payable",
+            account_id=acc_accrued_liabilities,
+            description="Accrued hosting (liability)",
             debit=Decimal("0"),
             credit=Decimal("2500.00"),
             line_order=1,
@@ -1164,7 +1262,9 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             created_at=utcnow(),
         )
     )
-    logger.info("Inserted general ledger demo (entities, CoA, journals, batches, IFRS 15 schedule)")
+    logger.info(
+        "Inserted general ledger demo (entities, SaaS CoA, journals, batches, IFRS 15 schedule)"
+    )
 
 
 async def _upsert_demo_user(session: AsyncSession, org_id: str) -> None:
@@ -1183,7 +1283,9 @@ async def _upsert_demo_user(session: AsyncSession, org_id: str) -> None:
     password = os.environ.get("DEMO_SEED_PASSWORD", _DEFAULT_DEMO_PASSWORD)
     pw_hash = hash_password(password, pepper=settings.CODE_PEPPER)
 
-    await session.execute(delete(UserSession).where(UserSession.user_id == DEMO_USER_ID))
+    await session.execute(
+        delete(UserSession).where(UserSession.user_id == DEMO_USER_ID)
+    )
 
     r = await session.execute(select(User).where(User.id == DEMO_USER_ID))
     user = r.scalar_one_or_none()
@@ -1196,7 +1298,9 @@ async def _upsert_demo_user(session: AsyncSession, org_id: str) -> None:
         user.email_verified = True
         user.is_active = True
     else:
-        taken = await session.execute(select(User.id).where(User.email == DEMO_USER_EMAIL))
+        taken = await session.execute(
+            select(User.id).where(User.email == DEMO_USER_EMAIL)
+        )
         other_id = taken.scalar_one_or_none()
         if other_id and str(other_id) != DEMO_USER_ID:
             raise RuntimeError(
