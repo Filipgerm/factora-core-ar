@@ -20,10 +20,21 @@ export interface RevenueWaterfallPoint {
   deferredClosing: number;
 }
 
+export interface WaterfallSeriesLabels {
+  primary: string;
+  closing: string;
+}
+
+const DEFAULT_LABELS: WaterfallSeriesLabels = {
+  primary: "Recognized",
+  closing: "Deferred (closing)",
+};
+
 interface RevenueWaterfallChartProps {
   data: RevenueWaterfallPoint[];
   currency: string;
   className?: string;
+  seriesLabels?: WaterfallSeriesLabels;
 }
 
 function formatAxisCurrency(value: number, currency: string): string {
@@ -72,6 +83,7 @@ export function RevenueWaterfallChart({
   data,
   currency,
   className,
+  seriesLabels = DEFAULT_LABELS,
 }: RevenueWaterfallChartProps) {
   const uid = useId().replace(/:/g, "");
   const areaGradientId = `waterfall-area-${uid}`;
@@ -165,7 +177,7 @@ export function RevenueWaterfallChart({
                       <div className="flex items-center gap-2">
                         <span className="block size-1.5 rounded-full bg-[#2f9a8a]" />
                         <span className="text-slate-600 dark:text-slate-300">
-                          Recognized
+                          {seriesLabels.primary}
                         </span>
                       </div>
                       <span className="font-semibold tabular-nums tracking-tight text-slate-900 dark:text-slate-50">
@@ -181,7 +193,7 @@ export function RevenueWaterfallChart({
                       <div className="flex items-center gap-2">
                         <span className="block size-1.5 rounded-full bg-slate-400/80" />
                         <span className="text-slate-600 dark:text-slate-300">
-                          Deferred (closing)
+                          {seriesLabels.closing}
                         </span>
                       </div>
                       <span className="tabular-nums tracking-tight text-slate-700 dark:text-slate-200">
