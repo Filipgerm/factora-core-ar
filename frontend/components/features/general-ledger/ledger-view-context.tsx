@@ -44,6 +44,7 @@ const NAV = [
   { href: "/general-ledger/periods", label: "Periods" },
   { href: "/general-ledger/billing-aggregations", label: "Billing aggregations" },
   { href: "/general-ledger/deferred-revenue", label: "Deferred revenue" },
+  { href: "/general-ledger/prepaid-schedule", label: "Prepaid schedule" },
   { href: "/general-ledger/recurring-templates", label: "Recurring entries" },
 ] as const;
 
