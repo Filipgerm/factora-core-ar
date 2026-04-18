@@ -12,7 +12,13 @@ type TechStackItem = {
   id: string;
   label: string;
   logo:
-    | { kind: "image"; src: string; alt: string }
+    | {
+        kind: "image";
+        src: string;
+        alt: string;
+        /** Wordmark logos get a wider tile so the glyph stays legible. */
+        shape?: "mark" | "wordmark";
+      }
     | { kind: "lucide"; className: string };
   tint: string;
 };
@@ -29,7 +35,7 @@ const ITEMS: ReadonlyArray<TechStackItem> = [
     label: "Hubspot",
     logo: {
       kind: "image",
-      src: "/images/integrations/hubspot.svg",
+      src: "/images/integrations/HubSpot_Logo.svg",
       alt: "Hubspot",
     },
     tint: "bg-orange-50/70 text-orange-700 ring-orange-200/70",
@@ -39,8 +45,9 @@ const ITEMS: ReadonlyArray<TechStackItem> = [
     label: "Stripe",
     logo: {
       kind: "image",
-      src: "/images/payment-providers/stripe.svg",
+      src: "/images/integrations/Stripe_Logo,_revised_2016.svg",
       alt: "Stripe",
+      shape: "wordmark",
     },
     tint: "bg-violet-50/70 text-violet-700 ring-violet-200/70",
   },
@@ -49,7 +56,7 @@ const ITEMS: ReadonlyArray<TechStackItem> = [
     label: "Snowflake",
     logo: {
       kind: "image",
-      src: "/images/integrations/snowflake.svg",
+      src: "/images/integrations/Snowflake_Logo.svg",
       alt: "Snowflake",
     },
     tint: "bg-sky-50/70 text-sky-700 ring-sky-200/70",
@@ -97,7 +104,10 @@ export function HomeTechStackSection({ className }: { className?: string }) {
             <div className="flex min-w-0 items-center gap-2.5">
               <div
                 className={cn(
-                  "flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md ring-1 ring-inset",
+                  "flex h-7 shrink-0 items-center justify-center overflow-hidden rounded-md px-1 ring-1 ring-inset",
+                  item.logo.kind === "image" && item.logo.shape === "wordmark"
+                    ? "w-10"
+                    : "w-7",
                   item.tint
                 )}
                 aria-hidden
@@ -108,9 +118,12 @@ export function HomeTechStackSection({ className }: { className?: string }) {
                   <Image
                     src={item.logo.src}
                     alt={item.logo.alt}
-                    width={16}
+                    width={item.logo.shape === "wordmark" ? 40 : 16}
                     height={16}
-                    className="size-4 object-contain"
+                    className={cn(
+                      "h-auto max-h-4 w-auto object-contain",
+                      item.logo.shape === "wordmark" ? "max-w-8" : "max-w-4"
+                    )}
                   />
                 )}
               </div>
