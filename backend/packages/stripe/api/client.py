@@ -63,6 +63,97 @@ class StripeClient:
             "name": getattr(cust, "name", name),
         }
 
+    def record_meter_event(
+        self,
+        *,
+        event_name: str,
+        payload: dict[str, Any],
+        identifier: str | None = None,
+        timestamp: int | None = None,
+    ) -> dict[str, Any]:
+        """Record a Stripe Billing meter event (usage ingestion).
+
+        Args:
+            event_name: The configured meter's ``event_name``.
+            payload: Customer + value payload (e.g. ``{"stripe_customer_id": ..., "value": 1}``).
+            identifier: Idempotency identifier; Stripe dedupes on this.
+            timestamp: Unix seconds; defaults to Stripe server time.
+        """
+        if not self.is_configured():
+            return {"identifier": identifier, "event_name": event_name, "stub": True}
+        meter_event_cls = getattr(getattr(stripe, "billing", None), "MeterEvent", None)
+        if meter_event_cls is None or not hasattr(meter_event_cls, "create"):
+            raise RuntimeError("stripe.billing.MeterEvent is unavailable in this SDK version")
+        params: dict[str, Any] = {"event_name": event_name, "payload": payload}
+        if identifier:
+            params["identifier"] = identifier
+        if timestamp is not None:
+            params["timestamp"] = timestamp
+        ev = meter_event_cls.create(**params)
+        return stripe_object_to_dict(ev)
+
+    def list_meter_event_summaries(
+        self,
+        *,
+        meter_id: str,
+        customer: str,
+        start_time: int,
+        end_time: int,
+        value_grouping_window: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """List aggregated meter event summaries for a single customer."""
+        if not self.is_configured():
+            return []
+        meter_cls = getattr(getattr(stripe, "billing", None), "Meter", None)
+        if meter_cls is None or not hasattr(meter_cls, "list_event_summaries"):
+            raise RuntimeError("stripe.billing.Meter is unavailable in this SDK version")
+        params: dict[str, Any] = {
+            "customer": customer,
+            "start_time": start_time,
+            "end_time": end_time,
+        }
+        if value_grouping_window:
+            params["value_grouping_window"] = value_grouping_window
+        res = meter_cls.list_event_summaries(meter_id, **params)
+        data = getattr(res, "data", []) or []
+        return [stripe_object_to_dict(r) for r in data]
+
+    def create_tax_calculation(
+        self,
+        *,
+        currency: str,
+        line_items: list[dict[str, Any]],
+        customer_details: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Call Stripe Tax API's Calculation endpoint."""
+        if not self.is_configured():
+            return {"id": "stub_txcalc", "currency": currency}
+        calc_cls = getattr(getattr(stripe, "tax", None), "Calculation", None)
+        if calc_cls is None or not hasattr(calc_cls, "create"):
+            raise RuntimeError("stripe.tax.Calculation is unavailable in this SDK version")
+        params: dict[str, Any] = {"currency": currency, "line_items": line_items}
+        if customer_details:
+            params["customer_details"] = customer_details
+        calc = calc_cls.create(**params)
+        return stripe_object_to_dict(calc)
+
+    def create_tax_transaction_from_calculation(
+        self,
+        *,
+        calculation: str,
+        reference: str,
+    ) -> dict[str, Any]:
+        """Persist a Tax Calculation into a Tax Transaction (post-commit)."""
+        if not self.is_configured():
+            return {"id": "stub_tx", "reference": reference}
+        tx_cls = getattr(getattr(stripe, "tax", None), "Transaction", None)
+        if tx_cls is None or not hasattr(tx_cls, "create_from_calculation"):
+            raise RuntimeError(
+                "stripe.tax.Transaction is unavailable in this SDK version"
+            )
+        tx = tx_cls.create_from_calculation(calculation=calculation, reference=reference)
+        return stripe_object_to_dict(tx)
+
     def create_payment_intent_stub(
         self,
         *,

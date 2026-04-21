@@ -10,7 +10,12 @@ from packages.stripe.models import (
     StripeBalanceTransactionResponse,
     StripeCustomerResponse,
     StripeInvoiceResponse,
+    StripeMeterEventAckResponse,
+    StripeMeterEventRequest,
+    StripeMeterEventSummaryQuery,
     StripeSyncStatsResponse,
+    StripeTaxCalculationRequest,
+    StripeTaxTransactionCommitRequest,
     StripeWebhookAckResponse,
 )
 
@@ -129,3 +134,98 @@ class StripeController:
 
     async def list_customers(self, limit: int = 100) -> list[StripeCustomerResponse]:
         return await self._sync.list_customers_mirror(limit=limit)
+
+    # --- Stripe-native integrations: Schedules, Meters, Tax, RevRec ---
+
+    async def sync_subscription_schedules(
+        self, *, page_size: int = 100, max_pages: int = 50
+    ) -> StripeSyncStatsResponse:
+        return await self._wrap_sync(
+            self._sync.sync_subscription_schedules(page_size=page_size, max_pages=max_pages),
+            err_detail="Stripe sync failed: {exc}",
+        )
+
+    async def sync_billing_meters(
+        self, *, page_size: int = 100, max_pages: int = 50
+    ) -> StripeSyncStatsResponse:
+        return await self._wrap_sync(
+            self._sync.sync_billing_meters(page_size=page_size, max_pages=max_pages),
+            err_detail="Stripe meter sync failed: {exc}",
+        )
+
+    async def record_meter_event(
+        self, req: StripeMeterEventRequest
+    ) -> StripeMeterEventAckResponse:
+        """Forward usage events to Stripe Billing Meters.
+
+        We intentionally do **not** persist these into our mirror — MeterEventSummary
+        (aggregated rollups) is the canonical source for revenue recognition.
+        """
+        try:
+            ev = self._stripe.record_meter_event(
+                event_name=req.event_name,
+                payload=req.payload,
+                identifier=req.identifier,
+                timestamp=req.timestamp,
+            )
+        except Exception as exc:
+            raise StripeError(
+                f"Failed to record Stripe meter event: {exc}",
+                code="external.stripe.meter_event",
+            ) from exc
+        return StripeMeterEventAckResponse(
+            identifier=ev.get("identifier") if isinstance(ev, dict) else None,
+            event_name=req.event_name,
+            stripe_event=ev if isinstance(ev, dict) else None,
+        )
+
+    async def fetch_meter_event_summaries(
+        self, req: StripeMeterEventSummaryQuery
+    ) -> StripeSyncStatsResponse:
+        """Pull per-customer meter summaries from Stripe into ``stripe_meter_event_summaries``."""
+        return await self._wrap_sync(
+            self._sync.sync_meter_event_summaries_for_customer(
+                stripe_client=self._stripe,
+                meter_stripe_id=req.meter_id,
+                customer_stripe_id=req.customer,
+                start_time=req.start_time,
+                end_time=req.end_time,
+                value_grouping_window=req.value_grouping_window,
+            ),
+            err_detail="Stripe meter summaries fetch failed: {exc}",
+        )
+
+    async def calculate_tax(
+        self, req: StripeTaxCalculationRequest
+    ) -> dict[str, Any]:
+        """Stripe Tax Calculation (read-only preview)."""
+        try:
+            calc = self._stripe.create_tax_calculation(
+                currency=req.currency,
+                line_items=req.line_items,
+                customer_details=req.customer_details,
+            )
+        except Exception as exc:
+            raise StripeError(
+                f"Stripe tax calculation failed: {exc}",
+                code="external.stripe.tax_calculation",
+            ) from exc
+        return calc
+
+    async def commit_tax_transaction(
+        self, req: StripeTaxTransactionCommitRequest
+    ) -> StripeSyncStatsResponse:
+        """Commit a prior Tax Calculation into a Transaction and mirror it locally."""
+        try:
+            tx = self._stripe.create_tax_transaction_from_calculation(
+                calculation=req.calculation, reference=req.reference
+            )
+        except Exception as exc:
+            raise StripeError(
+                f"Stripe tax transaction commit failed: {exc}",
+                code="external.stripe.tax_transaction",
+            ) from exc
+        return await self._wrap_sync(
+            self._sync.commit_tax_transaction_record(tx),
+            err_detail="Stripe tax transaction persist failed: {exc}",
+        )

@@ -1,7 +1,18 @@
 """Stripe mirror and webhook routes (version prefix applied in ``main``)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends, Query, Request
+
+from packages.stripe.models import (
+    StripeMeterEventAckResponse,
+    StripeMeterEventRequest,
+    StripeMeterEventSummaryQuery,
+    StripeSyncStatsResponse,
+    StripeTaxCalculationRequest,
+    StripeTaxTransactionCommitRequest,
+)
 
 from app.db.models.identity import UserRole
 from app.dependencies import (
@@ -252,3 +263,109 @@ async def list_customers(
     limit: int = Query(100, ge=1, le=500),
 ):
     return await controller.list_customers(limit=limit)
+
+
+# --- Subscription schedules (multi-phase contracts) -----------------------
+
+
+@router.post(
+    "/sync/subscription-schedules",
+    response_model=StripeSyncStatsResponse,
+    dependencies=[
+        Depends(require_auth),
+        Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    ],
+)
+async def sync_subscription_schedules(
+    controller: StripeCtrl,
+    page_size: int = Query(100, ge=1, le=100),
+    max_pages: int = Query(50, ge=1, le=200),
+):
+    return await controller.sync_subscription_schedules(
+        page_size=page_size, max_pages=max_pages
+    )
+
+
+# --- Stripe Billing Meters -------------------------------------------------
+
+
+@router.post(
+    "/sync/billing-meters",
+    response_model=StripeSyncStatsResponse,
+    dependencies=[
+        Depends(require_auth),
+        Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    ],
+)
+async def sync_billing_meters(
+    controller: StripeCtrl,
+    page_size: int = Query(100, ge=1, le=100),
+    max_pages: int = Query(50, ge=1, le=200),
+):
+    return await controller.sync_billing_meters(page_size=page_size, max_pages=max_pages)
+
+
+@router.post(
+    "/billing-meters/events",
+    response_model=StripeMeterEventAckResponse,
+    dependencies=[
+        Depends(require_auth),
+        Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    ],
+)
+async def record_meter_event(
+    controller: StripeCtrl,
+    req: StripeMeterEventRequest,
+):
+    """Forward a single usage event to Stripe's Billing Meters API."""
+    return await controller.record_meter_event(req)
+
+
+@router.post(
+    "/billing-meters/event-summaries/sync",
+    response_model=StripeSyncStatsResponse,
+    dependencies=[
+        Depends(require_auth),
+        Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    ],
+)
+async def sync_meter_event_summaries(
+    controller: StripeCtrl,
+    req: StripeMeterEventSummaryQuery,
+):
+    """Pull aggregated meter usage into our mirror for revrec."""
+    return await controller.fetch_meter_event_summaries(req)
+
+
+# --- Stripe Tax API --------------------------------------------------------
+
+
+@router.post(
+    "/tax/calculations",
+    dependencies=[
+        Depends(require_auth),
+        Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    ],
+)
+async def calculate_tax(
+    controller: StripeCtrl,
+    req: StripeTaxCalculationRequest,
+) -> dict[str, Any]:
+    """Stateless Stripe Tax preview (Calculation API)."""
+    return await controller.calculate_tax(req)
+
+
+@router.post(
+    "/tax/transactions",
+    response_model=StripeSyncStatsResponse,
+    dependencies=[
+        Depends(require_auth),
+        Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    ],
+)
+async def commit_tax_transaction(
+    controller: StripeCtrl,
+    req: StripeTaxTransactionCommitRequest,
+):
+    """Commit a prior Calculation into a Transaction + mirror locally."""
+    return await controller.commit_tax_transaction(req)

@@ -41,13 +41,19 @@ from app.db.models.stripe_billing import (
     StripeDispute,
     StripeInvoice,
     StripeInvoiceLineItem,
+    StripeMeter,
+    StripeMeterEventSummary,
     StripePaymentIntent,
     StripePayout,
     StripePrice,
     StripeProduct,
     StripeRefund,
+    StripeRevrecReport,
     StripeSubscription,
+    StripeSubscriptionItem,
+    StripeSubscriptionSchedule,
     StripeTaxRate,
+    StripeTaxTransaction,
 )
 from packages.stripe import mappers as M
 from packages.stripe.api.serialize import stripe_object_to_dict
@@ -222,8 +228,138 @@ class StripeSyncService:
         return await self._upsert(model=StripeCustomer, mapper=M.map_customer, obj=obj, deleted=deleted)
 
     async def apply_subscription(self, obj: Any, *, deleted: bool = False) -> bool:
+        d = M.as_dict(obj)
+        handled = await self._upsert(
+            model=StripeSubscription, mapper=M.map_subscription, obj=d, deleted=deleted
+        )
+        if handled and not deleted:
+            await self._upsert_subscription_items_from_subscription(d)
+        return handled
+
+    async def _upsert_subscription_items_from_subscription(
+        self, d: dict[str, Any]
+    ) -> None:
+        """Stripe embeds a subscription's items on the parent — upsert inline."""
+        org = self._resolve_org(d)
+        if not org:
+            return
+        sub_id = d.get("id")
+        if not isinstance(sub_id, str):
+            return
+        items_wrap = d.get("items") or {}
+        raw_items = items_wrap.get("data") if isinstance(items_wrap, dict) else []
+        if not isinstance(raw_items, list):
+            return
+        for item in raw_items:
+            item_d = M.as_dict(item)
+            sid = item_d.get("id")
+            if not isinstance(sid, str):
+                continue
+            row = await self._load_row(StripeSubscriptionItem, org, sid)
+            vals = M.map_subscription_item(item_d, subscription_stripe_id=sub_id)
+            if row:
+                for k, v in vals.items():
+                    setattr(row, k, v)
+                row.updated_at = utcnow()
+            else:
+                self._db.add(
+                    StripeSubscriptionItem(
+                        id=str(uuid.uuid4()),
+                        organization_id=org,
+                        stripe_id=sid,
+                        **vals,
+                    )
+                )
+
+    async def apply_subscription_item(self, obj: Any, *, deleted: bool = False) -> bool:
+        """Webhook path for ``customer.subscription_item.*`` events (rare — usually inline)."""
+        d = M.as_dict(obj)
+        sub_id = d.get("subscription") if isinstance(d.get("subscription"), str) else None
+        if not sub_id:
+            return False
         return await self._upsert(
-            model=StripeSubscription, mapper=M.map_subscription, obj=obj, deleted=deleted
+            model=StripeSubscriptionItem,
+            mapper=lambda x: M.map_subscription_item(x, subscription_stripe_id=sub_id),
+            obj=d,
+            deleted=deleted,
+        )
+
+    async def apply_subscription_schedule(self, obj: Any, *, deleted: bool = False) -> bool:
+        return await self._upsert(
+            model=StripeSubscriptionSchedule,
+            mapper=M.map_subscription_schedule,
+            obj=obj,
+            deleted=deleted,
+        )
+
+    async def apply_billing_meter(self, obj: Any, *, deleted: bool = False) -> bool:
+        return await self._upsert(
+            model=StripeMeter, mapper=M.map_billing_meter, obj=obj, deleted=deleted
+        )
+
+    async def apply_billing_meter_event_summary(
+        self, obj: Any, *, meter_stripe_id: str, customer_stripe_id: str
+    ) -> bool:
+        """MeterEventSummary is not uniquely ``stripe_id``-keyed — we use (meter, customer, window)."""
+        d = M.as_dict(obj)
+        org = self._organization_id
+        if not org:
+            return False
+        start = M.ts_from_epoch(d.get("start_time"))
+        r = await self._db.execute(
+            select(StripeMeterEventSummary).where(
+                StripeMeterEventSummary.organization_id == org,
+                StripeMeterEventSummary.meter_stripe_id == meter_stripe_id,
+                StripeMeterEventSummary.customer_stripe_id == customer_stripe_id,
+                StripeMeterEventSummary.start_time == start,
+            )
+        )
+        row = r.scalar_one_or_none()
+        vals = M.map_billing_meter_event_summary(
+            d, meter_stripe_id=meter_stripe_id, customer_stripe_id=customer_stripe_id
+        )
+        if row:
+            for k, v in vals.items():
+                setattr(row, k, v)
+        else:
+            self._db.add(
+                StripeMeterEventSummary(
+                    id=str(uuid.uuid4()),
+                    organization_id=org,
+                    **vals,
+                )
+            )
+        return True
+
+    async def apply_tax_transaction(self, obj: Any, *, deleted: bool = False) -> bool:
+        return await self._upsert(
+            model=StripeTaxTransaction,
+            mapper=M.map_tax_transaction,
+            obj=obj,
+            deleted=deleted,
+        )
+
+    async def apply_revrec_report(self, obj: Any, *, deleted: bool = False) -> bool:
+        """Stripe native Revenue Recognition — mirrored so our scheduler can reconcile."""
+        d = M.as_dict(obj)
+        vals = {
+            "report_type": d.get("report_type"),
+            "status": d.get("status"),
+            "interval_start": M.ts_from_epoch(d.get("interval_start")),
+            "interval_end": M.ts_from_epoch(d.get("interval_end")),
+            "result_url": d.get("result"),
+            "parameters": d.get("parameters") if isinstance(d.get("parameters"), dict) else None,
+            "summary": d.get("summary") if isinstance(d.get("summary"), dict) else None,
+            "stripe_created": M.ts_from_epoch(d.get("created")),
+            "succeeded_at": M.ts_from_epoch(d.get("succeeded_at")),
+            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
+            "raw_stripe_object": d,
+        }
+        return await self._upsert(
+            model=StripeRevrecReport,
+            mapper=lambda _: vals,
+            obj=d,
+            deleted=deleted,
         )
 
     async def _upsert_invoice_lines(
@@ -447,6 +583,79 @@ class StripeSyncService:
         return await self._pull_page(
             stripe.TaxRate.list,
             apply=self.apply_tax_rate,
+            page_size=page_size,
+            max_pages=max_pages,
+        )
+
+    async def sync_subscription_schedules(
+        self, *, page_size: int = 100, max_pages: int = 50
+    ) -> StripeSyncStatsResponse:
+        return await self._pull_page(
+            stripe.SubscriptionSchedule.list,
+            apply=self.apply_subscription_schedule,
+            page_size=page_size,
+            max_pages=max_pages,
+        )
+
+    async def sync_meter_event_summaries_for_customer(
+        self,
+        *,
+        stripe_client: Any,
+        meter_stripe_id: str,
+        customer_stripe_id: str,
+        start_time: int,
+        end_time: int,
+        value_grouping_window: str | None = None,
+    ) -> StripeSyncStatsResponse:
+        """Fetch meter summaries for one customer via the provided client and upsert."""
+        self._require_org_for_pull()
+        summaries = await asyncio.to_thread(
+            stripe_client.list_meter_event_summaries,
+            meter_id=meter_stripe_id,
+            customer=customer_stripe_id,
+            start_time=start_time,
+            end_time=end_time,
+            value_grouping_window=value_grouping_window,
+        )
+        stats = StripeSyncStatsResponse(fetched=len(summaries))
+        for raw in summaries:
+            ok = await self.apply_billing_meter_event_summary(
+                raw,
+                meter_stripe_id=meter_stripe_id,
+                customer_stripe_id=customer_stripe_id,
+            )
+            if ok:
+                stats.upserted += 1
+            else:
+                stats.skipped_no_org_metadata += 1
+        await self._db.commit()
+        return stats
+
+    async def commit_tax_transaction_record(self, tx: dict[str, Any]) -> StripeSyncStatsResponse:
+        """Persist a single Tax Transaction returned from Stripe and commit."""
+        self._require_org_for_pull()
+        stats = StripeSyncStatsResponse(fetched=1)
+        ok = await self.apply_tax_transaction(tx)
+        if ok:
+            stats.upserted = 1
+            await self._db.commit()
+        else:
+            stats.skipped_no_org_metadata = 1
+        return stats
+
+    async def sync_billing_meters(
+        self, *, page_size: int = 100, max_pages: int = 50
+    ) -> StripeSyncStatsResponse:
+        """Stripe Billing Meters (``stripe.billing.Meter.list``)."""
+        meter_list = getattr(getattr(stripe, "billing", None), "Meter", None)
+        if meter_list is None or not hasattr(meter_list, "list"):
+            raise StripeError(
+                "Stripe Billing Meters API not available in this SDK version",
+                code="external.stripe.meters_unavailable",
+            )
+        return await self._pull_page(
+            meter_list.list,
+            apply=self.apply_billing_meter,
             page_size=page_size,
             max_pages=max_pages,
         )

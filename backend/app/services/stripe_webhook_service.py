@@ -65,7 +65,11 @@ class StripeWebhookService:
         sync = StripeSyncService(self._db, organization_id=None, app_settings=self._settings)
         handled = False
 
-        if etype.startswith("customer.subscription"):
+        if etype.startswith("customer.subscription_item"):
+            handled = await sync.apply_subscription_item(
+                obj_d, deleted=etype.endswith(".deleted")
+            )
+        elif etype.startswith("customer.subscription"):
             deleted = etype.endswith(".deleted")
             handled = await sync.apply_subscription(obj_d, deleted=deleted)
         elif etype.startswith("customer."):
@@ -95,6 +99,20 @@ class StripeWebhookService:
             handled = await sync.apply_tax_rate(obj_d, deleted=etype.endswith(".deleted"))
         elif etype.startswith("balance_transaction."):
             handled = await sync.apply_balance_transaction(obj_d)
+        elif etype.startswith("subscription_schedule."):
+            handled = await sync.apply_subscription_schedule(
+                obj_d, deleted=etype.endswith(".canceled") or etype.endswith(".released")
+            )
+        elif etype.startswith("billing.meter."):
+            handled = await sync.apply_billing_meter(
+                obj_d, deleted=etype.endswith(".deactivated")
+            )
+        elif etype.startswith("tax.transaction."):
+            handled = await sync.apply_tax_transaction(obj_d, deleted=False)
+        elif etype.startswith("revenue_recognition.") or etype.startswith(
+            "revenue_recognition_report."
+        ):
+            handled = await sync.apply_revrec_report(obj_d, deleted=False)
 
         await self._db.commit()
         return StripeWebhookAckResponse(received=True, event_type=etype or None, handled=handled)

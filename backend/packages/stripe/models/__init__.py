@@ -47,5 +47,10 @@ __all__ = [  # noqa: RUF022
     "StripeTaxRateCreate",
     "StripeTaxRateResponse",
     "StripeTaxRateUpdate",
+    "StripeMeterEventRequest",
+    "StripeMeterEventAckResponse",
+    "StripeMeterEventSummaryQuery",
+    "StripeTaxCalculationRequest",
+    "StripeTaxTransactionCommitRequest",
     "StripeWebhookAckResponse",
 ]
