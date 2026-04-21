@@ -166,4 +166,11 @@ class Invoice(Base):
             "status",
             postgresql_where=text("status = 'pending_review' AND deleted_at IS NULL"),
         ),
+        Index(
+            "ix_invoices_org_source_status",
+            "organization_id",
+            "source",
+            "status",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
