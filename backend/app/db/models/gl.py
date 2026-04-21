@@ -479,6 +479,18 @@ class GlRevenueRecognitionSchedule(Base):
         nullable=False,
         index=True,
     )
+    contract_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("contracts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    performance_obligation_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("performance_obligations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     contract_name: Mapped[str] = mapped_column(String(255), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
     total_contract_value: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
@@ -500,6 +512,19 @@ class GlRevenueRecognitionSchedule(Base):
         "GlRevenueRecognitionScheduleLine",
         back_populates="schedule",
         cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_gl_rev_sched_org_contract",
+            "organization_id",
+            "contract_id",
+        ),
+        Index(
+            "ix_gl_rev_sched_org_po",
+            "organization_id",
+            "performance_obligation_id",
+        ),
     )
 
 
