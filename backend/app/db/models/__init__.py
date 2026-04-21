@@ -19,6 +19,19 @@ from app.db.models.banking import (
     TransactionStatus,
 )
 from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
+from app.db.models.contracts import (
+    AllocationMethod,
+    Contract,
+    ContractAllocation,
+    ContractAllocationSource,
+    ContractDocument,
+    ContractModification,
+    ContractModificationType,
+    ContractSource,
+    ContractStatus,
+    PerformanceObligation,
+    PerformanceObligationKind,
+)
 
 __all__ = [
     # identity
@@ -45,4 +58,16 @@ __all__ = [
     "AadeDocumentModel",
     "AadeInvoiceModel",
     "InvoiceDirection",
+    # contracts
+    "AllocationMethod",
+    "Contract",
+    "ContractAllocation",
+    "ContractAllocationSource",
+    "ContractDocument",
+    "ContractModification",
+    "ContractModificationType",
+    "ContractSource",
+    "ContractStatus",
+    "PerformanceObligation",
+    "PerformanceObligationKind",
 ]
