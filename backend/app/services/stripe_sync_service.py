@@ -362,6 +362,29 @@ class StripeSyncService:
             deleted=deleted,
         )
 
+    async def _ensure_stub_parent(
+        self,
+        *,
+        model: type,
+        org: str,
+        stripe_id: str | None,
+        defaults: dict[str, Any],
+    ) -> None:
+        """Insert a minimal parent row if absent — used to satisfy FKs on out-of-order events."""
+        if not stripe_id:
+            return
+        existing = await self._load_row(model, org, stripe_id)
+        if existing is not None:
+            return
+        self._db.add(
+            model(
+                id=str(uuid.uuid4()),
+                organization_id=org,
+                stripe_id=stripe_id,
+                **defaults,
+            )
+        )
+
     async def _upsert_invoice_lines(
         self, org: str, invoice_stripe_id: str, d: dict[str, Any]
     ) -> None:
@@ -372,8 +395,42 @@ class StripeSyncService:
             lid = ld.get("id")
             if not isinstance(lid, str):
                 continue
-            row = await self._load_row(StripeInvoiceLineItem, org, lid)
             vals = M.map_invoice_line_item(ld, invoice_stripe_id=invoice_stripe_id)
+            # Stub parents so FKs hold even if the price/product/sub item
+            # webhook arrives after this invoice event.
+            await self._ensure_stub_parent(
+                model=StripeProduct,
+                org=org,
+                stripe_id=vals.get("product_stripe_id"),
+                defaults={"raw_stripe_object": None},
+            )
+            await self._ensure_stub_parent(
+                model=StripePrice,
+                org=org,
+                stripe_id=vals.get("price_stripe_id"),
+                defaults={
+                    "product_stripe_id": vals.get("product_stripe_id"),
+                    "currency": ld.get("currency"),
+                    "unit_amount": ld.get("unit_amount"),
+                    "raw_stripe_object": None,
+                },
+            )
+            sub_item_sid = vals.get("subscription_item_stripe_id")
+            if sub_item_sid:
+                sub_raw = ld.get("subscription")
+                sub_sid = sub_raw if isinstance(sub_raw, str) else M.source_id(sub_raw)
+                await self._ensure_stub_parent(
+                    model=StripeSubscriptionItem,
+                    org=org,
+                    stripe_id=sub_item_sid,
+                    defaults={
+                        "subscription_stripe_id": sub_sid or "",
+                        "price_stripe_id": vals.get("price_stripe_id"),
+                        "product_stripe_id": vals.get("product_stripe_id"),
+                        "raw_stripe_object": None,
+                    },
+                )
+            row = await self._load_row(StripeInvoiceLineItem, org, lid)
             if row:
                 for k, v in vals.items():
                     setattr(row, k, v)

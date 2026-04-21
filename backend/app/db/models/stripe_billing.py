@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -214,7 +215,13 @@ class StripeInvoice(_StripeOrgScoped):
 
 
 class StripeInvoiceLineItem(_StripeOrgScoped):
-    """Line item on a Stripe Invoice."""
+    """Line item on a Stripe Invoice.
+
+    Composite FKs on ``(organization_id, price_stripe_id)`` →
+    ``stripe_prices(organization_id, stripe_id)`` etc. protect reconciliation
+    joins without depending on Stripe's event ordering — the sync service
+    pre-upserts stub Price/Product/SubscriptionItem rows from the line payload.
+    """
 
     __tablename__ = "stripe_invoice_line_items"
 
@@ -225,6 +232,9 @@ class StripeInvoiceLineItem(_StripeOrgScoped):
     quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     price_stripe_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     product_stripe_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    subscription_item_stripe_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
     unit_amount: Mapped[int | None] = mapped_column(Integer, nullable=True)
     discountable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     stripe_type: Mapped[str | None] = mapped_column("line_type", String(32), nullable=True)
@@ -236,7 +246,36 @@ class StripeInvoiceLineItem(_StripeOrgScoped):
             "stripe_id",
             name="uq_stripe_inv_line_org_stripe_id",
         ),
+        ForeignKeyConstraint(
+            ["organization_id", "price_stripe_id"],
+            ["stripe_prices.organization_id", "stripe_prices.stripe_id"],
+            name="fk_stripe_inv_line_price",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "product_stripe_id"],
+            ["stripe_products.organization_id", "stripe_products.stripe_id"],
+            name="fk_stripe_inv_line_product",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "subscription_item_stripe_id"],
+            ["stripe_subscription_items.organization_id", "stripe_subscription_items.stripe_id"],
+            name="fk_stripe_inv_line_sub_item",
+            ondelete="SET NULL",
+        ),
         Index("ix_stripe_inv_line_org_invoice", "organization_id", "invoice_stripe_id"),
+        Index(
+            "ix_stripe_inv_line_org_price", "organization_id", "price_stripe_id"
+        ),
+        Index(
+            "ix_stripe_inv_line_org_product", "organization_id", "product_stripe_id"
+        ),
+        Index(
+            "ix_stripe_inv_line_org_sub_item",
+            "organization_id",
+            "subscription_item_stripe_id",
+        ),
     )
 
 
