@@ -7,19 +7,24 @@ raises ``StripeError`` when API keys are missing. Commits on pull/sync endpoints
 
 **Flow:**
 1. Resolve ``organization_id`` (JWT for pull; metadata for webhooks; charge/PI for balance txs).
-2. Upsert by ``(organization_id, stripe_id)`` or insert balance snapshot rows.
-3. ``await commit()`` for transactional persistence.
+2. Delegate payload shaping to ``packages.stripe.mappers`` (pure, DB-free).
+3. Upsert by ``(organization_id, stripe_id)`` or insert balance snapshot rows.
+4. ``await commit()`` for transactional persistence on pull paths.
 
-**Architectural notes:** Stripe SDK calls use ``asyncio.to_thread`` to avoid blocking the loop.
+**Architectural notes:**
+    * Per-resource mappers live in ``packages/stripe/mappers/`` — this service owns
+      only org resolution, loading, upserting, and pagination.
+    * Stripe SDK calls use ``asyncio.to_thread`` to avoid blocking the loop.
+    * The webhook dispatcher should *not* call ``_org_from_charge_id`` — the
+      fallback Stripe HTTP retrieve is moved to a Celery task to keep the
+      webhook hot-path O(1) DB.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 
 import stripe
 from sqlalchemy import select
@@ -36,14 +41,21 @@ from app.db.models.stripe_billing import (
     StripeDispute,
     StripeInvoice,
     StripeInvoiceLineItem,
+    StripeMeter,
+    StripeMeterEventSummary,
     StripePaymentIntent,
     StripePayout,
     StripePrice,
     StripeProduct,
     StripeRefund,
+    StripeRevrecReport,
     StripeSubscription,
+    StripeSubscriptionItem,
+    StripeSubscriptionSchedule,
     StripeTaxRate,
+    StripeTaxTransaction,
 )
+from packages.stripe import mappers as M
 from packages.stripe.api.serialize import stripe_object_to_dict
 from packages.stripe.models import (
     StripeBalanceSnapshotResponse,
@@ -55,36 +67,6 @@ from packages.stripe.models import (
 
 logger = logging.getLogger(__name__)
 
-ORG_META = "organization_id"
-
-
-def _ts(sec: int | float | None) -> datetime | None:
-    if sec is None:
-        return None
-    return datetime.fromtimestamp(int(sec), tz=timezone.utc)
-
-
-def metadata_org(obj: dict[str, Any]) -> str | None:
-    md = obj.get("metadata")
-    if not isinstance(md, dict):
-        return None
-    v = md.get(ORG_META)
-    if isinstance(v, str) and v.strip():
-        return v.strip()
-    return None
-
-
-def _as_dict(obj: Any) -> dict[str, Any]:
-    return obj if isinstance(obj, dict) else stripe_object_to_dict(obj)
-
-
-def _source_id(src: Any) -> str | None:
-    if isinstance(src, dict):
-        return src.get("id") if isinstance(src.get("id"), str) else None
-    if isinstance(src, str):
-        return src
-    return None
-
 
 class StripeSyncService:
     def __init__(
@@ -92,10 +74,22 @@ class StripeSyncService:
         db: AsyncSession,
         organization_id: str | None,
         app_settings: Settings | None = None,
+        *,
+        allow_blocking_stripe_calls: bool = True,
     ) -> None:
+        """Build a sync service.
+
+        ``allow_blocking_stripe_calls`` controls whether org-resolution
+        fallbacks are permitted to issue live Stripe HTTP requests
+        (``Charge.retrieve`` / ``BalanceTransaction.retrieve``). Webhook
+        dispatchers instantiate this service with ``False`` so the ack
+        latency stays O(1) DB — the fallback is re-attempted by a
+        Celery task off the hot-path.
+        """
         self._db = db
         self._organization_id = organization_id
         self._settings = app_settings or settings
+        self._allow_blocking_stripe_calls = allow_blocking_stripe_calls
 
     def _require_org_for_pull(self) -> str:
         if not self._organization_id:
@@ -109,20 +103,33 @@ class StripeSyncService:
         if not self._settings.STRIPE_SECRET_KEY:
             raise StripeError("Stripe is not configured", code="external.stripe.unconfigured")
 
+    # --- Org resolution --------------------------------------------------
+
     def _resolve_org(self, obj: dict[str, Any]) -> str | None:
-        mo = metadata_org(obj)
+        mo = M.metadata_org(obj)
         if self._organization_id:
-            if mo == self._organization_id:
-                return self._organization_id
-            return None
+            return self._organization_id if mo == self._organization_id else None
         return mo
 
     async def _resolve_org_balance_tx(self, obj: dict[str, Any]) -> str | None:
-        mo = metadata_org(obj)
+        """Resolve org for a balance-transaction row.
+
+        Order:
+            1. ``metadata.organization_id`` on the row (fast, DB-free).
+            2. (**Only when ``allow_blocking_stripe_calls`` is True**) issue
+               a live ``Charge.retrieve`` to read the source metadata.
+
+        On the webhook hot-path the second step is **disabled**; the caller
+        is expected to enqueue a Celery task that retries this resolution
+        asynchronously (see ``app.workers.tasks.stripe``).
+        """
+        mo = M.metadata_org(obj)
         if self._organization_id:
             if mo == self._organization_id:
                 return self._organization_id
-            src = _source_id(obj.get("source"))
+            if not self._allow_blocking_stripe_calls:
+                return None
+            src = M.source_id(obj.get("source"))
             if src and src.startswith("ch_"):
                 org = await self._org_from_charge_id(src)
                 if org == self._organization_id:
@@ -130,12 +137,28 @@ class StripeSyncService:
             return None
         if mo:
             return mo
-        src = _source_id(obj.get("source"))
+        if not self._allow_blocking_stripe_calls:
+            return None
+        src = M.source_id(obj.get("source"))
         if src and src.startswith("ch_"):
             return await self._org_from_charge_id(src)
         return None
 
     async def _org_from_charge_id(self, charge_id: str) -> str | None:
+        """Slow fallback: retrieve charge + PI to read metadata.organization_id.
+
+        **IMPORTANT:** never invoke this on the webhook hot-path — it blocks
+        the ack. The webhook dispatcher constructs this service with
+        ``allow_blocking_stripe_calls=False`` so accidental invocations are
+        short-circuited; the Celery task in ``app.workers.tasks.stripe``
+        re-runs this resolution off the hot-path.
+        """
+        if not self._allow_blocking_stripe_calls:
+            logger.debug(
+                "_org_from_charge_id short-circuited (blocking disabled) for %s",
+                charge_id,
+            )
+            return None
         try:
             ch = await asyncio.to_thread(
                 lambda: stripe.Charge.retrieve(charge_id, expand=["payment_intent"]),
@@ -144,12 +167,12 @@ class StripeSyncService:
             logger.debug("stripe charge retrieve failed: %s", exc)
             return None
         d = stripe_object_to_dict(ch)
-        o = metadata_org(d)
+        o = M.metadata_org(d)
         if o:
             return o
         pi = d.get("payment_intent")
         if isinstance(pi, dict):
-            return metadata_org(pi)
+            return M.metadata_org(pi)
         return None
 
     async def _load_row(self, model: type, org: str, sid: str) -> Any:
@@ -158,10 +181,59 @@ class StripeSyncService:
         )
         return r.scalar_one_or_none()
 
-    # --- Upsert helpers -------------------------------------------------
+    # --- Generic upsert pipeline ----------------------------------------
+
+    async def _upsert(
+        self,
+        *,
+        model: type,
+        mapper: Callable[[dict[str, Any]], dict[str, Any]],
+        obj: Any,
+        deleted: bool,
+        org_resolver: Callable[[dict[str, Any]], Any] | None = None,
+    ) -> bool:
+        """Upsert a Stripe object via a pure mapper.
+
+        ``org_resolver`` defaults to ``_resolve_org``; async variants (balance
+        transaction) pass their own coroutine.
+        """
+        d = M.as_dict(obj)
+        resolver = org_resolver or self._resolve_org
+        org = resolver(d)
+        if asyncio.iscoroutine(org):
+            org = await org
+        if not org:
+            return False
+        sid = d.get("id")
+        if not isinstance(sid, str):
+            return False
+        row = await self._load_row(model, org, sid)
+        if deleted:
+            if row:
+                row.deleted_at = utcnow()
+                row.updated_at = utcnow()
+            return True
+        vals = mapper(d)
+        if row:
+            for k, v in vals.items():
+                setattr(row, k, v)
+            row.deleted_at = None
+            row.updated_at = utcnow()
+        else:
+            self._db.add(
+                model(
+                    id=str(uuid.uuid4()),
+                    organization_id=org,
+                    stripe_id=sid,
+                    **vals,
+                )
+            )
+        return True
+
+    # --- Individual resources -------------------------------------------
 
     async def apply_balance_transaction(self, obj: Any) -> bool:
-        d = _as_dict(obj)
+        d = M.as_dict(obj)
         org = await self._resolve_org_balance_tx(d)
         if not org:
             return False
@@ -169,22 +241,7 @@ class StripeSyncService:
         if not isinstance(sid, str):
             return False
         row = await self._load_row(StripeBalanceTransaction, org, sid)
-        vals = {
-            "amount": int(d.get("amount", 0)),
-            "currency": str(d.get("currency") or "eur").lower()[:3],
-            "description": d.get("description"),
-            "fee": int(d.get("fee") or 0),
-            "net": int(d.get("net", 0)),
-            "status": d.get("status"),
-            "type": d.get("type"),
-            "reporting_category": d.get("reporting_category"),
-            "source": _source_id(d.get("source")),
-            "stripe_created": _ts(d.get("created")),
-            "available_on": _ts(d.get("available_on")),
-            "exchange_rate": d.get("exchange_rate"),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
+        vals = M.map_balance_transaction(d)
         if row:
             for k, v in vals.items():
                 setattr(row, k, v)
@@ -201,176 +258,276 @@ class StripeSyncService:
         return True
 
     async def apply_payout(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
-        org = self._resolve_org(d)
-        if not org:
-            return False
-        sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
-        row = await self._load_row(StripePayout, org, sid)
-        if deleted:
-            if row:
-                row.deleted_at = utcnow()
-                row.updated_at = utcnow()
-            return True
-        vals = {
-            "amount": int(d.get("amount", 0)),
-            "currency": str(d.get("currency") or "eur").lower()[:3],
-            "status": d.get("status"),
-            "arrival_date": _ts(d.get("arrival_date")),
-            "automatic": d.get("automatic"),
-            "balance_transaction_id": _source_id(d.get("balance_transaction")),
-            "destination": d.get("destination") if isinstance(d.get("destination"), str) else None,
-            "failure_code": d.get("failure_code"),
-            "failure_message": d.get("failure_message"),
-            "method": d.get("method"),
-            "stripe_type": d.get("type"),
-            "statement_descriptor": d.get("statement_descriptor"),
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
-        if row:
-            for k, v in vals.items():
-                setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
-        else:
-            self._db.add(
-                StripePayout(
-                    id=str(uuid.uuid4()),
-                    organization_id=org,
-                    stripe_id=sid,
-                    **vals,
-                )
-            )
-        return True
+        return await self._upsert(model=StripePayout, mapper=M.map_payout, obj=obj, deleted=deleted)
 
     async def apply_customer(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
+        handled = await self._upsert(
+            model=StripeCustomer, mapper=M.map_customer, obj=obj, deleted=deleted
+        )
+        if handled and not deleted:
+            await self._link_customer_to_counterparty(obj)
+        return handled
+
+    async def _link_customer_to_counterparty(self, obj: Any) -> None:
+        """Opportunistically resolve (or bootstrap) the Counterparty.
+
+        Delegates to :class:`CustomerBootstrapperService` which first runs
+        :class:`StripeCustomerCounterpartyMatcher` and — on no-match —
+        decides whether to auto-create a ``Counterparty`` from the Stripe
+        customer fields. Imported locally to avoid a service-layer
+        import cycle.
+        """
+        from app.services.customer_bootstrapper_service import (
+            CustomerBootstrapperService,
+        )
+
+        d = M.as_dict(obj)
         org = self._resolve_org(d)
-        if not org:
-            return False
         sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
+        if not org or not isinstance(sid, str):
+            return
         row = await self._load_row(StripeCustomer, org, sid)
-        if deleted:
-            if row:
-                row.deleted_at = utcnow()
-                row.updated_at = utcnow()
-            return True
-        addr = d.get("address")
-        vals = {
-            "email": d.get("email"),
-            "name": d.get("name"),
-            "phone": d.get("phone"),
-            "description": d.get("description"),
-            "balance": d.get("balance"),
-            "currency": d.get("currency"),
-            "delinquent": d.get("delinquent"),
-            "invoice_prefix": d.get("invoice_prefix"),
-            "tax_exempt": d.get("tax_exempt"),
-            "default_source": _source_id(d.get("default_source")),
-            "address": addr if isinstance(addr, dict) else None,
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
-        if row:
-            for k, v in vals.items():
-                setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
-        else:
-            self._db.add(
-                StripeCustomer(
-                    id=str(uuid.uuid4()),
-                    organization_id=org,
-                    stripe_id=sid,
-                    **vals,
-                )
-            )
-        return True
+        if row is None:
+            return
+        bootstrapper = CustomerBootstrapperService(self._db)
+        await bootstrapper.from_stripe_customer(row)
 
     async def apply_subscription(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
+        d = M.as_dict(obj)
+        handled = await self._upsert(
+            model=StripeSubscription, mapper=M.map_subscription, obj=d, deleted=deleted
+        )
+        if handled and not deleted:
+            await self._upsert_subscription_items_from_subscription(d)
+            await self._bootstrap_contract_from_subscription(d)
+        return handled
+
+    async def _bootstrap_contract_from_subscription(
+        self, d: dict[str, Any]
+    ) -> None:
+        """Turn a live Stripe Subscription into a Contract + POs.
+
+        Uses the mirror tables we just upserted — no Stripe HTTP calls —
+        so safe on the webhook hot-path. Errors are logged and swallowed
+        because a failure to bootstrap the contract must never prevent
+        the billing mirror from acking the webhook.
+        """
+        from app.services.contract_bootstrapper_service import (
+            ContractBootstrapperService,
+        )
+
+        org = self._resolve_org(d)
+        sid = d.get("id")
+        if not org or not isinstance(sid, str):
+            return
+        try:
+            bootstrapper = ContractBootstrapperService(self._db)
+            await bootstrapper.from_stripe_subscription(
+                organization_id=org, stripe_subscription_id=sid
+            )
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning(
+                "ContractBootstrapper failed for org=%s sub=%s: %s",
+                org,
+                sid,
+                exc,
+            )
+
+    async def _upsert_subscription_items_from_subscription(
+        self, d: dict[str, Any]
+    ) -> None:
+        """Stripe embeds a subscription's items on the parent — upsert inline."""
         org = self._resolve_org(d)
         if not org:
-            return False
-        sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
-        row = await self._load_row(StripeSubscription, org, sid)
-        if deleted:
+            return
+        sub_id = d.get("id")
+        if not isinstance(sub_id, str):
+            return
+        items_wrap = d.get("items") or {}
+        raw_items = items_wrap.get("data") if isinstance(items_wrap, dict) else []
+        if not isinstance(raw_items, list):
+            return
+        for item in raw_items:
+            item_d = M.as_dict(item)
+            sid = item_d.get("id")
+            if not isinstance(sid, str):
+                continue
+            row = await self._load_row(StripeSubscriptionItem, org, sid)
+            vals = M.map_subscription_item(item_d, subscription_stripe_id=sub_id)
             if row:
-                row.deleted_at = utcnow()
+                for k, v in vals.items():
+                    setattr(row, k, v)
                 row.updated_at = utcnow()
-            return True
-        items = d.get("items")
-        items_data = items if isinstance(items, (dict, list)) else None
-        vals = {
-            "customer_stripe_id": d.get("customer") if isinstance(d.get("customer"), str) else None,
-            "status": d.get("status"),
-            "current_period_start": _ts(d.get("current_period_start")),
-            "current_period_end": _ts(d.get("current_period_end")),
-            "cancel_at_period_end": d.get("cancel_at_period_end"),
-            "canceled_at": _ts(d.get("canceled_at")),
-            "collection_method": d.get("collection_method"),
-            "default_payment_method": _source_id(d.get("default_payment_method")),
-            "items_data": items_data,
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
+            else:
+                self._db.add(
+                    StripeSubscriptionItem(
+                        id=str(uuid.uuid4()),
+                        organization_id=org,
+                        stripe_id=sid,
+                        **vals,
+                    )
+                )
+
+    async def apply_subscription_item(self, obj: Any, *, deleted: bool = False) -> bool:
+        """Webhook path for ``customer.subscription_item.*`` events (rare — usually inline)."""
+        d = M.as_dict(obj)
+        sub_id = d.get("subscription") if isinstance(d.get("subscription"), str) else None
+        if not sub_id:
+            return False
+        return await self._upsert(
+            model=StripeSubscriptionItem,
+            mapper=lambda x: M.map_subscription_item(x, subscription_stripe_id=sub_id),
+            obj=d,
+            deleted=deleted,
+        )
+
+    async def apply_subscription_schedule(self, obj: Any, *, deleted: bool = False) -> bool:
+        return await self._upsert(
+            model=StripeSubscriptionSchedule,
+            mapper=M.map_subscription_schedule,
+            obj=obj,
+            deleted=deleted,
+        )
+
+    async def apply_billing_meter(self, obj: Any, *, deleted: bool = False) -> bool:
+        return await self._upsert(
+            model=StripeMeter, mapper=M.map_billing_meter, obj=obj, deleted=deleted
+        )
+
+    async def apply_billing_meter_event_summary(
+        self, obj: Any, *, meter_stripe_id: str, customer_stripe_id: str
+    ) -> bool:
+        """MeterEventSummary is not uniquely ``stripe_id``-keyed — we use (meter, customer, window)."""
+        d = M.as_dict(obj)
+        org = self._organization_id
+        if not org:
+            return False
+        start = M.ts_from_epoch(d.get("start_time"))
+        r = await self._db.execute(
+            select(StripeMeterEventSummary).where(
+                StripeMeterEventSummary.organization_id == org,
+                StripeMeterEventSummary.meter_stripe_id == meter_stripe_id,
+                StripeMeterEventSummary.customer_stripe_id == customer_stripe_id,
+                StripeMeterEventSummary.start_time == start,
+            )
+        )
+        row = r.scalar_one_or_none()
+        vals = M.map_billing_meter_event_summary(
+            d, meter_stripe_id=meter_stripe_id, customer_stripe_id=customer_stripe_id
+        )
         if row:
             for k, v in vals.items():
                 setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
         else:
             self._db.add(
-                StripeSubscription(
+                StripeMeterEventSummary(
                     id=str(uuid.uuid4()),
                     organization_id=org,
-                    stripe_id=sid,
                     **vals,
                 )
             )
         return True
 
-    async def _upsert_invoice_lines(self, org: str, invoice_stripe_id: str, d: dict[str, Any]) -> None:
+    async def apply_tax_transaction(self, obj: Any, *, deleted: bool = False) -> bool:
+        return await self._upsert(
+            model=StripeTaxTransaction,
+            mapper=M.map_tax_transaction,
+            obj=obj,
+            deleted=deleted,
+        )
+
+    async def apply_revrec_report(self, obj: Any, *, deleted: bool = False) -> bool:
+        """Stripe native Revenue Recognition — mirrored so our scheduler can reconcile."""
+        d = M.as_dict(obj)
+        vals = {
+            "report_type": d.get("report_type"),
+            "status": d.get("status"),
+            "interval_start": M.ts_from_epoch(d.get("interval_start")),
+            "interval_end": M.ts_from_epoch(d.get("interval_end")),
+            "result_url": d.get("result"),
+            "parameters": d.get("parameters") if isinstance(d.get("parameters"), dict) else None,
+            "summary": d.get("summary") if isinstance(d.get("summary"), dict) else None,
+            "stripe_created": M.ts_from_epoch(d.get("created")),
+            "succeeded_at": M.ts_from_epoch(d.get("succeeded_at")),
+            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
+            "raw_stripe_object": d,
+        }
+        return await self._upsert(
+            model=StripeRevrecReport,
+            mapper=lambda _: vals,
+            obj=d,
+            deleted=deleted,
+        )
+
+    async def _ensure_stub_parent(
+        self,
+        *,
+        model: type,
+        org: str,
+        stripe_id: str | None,
+        defaults: dict[str, Any],
+    ) -> None:
+        """Insert a minimal parent row if absent — used to satisfy FKs on out-of-order events."""
+        if not stripe_id:
+            return
+        existing = await self._load_row(model, org, stripe_id)
+        if existing is not None:
+            return
+        self._db.add(
+            model(
+                id=str(uuid.uuid4()),
+                organization_id=org,
+                stripe_id=stripe_id,
+                **defaults,
+            )
+        )
+
+    async def _upsert_invoice_lines(
+        self, org: str, invoice_stripe_id: str, d: dict[str, Any]
+    ) -> None:
         lines_wrap = d.get("lines") or {}
         raw_lines = lines_wrap.get("data") if isinstance(lines_wrap, dict) else []
         for line in raw_lines:
-            ld = _as_dict(line)
+            ld = M.as_dict(line)
             lid = ld.get("id")
             if not isinstance(lid, str):
                 continue
+            vals = M.map_invoice_line_item(ld, invoice_stripe_id=invoice_stripe_id)
+            # Stub parents so FKs hold even if the price/product/sub item
+            # webhook arrives after this invoice event.
+            await self._ensure_stub_parent(
+                model=StripeProduct,
+                org=org,
+                stripe_id=vals.get("product_stripe_id"),
+                defaults={"raw_stripe_object": None},
+            )
+            await self._ensure_stub_parent(
+                model=StripePrice,
+                org=org,
+                stripe_id=vals.get("price_stripe_id"),
+                defaults={
+                    "product_stripe_id": vals.get("product_stripe_id"),
+                    "currency": ld.get("currency"),
+                    "unit_amount": ld.get("unit_amount"),
+                    "raw_stripe_object": None,
+                },
+            )
+            sub_item_sid = vals.get("subscription_item_stripe_id")
+            if sub_item_sid:
+                sub_raw = ld.get("subscription")
+                sub_sid = sub_raw if isinstance(sub_raw, str) else M.source_id(sub_raw)
+                await self._ensure_stub_parent(
+                    model=StripeSubscriptionItem,
+                    org=org,
+                    stripe_id=sub_item_sid,
+                    defaults={
+                        "subscription_stripe_id": sub_sid or "",
+                        "price_stripe_id": vals.get("price_stripe_id"),
+                        "product_stripe_id": vals.get("product_stripe_id"),
+                        "raw_stripe_object": None,
+                    },
+                )
             row = await self._load_row(StripeInvoiceLineItem, org, lid)
-            period = ld.get("period")
-            pr_obj = ld.get("price")
-            price_stripe_id = _source_id(pr_obj)
-            product_stripe_id = None
-            if isinstance(pr_obj, dict):
-                p = pr_obj.get("product")
-                product_stripe_id = p if isinstance(p, str) else _source_id(p)
-            vals = {
-                "invoice_stripe_id": invoice_stripe_id,
-                "amount": ld.get("amount"),
-                "currency": ld.get("currency"),
-                "description": ld.get("description"),
-                "quantity": ld.get("quantity"),
-                "price_stripe_id": price_stripe_id,
-                "product_stripe_id": product_stripe_id,
-                "unit_amount": ld.get("unit_amount"),
-                "discountable": ld.get("discountable"),
-                "stripe_type": ld.get("type"),
-                "period": period if isinstance(period, dict) else None,
-                "stripe_metadata": ld.get("metadata") if isinstance(ld.get("metadata"), dict) else None,
-                "raw_stripe_object": ld,
-            }
             if row:
                 for k, v in vals.items():
                     setattr(row, k, v)
@@ -386,7 +543,7 @@ class StripeSyncService:
                 )
 
     async def apply_invoice(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
+        d = M.as_dict(obj)
         org = self._resolve_org(d)
         if not org:
             return False
@@ -399,30 +556,7 @@ class StripeSyncService:
                 row.deleted_at = utcnow()
                 row.updated_at = utcnow()
             return True
-        vals = {
-            "customer_stripe_id": d.get("customer") if isinstance(d.get("customer"), str) else None,
-            "subscription_stripe_id": _source_id(d.get("subscription")),
-            "status": d.get("status"),
-            "currency": d.get("currency"),
-            "amount_due": d.get("amount_due"),
-            "amount_paid": d.get("amount_paid"),
-            "amount_remaining": d.get("amount_remaining"),
-            "subtotal": d.get("subtotal"),
-            "total": d.get("total"),
-            "tax": d.get("tax"),
-            "billing_reason": d.get("billing_reason"),
-            "collection_method": d.get("collection_method"),
-            "hosted_invoice_url": d.get("hosted_invoice_url"),
-            "invoice_pdf": d.get("invoice_pdf"),
-            "number": d.get("number"),
-            "paid": d.get("paid"),
-            "period_start": _ts(d.get("period_start")),
-            "period_end": _ts(d.get("period_end")),
-            "stripe_created": _ts(d.get("created")),
-            "due_date": _ts(d.get("due_date")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
+        vals = M.map_invoice(d)
         if row:
             for k, v in vals.items():
                 setattr(row, k, v)
@@ -438,314 +572,76 @@ class StripeSyncService:
                 )
             )
         await self._upsert_invoice_lines(org, sid, d)
+        # After the Stripe mirror (invoice + lines) is consistent, bridge
+        # through to the unified invoices table + revrec allocations. This
+        # is DB-only (no Stripe HTTP), so it is safe on the webhook hot-path.
+        await self._bridge_invoice_to_unified(org, sid)
         return True
+
+    async def _bridge_invoice_to_unified(self, org: str, stripe_id: str) -> None:
+        """Mirror the StripeInvoice row into the unified ``invoices`` + allocations."""
+        from app.services.stripe_invoice_bridge import StripeInvoiceBridgeService
+
+        stripe_row = await self._load_row(StripeInvoice, org, stripe_id)
+        if stripe_row is None:
+            return
+        bridge = StripeInvoiceBridgeService(self._db)
+        await bridge.upsert_from_stripe_invoice(stripe_row)
 
     async def apply_credit_note(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
-        org = self._resolve_org(d)
-        if not org:
-            return False
-        sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
-        row = await self._load_row(StripeCreditNote, org, sid)
-        if deleted:
-            if row:
-                row.deleted_at = utcnow()
-                row.updated_at = utcnow()
-            return True
-        vals = {
-            "invoice_stripe_id": d.get("invoice") if isinstance(d.get("invoice"), str) else None,
-            "customer_stripe_id": d.get("customer") if isinstance(d.get("customer"), str) else None,
-            "status": d.get("status"),
-            "currency": d.get("currency"),
-            "amount": d.get("amount"),
-            "subtotal": d.get("subtotal"),
-            "total": d.get("total"),
-            "reason": d.get("reason"),
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
-        if row:
-            for k, v in vals.items():
-                setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
-        else:
-            self._db.add(
-                StripeCreditNote(
-                    id=str(uuid.uuid4()),
-                    organization_id=org,
-                    stripe_id=sid,
-                    **vals,
-                )
-            )
-        return True
+        return await self._upsert(
+            model=StripeCreditNote, mapper=M.map_credit_note, obj=obj, deleted=deleted
+        )
 
     async def apply_product(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
-        org = self._resolve_org(d)
-        if not org:
-            return False
-        sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
-        row = await self._load_row(StripeProduct, org, sid)
-        if deleted:
-            if row:
-                row.deleted_at = utcnow()
-                row.updated_at = utcnow()
-            return True
-        imgs = d.get("images")
-        vals = {
-            "name": d.get("name"),
-            "active": d.get("active"),
-            "description": d.get("description"),
-            "default_price_id": _source_id(d.get("default_price")),
-            "images": imgs if isinstance(imgs, list) else None,
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
-        if row:
-            for k, v in vals.items():
-                setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
-        else:
-            self._db.add(
-                StripeProduct(
-                    id=str(uuid.uuid4()),
-                    organization_id=org,
-                    stripe_id=sid,
-                    **vals,
-                )
-            )
-        return True
+        return await self._upsert(
+            model=StripeProduct, mapper=M.map_product, obj=obj, deleted=deleted
+        )
 
     async def apply_price(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
-        org = self._resolve_org(d)
-        if not org:
-            return False
-        sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
-        row = await self._load_row(StripePrice, org, sid)
-        if deleted:
-            if row:
-                row.deleted_at = utcnow()
-                row.updated_at = utcnow()
-            return True
-        rec = d.get("recurring")
-        vals = {
-            "product_stripe_id": d.get("product") if isinstance(d.get("product"), str) else None,
-            "active": d.get("active"),
-            "currency": d.get("currency"),
-            "unit_amount": d.get("unit_amount"),
-            "billing_scheme": d.get("billing_scheme"),
-            "stripe_type": d.get("type"),
-            "recurring": rec if isinstance(rec, dict) else None,
-            "tax_behavior": d.get("tax_behavior"),
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
-        if row:
-            for k, v in vals.items():
-                setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
-        else:
-            self._db.add(
-                StripePrice(
-                    id=str(uuid.uuid4()),
-                    organization_id=org,
-                    stripe_id=sid,
-                    **vals,
-                )
-            )
-        return True
+        return await self._upsert(
+            model=StripePrice, mapper=M.map_price, obj=obj, deleted=deleted
+        )
 
     async def apply_payment_intent(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
-        org = self._resolve_org(d)
-        if not org:
-            return False
-        sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
-        row = await self._load_row(StripePaymentIntent, org, sid)
-        if deleted:
-            if row:
-                row.deleted_at = utcnow()
-                row.updated_at = utcnow()
-            return True
-        vals = {
-            "amount": d.get("amount"),
-            "amount_received": d.get("amount_received"),
-            "currency": d.get("currency"),
-            "customer_stripe_id": d.get("customer") if isinstance(d.get("customer"), str) else None,
-            "status": d.get("status"),
-            "description": d.get("description"),
-            "invoice_stripe_id": d.get("invoice") if isinstance(d.get("invoice"), str) else None,
-            "latest_charge": _source_id(d.get("latest_charge")),
-            "payment_method": _source_id(d.get("payment_method")),
-            "receipt_email": d.get("receipt_email"),
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
-        if row:
-            for k, v in vals.items():
-                setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
-        else:
-            self._db.add(
-                StripePaymentIntent(
-                    id=str(uuid.uuid4()),
-                    organization_id=org,
-                    stripe_id=sid,
-                    **vals,
-                )
-            )
-        return True
+        return await self._upsert(
+            model=StripePaymentIntent, mapper=M.map_payment_intent, obj=obj, deleted=deleted
+        )
 
     async def apply_refund(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
-        org = self._resolve_org(d)
-        if not org:
-            return False
-        sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
-        row = await self._load_row(StripeRefund, org, sid)
-        if deleted:
-            if row:
-                row.deleted_at = utcnow()
-                row.updated_at = utcnow()
-            return True
-        vals = {
-            "amount": d.get("amount"),
-            "currency": d.get("currency"),
-            "charge_stripe_id": _source_id(d.get("charge")),
-            "payment_intent_stripe_id": _source_id(d.get("payment_intent")),
-            "status": d.get("status"),
-            "reason": d.get("reason"),
-            "failure_reason": d.get("failure_reason"),
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
-        if row:
-            for k, v in vals.items():
-                setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
-        else:
-            self._db.add(
-                StripeRefund(
-                    id=str(uuid.uuid4()),
-                    organization_id=org,
-                    stripe_id=sid,
-                    **vals,
-                )
-            )
-        return True
+        return await self._upsert(
+            model=StripeRefund, mapper=M.map_refund, obj=obj, deleted=deleted
+        )
 
     async def apply_dispute(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
-        org = self._resolve_org(d)
-        if not org:
-            return False
-        sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
-        row = await self._load_row(StripeDispute, org, sid)
-        if deleted:
-            if row:
-                row.deleted_at = utcnow()
-                row.updated_at = utcnow()
-            return True
-        vals = {
-            "amount": d.get("amount"),
-            "currency": d.get("currency"),
-            "charge_stripe_id": _source_id(d.get("charge")),
-            "status": d.get("status"),
-            "reason": d.get("reason"),
-            "evidence_due_by": _ts(d.get("evidence_due_by")),
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
-        if row:
-            for k, v in vals.items():
-                setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
-        else:
-            self._db.add(
-                StripeDispute(
-                    id=str(uuid.uuid4()),
-                    organization_id=org,
-                    stripe_id=sid,
-                    **vals,
-                )
-            )
-        return True
+        return await self._upsert(
+            model=StripeDispute, mapper=M.map_dispute, obj=obj, deleted=deleted
+        )
 
     async def apply_tax_rate(self, obj: Any, *, deleted: bool = False) -> bool:
-        d = _as_dict(obj)
-        org = self._resolve_org(d)
-        if not org:
-            return False
-        sid = d.get("id")
-        if not isinstance(sid, str):
-            return False
-        row = await self._load_row(StripeTaxRate, org, sid)
-        if deleted:
-            if row:
-                row.deleted_at = utcnow()
-                row.updated_at = utcnow()
-            return True
-        pct = d.get("percentage")
-        vals = {
-            "display_name": d.get("display_name"),
-            "description": d.get("description"),
-            "percentage": Decimal(str(pct)) if pct is not None else None,
-            "inclusive": d.get("inclusive"),
-            "active": d.get("active"),
-            "jurisdiction": d.get("jurisdiction"),
-            "tax_type": d.get("tax_type"),
-            "stripe_created": _ts(d.get("created")),
-            "stripe_metadata": d.get("metadata") if isinstance(d.get("metadata"), dict) else None,
-            "raw_stripe_object": d,
-        }
-        if row:
-            for k, v in vals.items():
-                setattr(row, k, v)
-            row.deleted_at = None
-            row.updated_at = utcnow()
-        else:
-            self._db.add(
-                StripeTaxRate(
-                    id=str(uuid.uuid4()),
-                    organization_id=org,
-                    stripe_id=sid,
-                    **vals,
-                )
-            )
-        return True
+        return await self._upsert(
+            model=StripeTaxRate, mapper=M.map_tax_rate, obj=obj, deleted=deleted
+        )
 
     async def apply_charge(self, obj: Any) -> bool:
-        """Persist balance transaction from a charge when present (treasury)."""
-        d = _as_dict(obj)
+        """Persist balance transaction from a charge when present (treasury).
+
+        On the webhook hot-path (``allow_blocking_stripe_calls=False``) we
+        never fetch the ``BalanceTransaction`` synchronously — the dispatch
+        layer enqueues ``app.workers.tasks.stripe.resync_charge_balance``
+        instead. On pull-sync / admin paths the retrieve runs inline.
+        """
+        d = M.as_dict(obj)
         bt = d.get("balance_transaction")
         if isinstance(bt, dict) and bt.get("object") == "balance_transaction":
             return await self.apply_balance_transaction(bt)
         if isinstance(bt, str):
+            if not self._allow_blocking_stripe_calls:
+                logger.debug(
+                    "apply_charge skipped Stripe retrieve (hot-path); Celery task will reconcile %s",
+                    bt,
+                )
+                return False
             try:
                 full = await asyncio.to_thread(lambda: stripe.BalanceTransaction.retrieve(bt))
                 return await self.apply_balance_transaction(full)
@@ -778,9 +674,10 @@ class StripeSyncService:
             page = await asyncio.to_thread(list_call, **kwargs)
             items = list(getattr(page, "data", []) or [])
             stats.fetched += len(items)
+            last_d: dict[str, Any] = {}
             for item in items:
-                d = stripe_object_to_dict(item)
-                ok = await apply(d)
+                last_d = stripe_object_to_dict(item)
+                ok = await apply(last_d)
                 if ok:
                     stats.upserted += 1
                 else:
@@ -788,12 +685,14 @@ class StripeSyncService:
             if not getattr(page, "has_more", False) or not items:
                 break
             last = items[-1]
-            starting_after = last.id if hasattr(last, "id") else d.get("id")
+            starting_after = last.id if hasattr(last, "id") else last_d.get("id")
         await self._db.commit()
         return stats
 
     async def sync_customers(self, *, page_size: int = 100, max_pages: int = 50) -> StripeSyncStatsResponse:
-        return await self._pull_page(stripe.Customer.list, apply=self.apply_customer, page_size=page_size, max_pages=max_pages)
+        return await self._pull_page(
+            stripe.Customer.list, apply=self.apply_customer, page_size=page_size, max_pages=max_pages
+        )
 
     async def sync_subscriptions(self, *, page_size: int = 100, max_pages: int = 50) -> StripeSyncStatsResponse:
         return await self._pull_page(
@@ -868,6 +767,79 @@ class StripeSyncService:
             max_pages=max_pages,
         )
 
+    async def sync_subscription_schedules(
+        self, *, page_size: int = 100, max_pages: int = 50
+    ) -> StripeSyncStatsResponse:
+        return await self._pull_page(
+            stripe.SubscriptionSchedule.list,
+            apply=self.apply_subscription_schedule,
+            page_size=page_size,
+            max_pages=max_pages,
+        )
+
+    async def sync_meter_event_summaries_for_customer(
+        self,
+        *,
+        stripe_client: Any,
+        meter_stripe_id: str,
+        customer_stripe_id: str,
+        start_time: int,
+        end_time: int,
+        value_grouping_window: str | None = None,
+    ) -> StripeSyncStatsResponse:
+        """Fetch meter summaries for one customer via the provided client and upsert."""
+        self._require_org_for_pull()
+        summaries = await asyncio.to_thread(
+            stripe_client.list_meter_event_summaries,
+            meter_id=meter_stripe_id,
+            customer=customer_stripe_id,
+            start_time=start_time,
+            end_time=end_time,
+            value_grouping_window=value_grouping_window,
+        )
+        stats = StripeSyncStatsResponse(fetched=len(summaries))
+        for raw in summaries:
+            ok = await self.apply_billing_meter_event_summary(
+                raw,
+                meter_stripe_id=meter_stripe_id,
+                customer_stripe_id=customer_stripe_id,
+            )
+            if ok:
+                stats.upserted += 1
+            else:
+                stats.skipped_no_org_metadata += 1
+        await self._db.commit()
+        return stats
+
+    async def commit_tax_transaction_record(self, tx: dict[str, Any]) -> StripeSyncStatsResponse:
+        """Persist a single Tax Transaction returned from Stripe and commit."""
+        self._require_org_for_pull()
+        stats = StripeSyncStatsResponse(fetched=1)
+        ok = await self.apply_tax_transaction(tx)
+        if ok:
+            stats.upserted = 1
+            await self._db.commit()
+        else:
+            stats.skipped_no_org_metadata = 1
+        return stats
+
+    async def sync_billing_meters(
+        self, *, page_size: int = 100, max_pages: int = 50
+    ) -> StripeSyncStatsResponse:
+        """Stripe Billing Meters (``stripe.billing.Meter.list``)."""
+        meter_list = getattr(getattr(stripe, "billing", None), "Meter", None)
+        if meter_list is None or not hasattr(meter_list, "list"):
+            raise StripeError(
+                "Stripe Billing Meters API not available in this SDK version",
+                code="external.stripe.meters_unavailable",
+            )
+        return await self._pull_page(
+            meter_list.list,
+            apply=self.apply_billing_meter,
+            page_size=page_size,
+            max_pages=max_pages,
+        )
+
     async def sync_payouts(self, *, page_size: int = 100, max_pages: int = 50) -> StripeSyncStatsResponse:
         return await self._pull_page(
             stripe.Payout.list,
@@ -876,7 +848,9 @@ class StripeSyncService:
             max_pages=max_pages,
         )
 
-    async def sync_balance_transactions(self, *, page_size: int = 100, max_pages: int = 50) -> StripeSyncStatsResponse:
+    async def sync_balance_transactions(
+        self, *, page_size: int = 100, max_pages: int = 50
+    ) -> StripeSyncStatsResponse:
         self._require_stripe()
         self._require_org_for_pull()
         stats = StripeSyncStatsResponse()
@@ -901,6 +875,8 @@ class StripeSyncService:
             starting_after = last.id
         await self._db.commit()
         return stats
+
+    # --- Mirror reads ---------------------------------------------------
 
     async def list_balance_transactions_mirror(
         self, *, limit: int = 100

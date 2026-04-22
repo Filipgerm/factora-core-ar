@@ -479,6 +479,22 @@ class GlRevenueRecognitionSchedule(Base):
         nullable=False,
         index=True,
     )
+    # Every revrec schedule MUST be bound to a specific Contract +
+    # Performance Obligation — it is the IFRS 15 unit of recognition.
+    # ``ondelete=RESTRICT`` guarantees we never orphan a financial
+    # artifact by cascading a contract delete.
+    contract_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("contracts.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    performance_obligation_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("performance_obligations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     contract_name: Mapped[str] = mapped_column(String(255), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
     total_contract_value: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
@@ -500,6 +516,19 @@ class GlRevenueRecognitionSchedule(Base):
         "GlRevenueRecognitionScheduleLine",
         back_populates="schedule",
         cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_gl_rev_sched_org_contract",
+            "organization_id",
+            "contract_id",
+        ),
+        Index(
+            "ix_gl_rev_sched_org_po",
+            "organization_id",
+            "performance_obligation_id",
+        ),
     )
 
 

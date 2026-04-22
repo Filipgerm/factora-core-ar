@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from app.core.exceptions import AppError
 from app.db.models.aade import AadeInvoiceModel
 from app.db.models.banking import Transaction
+from app.db.models.invoices import Invoice
 from app.models.dashboard import (
     AadeDocumentsRequest,
     AadeDocumentsResponse,
@@ -53,29 +54,37 @@ class DashboardController:
             iban=tx.extra.get("iban") if tx.extra else None,
         )
 
-    def _map_invoice_to_item(self, inv: AadeInvoiceModel) -> AadeInvoiceItem:
-        """Helper to map an AadeInvoiceModel ORM to an AadeInvoiceItem DTO."""
+    def _map_invoice_to_item(
+        self, aade: AadeInvoiceModel, unified: Invoice
+    ) -> AadeInvoiceItem:
+        """Map an ``(aade, unified)`` pair to an ``AadeInvoiceItem`` DTO.
+
+        AADE-specific fields (direction header, VAT breakdown) come from
+        the mirror; canonical financial fields (issue_date, currency,
+        gross total) come from the unified ``invoices`` row so the API
+        response stays consistent with every other AR/AP surface.
+        """
         return AadeInvoiceItem(
-            id=inv.id,
-            document_id=inv.document_id,
-            uid=inv.uid,
-            mark=inv.mark,
-            authentication_code=inv.authentication_code,
-            issuer_vat=inv.issuer_vat,
-            issuer_country=inv.issuer_country,
-            issuer_branch=inv.issuer_branch,
-            counterpart_vat=inv.counterpart_vat,
-            counterpart_country=inv.counterpart_country,
-            counterpart_branch=inv.counterpart_branch,
-            series=inv.series,
-            aa=inv.aa,
-            issue_date=inv.issue_date,
-            invoice_type=inv.invoice_type,
-            currency=inv.currency,
-            total_net_value=inv.total_net_value,
-            total_vat_amount=inv.total_vat_amount,
-            total_gross_value=inv.total_gross_value,
-            created_at=inv.created_at,
+            id=aade.id,
+            document_id=aade.document_id,
+            uid=aade.uid,
+            mark=aade.mark,
+            authentication_code=aade.authentication_code,
+            issuer_vat=aade.issuer_vat,
+            issuer_country=aade.issuer_country,
+            issuer_branch=aade.issuer_branch,
+            counterpart_vat=aade.counterpart_vat,
+            counterpart_country=aade.counterpart_country,
+            counterpart_branch=aade.counterpart_branch,
+            series=aade.series,
+            aa=aade.aa,
+            issue_date=unified.issue_date,
+            invoice_type=aade.invoice_type,
+            currency=unified.currency,
+            total_net_value=aade.total_net_value,
+            total_vat_amount=aade.total_vat_amount,
+            total_gross_value=unified.amount,
+            created_at=aade.created_at,
         )
 
     def _map_party_summary(self, row: Any) -> PartySummary:
@@ -151,7 +160,10 @@ class DashboardController:
         """Return paginated AADE invoices for an organization with optional filters."""
         try:
             invoices, total = await self.dashboard_service.get_aade_documents(request)
-            invoice_items = [self._map_invoice_to_item(inv) for inv in invoices]
+            invoice_items = [
+                self._map_invoice_to_item(aade, unified)
+                for aade, unified in invoices
+            ]
 
             return AadeDocumentsResponse(
                 invoices=invoice_items,

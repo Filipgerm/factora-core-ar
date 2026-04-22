@@ -7,13 +7,12 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
 from sqlalchemy import (
     BigInteger,
-    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -101,12 +100,26 @@ class AadeInvoiceModel(Base):
     counterpart_branch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     series: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     aa: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    issue_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
     invoice_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
-    currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
+    # Greek-tax-specific VAT breakdown (kept — no equivalent on unified Invoice).
     total_net_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     total_vat_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
-    total_gross_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    # NOTE: ``issue_date`` / ``currency`` / ``total_gross_value`` live on
+    # the unified ``invoices`` row via the bridge (see
+    # ``AadeInvoiceBridgeService``). Do NOT re-add them here — the mirror
+    # is intentionally slim and Greek-tax-only.
+    invoice_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("invoices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc=(
+            "FK to the unified invoices row this AADE mirror was bridged to. "
+            "Nullable while the backfill completes; once populated it is the "
+            "canonical link dashboards and revrec should prefer over the "
+            "external_id join."
+        ),
+    )
     normalized_data: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"), onupdate=func.now())
@@ -118,7 +131,6 @@ class AadeInvoiceModel(Base):
         Index("ix_aade_invoices_document_id", "document_id"),
         Index("ix_aade_invoices_issuer_vat", "issuer_vat"),
         Index("ix_aade_invoices_counterpart_vat", "counterpart_vat"),
-        Index("ix_aade_invoices_issue_date", "issue_date"),
         Index("ix_aade_invoices_invoice_type", "invoice_type"),
     )
 

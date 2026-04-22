@@ -19,6 +19,31 @@ from app.db.models.banking import (
     TransactionStatus,
 )
 from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
+from app.db.models.contracts import (
+    AllocationMethod,
+    BillingSystem,
+    Contract,
+    ContractAllocation,
+    ContractAllocationSource,
+    ContractDocument,
+    ContractModification,
+    ContractModificationType,
+    ContractSource,
+    ContractStatus,
+    PerformanceObligation,
+    PerformanceObligationKind,
+)
+from app.db.models.stripe_connect import StripeAccountConnection
+from app.db.models.hubspot import (
+    HubspotAssociation,
+    HubspotCompany,
+    HubspotConnection,
+    HubspotDeal,
+    HubspotFile,
+    HubspotLineItem,
+    HubspotProduct,
+    HubspotQuote,
+)
 
 __all__ = [
     # identity
@@ -45,4 +70,28 @@ __all__ = [
     "AadeDocumentModel",
     "AadeInvoiceModel",
     "InvoiceDirection",
+    # contracts
+    "AllocationMethod",
+    "BillingSystem",
+    "Contract",
+    "ContractAllocation",
+    "ContractAllocationSource",
+    "ContractDocument",
+    "ContractModification",
+    "ContractModificationType",
+    "ContractSource",
+    "ContractStatus",
+    "PerformanceObligation",
+    "PerformanceObligationKind",
+    # stripe connect
+    "StripeAccountConnection",
+    # hubspot
+    "HubspotAssociation",
+    "HubspotCompany",
+    "HubspotConnection",
+    "HubspotDeal",
+    "HubspotFile",
+    "HubspotLineItem",
+    "HubspotProduct",
+    "HubspotQuote",
 ]

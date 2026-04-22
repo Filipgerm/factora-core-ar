@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -136,10 +137,24 @@ class StripeBalanceSnapshot(Base):
 
 
 class StripeCustomer(_StripeOrgScoped):
-    """Stripe Customer — AR/billing counterpart."""
+    """Stripe Customer — AR/billing counterpart.
+
+    ``counterparty_id`` links the Stripe customer back to the unified
+    ``counterparties`` table so AR invoices, revrec schedules, and
+    collections automation share a single canonical business entity.
+    The link is nullable — resolution happens opportunistically by the
+    ``StripeCustomerCounterpartyMatcher`` service on upsert; unresolved
+    rows are surfaced for manual review.
+    """
 
     __tablename__ = "stripe_customers"
 
+    counterparty_id: Mapped[str | None] = mapped_column(
+        PGUUID(as_uuid=False),
+        ForeignKey("counterparties.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str | None] = mapped_column(String(512), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -156,6 +171,11 @@ class StripeCustomer(_StripeOrgScoped):
     __table_args__ = (
         UniqueConstraint("organization_id", "stripe_id", name="uq_stripe_cus_org_stripe_id"),
         Index("ix_stripe_cus_org_email", "organization_id", "email"),
+        Index(
+            "ix_stripe_cus_org_counterparty",
+            "organization_id",
+            "counterparty_id",
+        ),
     )
 
 
@@ -214,7 +234,13 @@ class StripeInvoice(_StripeOrgScoped):
 
 
 class StripeInvoiceLineItem(_StripeOrgScoped):
-    """Line item on a Stripe Invoice."""
+    """Line item on a Stripe Invoice.
+
+    Composite FKs on ``(organization_id, price_stripe_id)`` →
+    ``stripe_prices(organization_id, stripe_id)`` etc. protect reconciliation
+    joins without depending on Stripe's event ordering — the sync service
+    pre-upserts stub Price/Product/SubscriptionItem rows from the line payload.
+    """
 
     __tablename__ = "stripe_invoice_line_items"
 
@@ -225,6 +251,9 @@ class StripeInvoiceLineItem(_StripeOrgScoped):
     quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     price_stripe_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     product_stripe_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    subscription_item_stripe_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
     unit_amount: Mapped[int | None] = mapped_column(Integer, nullable=True)
     discountable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     stripe_type: Mapped[str | None] = mapped_column("line_type", String(32), nullable=True)
@@ -236,7 +265,36 @@ class StripeInvoiceLineItem(_StripeOrgScoped):
             "stripe_id",
             name="uq_stripe_inv_line_org_stripe_id",
         ),
+        ForeignKeyConstraint(
+            ["organization_id", "price_stripe_id"],
+            ["stripe_prices.organization_id", "stripe_prices.stripe_id"],
+            name="fk_stripe_inv_line_price",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "product_stripe_id"],
+            ["stripe_products.organization_id", "stripe_products.stripe_id"],
+            name="fk_stripe_inv_line_product",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "subscription_item_stripe_id"],
+            ["stripe_subscription_items.organization_id", "stripe_subscription_items.stripe_id"],
+            name="fk_stripe_inv_line_sub_item",
+            ondelete="SET NULL",
+        ),
         Index("ix_stripe_inv_line_org_invoice", "organization_id", "invoice_stripe_id"),
+        Index(
+            "ix_stripe_inv_line_org_price", "organization_id", "price_stripe_id"
+        ),
+        Index(
+            "ix_stripe_inv_line_org_product", "organization_id", "product_stripe_id"
+        ),
+        Index(
+            "ix_stripe_inv_line_org_sub_item",
+            "organization_id",
+            "subscription_item_stripe_id",
+        ),
     )
 
 
@@ -357,6 +415,238 @@ class StripeDispute(_StripeOrgScoped):
     __table_args__ = (
         UniqueConstraint("organization_id", "stripe_id", name="uq_stripe_dispute_org_stripe_id"),
         Index("ix_stripe_dispute_org_status", "organization_id", "status"),
+    )
+
+
+class StripeSubscriptionItem(_StripeOrgScoped):
+    """Stripe SubscriptionItem — one per Price inside a Subscription.
+
+    Each row is the atomic unit of revenue a subscription emits; for IFRS 15
+    mapping, a ``PerformanceObligation`` typically points at one of these
+    via the generic ``performance_obligations.billing_item_ref`` column
+    (with ``billing_system == STRIPE``).
+    """
+
+    __tablename__ = "stripe_subscription_items"
+
+    subscription_stripe_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True
+    )
+    price_stripe_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    product_stripe_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    billing_thresholds: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    tax_rates: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    stripe_created: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "stripe_id", name="uq_stripe_sub_item_org_stripe_id"
+        ),
+        Index(
+            "ix_stripe_sub_item_org_sub",
+            "organization_id",
+            "subscription_stripe_id",
+        ),
+        Index(
+            "ix_stripe_sub_item_org_price",
+            "organization_id",
+            "price_stripe_id",
+        ),
+    )
+
+
+class StripeSubscriptionSchedule(_StripeOrgScoped):
+    """Stripe SubscriptionSchedule — multi-phase contracts with planned transitions.
+
+    Crucial for IFRS 15 modification accounting: the ``phases`` JSONB preserves
+    the full timeline so we can compute prospective vs cumulative-catch-up
+    without re-fetching from Stripe.
+    """
+
+    __tablename__ = "stripe_subscription_schedules"
+
+    customer_stripe_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    subscription_stripe_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    current_phase: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    phases: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    end_behavior: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    canceled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    released_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    released_subscription_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    stripe_created: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "stripe_id", name="uq_stripe_sub_sched_org_stripe_id"
+        ),
+        Index(
+            "ix_stripe_sub_sched_org_status", "organization_id", "status"
+        ),
+    )
+
+
+class StripeMeter(_StripeOrgScoped):
+    """Stripe Billing Meter — definition of a usage event (e.g. ``api_requests``)."""
+
+    __tablename__ = "stripe_meters"
+
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    event_name: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    event_time_window: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    customer_mapping: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    default_aggregation: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    value_settings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    status_transitions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    stripe_created: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    livemode: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "stripe_id", name="uq_stripe_meter_org_stripe_id"
+        ),
+        Index("ix_stripe_meter_org_status", "organization_id", "status"),
+    )
+
+
+class StripeMeterEventSummary(Base):
+    """Aggregated usage per (meter, customer, window) — drives usage-based revrec."""
+
+    __tablename__ = "stripe_meter_event_summaries"
+
+    id: Mapped[str] = mapped_column(
+        PGUUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    organization_id: Mapped[str] = mapped_column(
+        PGUUID(as_uuid=False),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    meter_stripe_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    customer_stripe_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    aggregated_value: Mapped[float | None] = mapped_column(Numeric(20, 6), nullable=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    livemode: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    raw_stripe_object: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "meter_stripe_id",
+            "customer_stripe_id",
+            "start_time",
+            name="uq_stripe_meter_summary_org_meter_cust_start",
+        ),
+        Index(
+            "ix_stripe_meter_summary_org_meter",
+            "organization_id",
+            "meter_stripe_id",
+        ),
+        Index(
+            "ix_stripe_meter_summary_org_customer",
+            "organization_id",
+            "customer_stripe_id",
+        ),
+    )
+
+
+class StripeTaxTransaction(_StripeOrgScoped):
+    """Stripe Tax API — Tax.Transaction (calculated/committed tax per invoice)."""
+
+    __tablename__ = "stripe_tax_transactions"
+
+    transaction_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    reference: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    customer_stripe_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    customer_details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    ship_from_details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    tax_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    line_items: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
+    shipping_cost: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reversal: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    stripe_created: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    livemode: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "stripe_id", name="uq_stripe_tax_tx_org_stripe_id"
+        ),
+        Index(
+            "ix_stripe_tax_tx_org_reference",
+            "organization_id",
+            "reference",
+        ),
+    )
+
+
+class StripeRevrecReport(_StripeOrgScoped):
+    """Stripe Revenue Recognition — exported report snapshot.
+
+    Stripe's native revrec engine produces periodic reports (deferred balance,
+    recognized revenue) as finance-grade numbers. We mirror those so our own
+    scheduler can reconcile its output vs Stripe's — closing the loop on the
+    "one number" problem for AR/AP teams.
+    """
+
+    __tablename__ = "stripe_revrec_reports"
+
+    report_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    interval_start: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    interval_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    result_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parameters: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    stripe_created: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    succeeded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "stripe_id", name="uq_stripe_revrec_report_org_stripe_id"
+        ),
+        Index(
+            "ix_stripe_revrec_report_org_interval",
+            "organization_id",
+            "interval_end",
+        ),
     )
 
 

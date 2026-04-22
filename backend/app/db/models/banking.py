@@ -42,9 +42,15 @@ CUSTOMER_CATEGORIZATION = ("personal", "business")
 
 
 class CustomerModel(Base):
-    """A SaltEdge customer entity scoped to one organization."""
+    """A SaltEdge customer entity scoped to one organization.
 
-    __tablename__ = "customers"
+    Table name is ``saltedge_customers`` to make the vendor origin explicit
+    and to avoid collision with non-banking "customer"-like entities (e.g.
+    Stripe customers, generic CRM customers). The ORM class name is kept as
+    ``CustomerModel`` to minimize upstream churn.
+    """
+
+    __tablename__ = "saltedge_customers"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
     organization_id: Mapped[str] = mapped_column(
@@ -69,12 +75,15 @@ class CustomerModel(Base):
     connections = relationship("ConnectionModel", back_populates="customer", cascade="all, delete-orphan")
 
     __table_args__ = (
-        CheckConstraint(f"categorization_type IN {CUSTOMER_CATEGORIZATION}", name="customer_categorization_chk"),
-        UniqueConstraint("identifier", name="uq_customers_identifier"),
-        UniqueConstraint("email", name="uq_customers_email"),
-        Index("ix_customers_identifier", "identifier"),
-        Index("ix_customers_email", "email"),
-        Index("ix_customers_organization_id", "organization_id"),
+        CheckConstraint(
+            f"categorization_type IN {CUSTOMER_CATEGORIZATION}",
+            name="saltedge_customer_categorization_chk",
+        ),
+        UniqueConstraint("identifier", name="uq_saltedge_customers_identifier"),
+        UniqueConstraint("email", name="uq_saltedge_customers_email"),
+        Index("ix_saltedge_customers_identifier", "identifier"),
+        Index("ix_saltedge_customers_email", "email"),
+        Index("ix_saltedge_customers_organization_id", "organization_id"),
     )
 
     def __repr__(self) -> str:
@@ -169,7 +178,11 @@ class ConnectionModel(Base):
     external_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     external_customer_id: Mapped[str] = mapped_column(String, nullable=False)
     customer_identifier: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    customer_id: Mapped[str] = mapped_column(String, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("saltedge_customers.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     customer = relationship("CustomerModel", back_populates="connections")
     provider_code: Mapped[str] = mapped_column(String, nullable=False)
     provider_name: Mapped[str] = mapped_column(String, nullable=False)

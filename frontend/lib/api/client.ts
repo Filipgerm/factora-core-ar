@@ -10,6 +10,7 @@ import {
   setSession,
   type StoredAuthProfile,
 } from "@/lib/api/session";
+import { ApiError } from "@/lib/api/types";
 import { authPublicResponseSchema } from "@/lib/schemas/auth";
 
 export function getApiOrigin(): string {

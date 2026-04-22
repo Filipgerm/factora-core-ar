@@ -143,7 +143,7 @@ export type Invoice = z.infer<typeof InvoiceSchema>;
 ## UI/UX Standards — The Stripe / Rillet Standard
 
 Factora must look and feel like a top-tier modern fintech application.
-Reference points: Stripe Dashboard, Rillet, DualEntry.
+Reference points: Stripe Dashboard, Rillet, DualEntry, Tabs.
 
 ### Principles
 

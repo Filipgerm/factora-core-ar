@@ -50,9 +50,13 @@ from app.services.task_queue_service import TaskQueueService, get_task_queue_ser
 from app.services.gmail_oauth_service import GmailOAuthService
 from app.services.gmail_sync_service import GmailSyncService
 from app.controllers.gmail_controller import GmailController
+from app.services.stripe_connect_service import StripeConnectService
 from app.services.stripe_sync_service import StripeSyncService
 from app.services.stripe_webhook_service import StripeWebhookService
+from app.services.hubspot_connect_service import HubspotConnectService
+from app.controllers.hubspot_controller import HubspotController
 from app.controllers.membership_controller import MembershipController
+from app.controllers.stripe_connect_controller import StripeConnectController
 from app.controllers.stripe_controller import StripeController
 from app.controllers.organization_controller import OrganizationController
 from app.controllers.saltedge_controller import SaltEdgeController
@@ -566,3 +570,45 @@ StripeCtrl = Annotated[StripeController, Depends(get_stripe_controller)]
 StripeWebhookCtrl = Annotated[
     StripeController, Depends(get_stripe_controller_for_webhook)
 ]
+
+
+# ---------------------------------------------------------------------------
+# Stripe Connect OAuth
+# ---------------------------------------------------------------------------
+
+
+def get_stripe_connect_service(
+    db: DB,
+    stripe_client: Annotated[StripeClient, Depends(get_stripe_client)],
+) -> StripeConnectService:
+    return StripeConnectService(db, stripe_client)
+
+
+def get_stripe_connect_controller(
+    service: Annotated[StripeConnectService, Depends(get_stripe_connect_service)],
+) -> StripeConnectController:
+    return StripeConnectController(service)
+
+
+StripeConnectCtrl = Annotated[
+    StripeConnectController, Depends(get_stripe_connect_controller)
+]
+
+
+# ---------------------------------------------------------------------------
+# HubSpot integration (OAuth + sync + webhook + read endpoints)
+# ---------------------------------------------------------------------------
+
+
+def get_hubspot_connect_service(db: DB) -> HubspotConnectService:
+    return HubspotConnectService(db)
+
+
+def get_hubspot_controller(
+    db: DB,
+    service: Annotated[HubspotConnectService, Depends(get_hubspot_connect_service)],
+) -> HubspotController:
+    return HubspotController(db, service)
+
+
+HubspotCtrl = Annotated[HubspotController, Depends(get_hubspot_controller)]

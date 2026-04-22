@@ -36,6 +36,9 @@ class InvoiceSource(str, enum.Enum):
     OCR_PDF = "ocr_pdf"
     CSV_IMPORT = "csv_import"
     GMAIL = "gmail"
+    STRIPE = "stripe"
+    HUBSPOT = "hubspot"
+    CHARGEBEE = "chargebee"
 
 
 class InvoiceStatus(str, enum.Enum):
@@ -165,5 +168,12 @@ class Invoice(Base):
             "organization_id",
             "status",
             postgresql_where=text("status = 'pending_review' AND deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_invoices_org_source_status",
+            "organization_id",
+            "source",
+            "status",
+            postgresql_where=text("deleted_at IS NULL"),
         ),
     )

@@ -762,3 +762,51 @@ class StripeSyncStatsResponse(BaseModel):
     upserted: int = 0
     skipped_no_org_metadata: int = 0
 
+
+# ---------------------------------------------------------------------------
+# Billing Meters — ingestion & summary queries
+# ---------------------------------------------------------------------------
+
+
+class StripeMeterEventRequest(BaseModel):
+    """Request body for ``POST /stripe/meter-events``.
+
+    The ``event_name`` must match an already-configured Stripe Billing Meter in
+    the destination account. Stripe dedupes on ``identifier`` when provided.
+    """
+
+    event_name: str = Field(..., min_length=1, max_length=128)
+    payload: dict[str, Any]
+    identifier: str | None = Field(None, max_length=128)
+    timestamp: int | None = Field(None, description="Unix seconds; default=now")
+
+
+class StripeMeterEventAckResponse(BaseModel):
+    identifier: str | None = None
+    event_name: str
+    stripe_event: dict[str, Any] | None = None
+
+
+class StripeMeterEventSummaryQuery(BaseModel):
+    meter_id: str = Field(..., min_length=1, max_length=255)
+    customer: str = Field(..., min_length=1, max_length=255)
+    start_time: int = Field(..., ge=0, description="Unix seconds (inclusive)")
+    end_time: int = Field(..., ge=0, description="Unix seconds (exclusive)")
+    value_grouping_window: str | None = Field(None, max_length=32)
+
+
+# ---------------------------------------------------------------------------
+# Tax API
+# ---------------------------------------------------------------------------
+
+
+class StripeTaxCalculationRequest(BaseModel):
+    currency: str = Field(..., min_length=3, max_length=3)
+    line_items: list[dict[str, Any]]
+    customer_details: dict[str, Any] | None = None
+
+
+class StripeTaxTransactionCommitRequest(BaseModel):
+    calculation: str = Field(..., min_length=1, max_length=255)
+    reference: str = Field(..., min_length=1, max_length=255)
+

@@ -27,6 +27,8 @@ celery_app = Celery(
         "app.workers.tasks.gmail",
         "app.workers.tasks.future_agents",
         "app.workers.tasks.maintenance",
+        "app.workers.tasks.stripe",
+        "app.workers.tasks.hubspot",
     ],
 )
 
@@ -47,6 +49,15 @@ celery_app.conf.update(
         "maintenance-hourly-heartbeat": {
             "task": "maintenance.worker_heartbeat",
             "schedule": crontab(minute=0),
+        },
+        # Eventually-consistent HubSpot mirror — webhooks are best-effort,
+        # so poll every 15 min and backfill stale connections. The
+        # fan-out task itself is cheap (one SELECT); per-connection
+        # backfills run as separate tasks so one slow tenant can't
+        # block the others.
+        "hubspot-poll-connections": {
+            "task": "hubspot.poll_connections",
+            "schedule": crontab(minute="*/15"),
         },
     },
 )
