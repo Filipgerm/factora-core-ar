@@ -653,6 +653,10 @@ async def _insert_aade(session: AsyncSession, org_id: str) -> None:
             )
         )
     for inv in invoices:
+        # Step 5 slim: ``issue_date`` / ``currency`` / ``total_gross_value``
+        # now live on the unified ``invoices`` row (bridged from this AADE
+        # mirror). Keep a copy inside ``normalized_data`` so the bridge
+        # keeps finding them at demo-seed time.
         session.add(
             AadeInvoiceModel(
                 id=str(inv["id"]),
@@ -670,9 +674,7 @@ async def _insert_aade(session: AsyncSession, org_id: str) -> None:
                 counterpart_branch=inv.get("counterpart_branch"),
                 series=inv.get("series"),
                 aa=inv.get("aa"),
-                issue_date=_parse_date(inv.get("issue_date")),
                 invoice_type=inv.get("invoice_type"),
-                currency=inv.get("currency"),
                 total_net_value=(
                     Decimal(str(inv["total_net_value"]))
                     if inv.get("total_net_value") is not None
@@ -683,12 +685,11 @@ async def _insert_aade(session: AsyncSession, org_id: str) -> None:
                     if inv.get("total_vat_amount") is not None
                     else None
                 ),
-                total_gross_value=(
-                    Decimal(str(inv["total_gross_value"]))
-                    if inv.get("total_gross_value") is not None
-                    else None
-                ),
-                normalized_data={},
+                normalized_data={
+                    "issue_date": inv.get("issue_date"),
+                    "currency": inv.get("currency"),
+                    "total_gross_value": inv.get("total_gross_value"),
+                },
                 created_at=_parse_dt(inv.get("created_at"))
                 or datetime.now(timezone.utc),
             )

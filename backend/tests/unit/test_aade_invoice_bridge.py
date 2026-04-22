@@ -237,6 +237,27 @@ async def test_insert_sets_invoice_id_fk_on_aade_mirror() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reads_amount_currency_issue_date_from_normalized_data() -> None:
+    """Step 5 drops those columns from the mirror; the bridge must read JSONB."""
+    session = _Recorder(existing=None, counterparty_ids=[])
+    bridge = AadeInvoiceBridgeService(session)  # type: ignore[arg-type]
+
+    aade = _aade(total_gross=None, currency="", issue=None)
+    aade.normalized_data = {
+        "total_gross_value": "999.99",
+        "currency": "usd",
+        "issue_date": "2026-02-14",
+    }
+
+    unified = await bridge.upsert_from_aade_invoice(aade)
+
+    assert unified is not None
+    assert unified.amount == Decimal("999.99")
+    assert unified.currency == "USD"
+    assert unified.issue_date == date(2026, 2, 14)
+
+
+@pytest.mark.asyncio
 async def test_update_sets_invoice_id_fk_on_aade_mirror() -> None:
     existing = SimpleNamespace(
         id="unified-77",

@@ -69,12 +69,41 @@ def _accounting_kind(direction: InvoiceDirection) -> InvoiceAccountingKind:
     return InvoiceAccountingKind.UNKNOWN
 
 
-def _default_issue_date(inv: AadeInvoiceModel) -> date:
-    """AADE rows generally carry ``issue_date``; fall back to ``created_at``
-    or today so the NOT NULL invariant on the unified table holds.
+def _normalized(inv: AadeInvoiceModel) -> dict:
+    """Return the AADE normalizer payload as a plain dict.
+
+    Step 5 removes ``issue_date`` / ``currency`` / ``total_gross_value`` from
+    the slim mirror schema; the canonical source for those fields is the
+    ``normalized_data`` JSONB that the myData normalizer already writes.
     """
-    if inv.issue_date is not None:
-        return inv.issue_date
+    data = getattr(inv, "normalized_data", None)
+    return data if isinstance(data, dict) else {}
+
+
+def _coerce_date(value: object) -> date | None:
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _default_issue_date(inv: AadeInvoiceModel) -> date:
+    """Prefer ``normalized_data.issue_date``; fall back to ``created_at`` or today.
+
+    Keeps reading the legacy column when the normalized payload is empty so
+    rows written before Step 5 still bridge without a backfill.
+    """
+    issue = _coerce_date(_normalized(inv).get("issue_date"))
+    if issue is None:
+        issue = _coerce_date(getattr(inv, "issue_date", None))
+    if issue is not None:
+        return issue
     created = inv.created_at
     if isinstance(created, datetime):
         return created.astimezone(timezone.utc).date() if created.tzinfo else created.date()
@@ -111,8 +140,12 @@ class AadeInvoiceBridgeService:
             aade_invoice.organization_id, external_id
         )
 
-        amount = _to_decimal(aade_invoice.total_gross_value)
-        currency = (aade_invoice.currency or "EUR").upper()[:3]
+        data = _normalized(aade_invoice)
+        amount = _to_decimal(
+            data.get("total_gross_value", getattr(aade_invoice, "total_gross_value", None))
+        )
+        currency_raw = data.get("currency") or getattr(aade_invoice, "currency", None)
+        currency = (currency_raw or "EUR").upper()[:3]
         issue = _default_issue_date(aade_invoice)
         kind = _accounting_kind(aade_invoice.direction)
 

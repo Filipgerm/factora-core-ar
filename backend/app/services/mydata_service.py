@@ -235,6 +235,11 @@ class MyDataService:
                 # Make normalized_data JSON-safe (convert Decimal, datetime, etc.)
                 normalized_json = jsonable_encoder(normalized)
 
+                # NOTE: After the Step-5 slim refactor, ``issue_date`` /
+                # ``currency`` / ``total_gross_value`` live on the unified
+                # ``invoices`` row (via the bridge) and inside
+                # ``normalized_data``. They are no longer columns on the
+                # AADE mirror.
                 invoice_model = AadeInvoiceModel(
                     organization_id=self.organization_id,
                     document_id=doc.id,
@@ -250,12 +255,9 @@ class MyDataService:
                     counterpart_branch=normalized.get("counterpart_branch"),
                     series=normalized.get("series"),
                     aa=normalized.get("aa"),
-                    issue_date=normalized.get("issue_date"),
                     invoice_type=normalized.get("invoice_type"),
-                    currency=normalized.get("currency"),
                     total_net_value=normalized.get("total_net_value"),
                     total_vat_amount=normalized.get("total_vat_amount"),
-                    total_gross_value=normalized.get("total_gross_value"),
                     normalized_data=normalized_json,
                 )
                 self.db.add(invoice_model)
