@@ -23,6 +23,7 @@ from packages.aade.models.e3_info import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
+from app.services.aade_invoice_bridge import AadeInvoiceBridgeService
 from datetime import date
 from decimal import Decimal
 
@@ -223,6 +224,7 @@ class MyDataService:
 
             # Insert only invoices with new marks
             invoice_ids = []
+            inserted_aade_rows: list[AadeInvoiceModel] = []
 
             for normalized in normalized_invoices:
                 mark = normalized.get("mark")
@@ -234,6 +236,7 @@ class MyDataService:
                 normalized_json = jsonable_encoder(normalized)
 
                 invoice_model = AadeInvoiceModel(
+                    organization_id=self.organization_id,
                     document_id=doc.id,
                     direction=direction,
                     uid=normalized.get("uid"),
@@ -257,6 +260,26 @@ class MyDataService:
                 )
                 self.db.add(invoice_model)
                 invoice_ids.append(invoice_model.id)
+                inserted_aade_rows.append(invoice_model)
+
+            # Flush so bridge-side ``SELECT``s see the AADE rows and so
+            # the unified ``Invoice`` can reference them in the same txn.
+            if inserted_aade_rows:
+                await self.db.flush()
+                bridge = AadeInvoiceBridgeService(self.db)
+                for aade_row in inserted_aade_rows:
+                    try:
+                        await bridge.upsert_from_aade_invoice(aade_row)
+                    except Exception:
+                        # Dual-write is best-effort — never block AADE
+                        # ingestion when the unified mirror errors. The
+                        # backfill job will reconcile any gaps.
+                        logger.exception(
+                            "AADE→unified bridge failed for aade_invoice=%s "
+                            "(mark=%s); continuing ingest.",
+                            aade_row.id,
+                            aade_row.mark,
+                        )
 
             await self.db.commit()
 
