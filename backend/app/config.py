@@ -151,6 +151,56 @@ class Settings(BaseSettings):
         description="OAuth scope requested by Stripe Connect authorize URL.",
     )
 
+    # --- HubSpot (CRM → revrec bridge) ---
+    HUBSPOT_CLIENT_ID: str = Field(
+        default="",
+        description=(
+            "HubSpot public app client id. Required to issue OAuth authorize URLs "
+            "for tenants to link their HubSpot portals."
+        ),
+    )
+    HUBSPOT_CLIENT_SECRET: str = Field(
+        default="",
+        description=(
+            "HubSpot public app client secret. Also used as the HMAC-SHA256 key "
+            "to verify v3 webhook signatures."
+        ),
+    )
+    HUBSPOT_REDIRECT_URI: str = Field(
+        default="",
+        description=(
+            "OAuth redirect for HubSpot Connect, e.g. "
+            "https://api.factora.eu/v1/hubspot/connect/callback"
+        ),
+    )
+    HUBSPOT_OAUTH_SCOPES: str = Field(
+        default=(
+            "crm.objects.deals.read crm.objects.line_items.read "
+            "crm.objects.quotes.read crm.objects.companies.read "
+            "crm.objects.contacts.read crm.schemas.deals.read "
+            "crm.schemas.line_items.read crm.schemas.quotes.read "
+            "crm.schemas.companies.read e-commerce oauth files"
+        ),
+        description=(
+            "Space-separated OAuth scopes requested by the HubSpot authorize URL. "
+            "Scopes map directly to the read/get API surface the sync service uses."
+        ),
+    )
+    HUBSPOT_APP_ID: int = Field(
+        default=0,
+        description=(
+            "HubSpot developer app numeric id. Used when inspecting webhook "
+            "subscriptions. Optional — leave 0 if webhooks are managed in the UI."
+        ),
+    )
+    HUBSPOT_DEVELOPER_API_KEY: str = Field(
+        default="",
+        description=(
+            "Developer-level API key for the /webhooks/v3 management endpoints. "
+            "Only required if you manage subscriptions programmatically."
+        ),
+    )
+
     # --- Security ---
     CODE_PEPPER: str = Field(
         ..., description="Server-side pepper for Argon2 hashes (>= 16 random chars)"

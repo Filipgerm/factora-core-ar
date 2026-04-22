@@ -53,6 +53,8 @@ from app.controllers.gmail_controller import GmailController
 from app.services.stripe_connect_service import StripeConnectService
 from app.services.stripe_sync_service import StripeSyncService
 from app.services.stripe_webhook_service import StripeWebhookService
+from app.services.hubspot_connect_service import HubspotConnectService
+from app.controllers.hubspot_controller import HubspotController
 from app.controllers.membership_controller import MembershipController
 from app.controllers.stripe_connect_controller import StripeConnectController
 from app.controllers.stripe_controller import StripeController
@@ -591,3 +593,22 @@ def get_stripe_connect_controller(
 StripeConnectCtrl = Annotated[
     StripeConnectController, Depends(get_stripe_connect_controller)
 ]
+
+
+# ---------------------------------------------------------------------------
+# HubSpot integration (OAuth + sync + webhook + read endpoints)
+# ---------------------------------------------------------------------------
+
+
+def get_hubspot_connect_service(db: DB) -> HubspotConnectService:
+    return HubspotConnectService(db)
+
+
+def get_hubspot_controller(
+    db: DB,
+    service: Annotated[HubspotConnectService, Depends(get_hubspot_connect_service)],
+) -> HubspotController:
+    return HubspotController(db, service)
+
+
+HubspotCtrl = Annotated[HubspotController, Depends(get_hubspot_controller)]
