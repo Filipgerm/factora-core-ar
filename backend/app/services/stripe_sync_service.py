@@ -74,10 +74,22 @@ class StripeSyncService:
         db: AsyncSession,
         organization_id: str | None,
         app_settings: Settings | None = None,
+        *,
+        allow_blocking_stripe_calls: bool = True,
     ) -> None:
+        """Build a sync service.
+
+        ``allow_blocking_stripe_calls`` controls whether org-resolution
+        fallbacks are permitted to issue live Stripe HTTP requests
+        (``Charge.retrieve`` / ``BalanceTransaction.retrieve``). Webhook
+        dispatchers instantiate this service with ``False`` so the ack
+        latency stays O(1) DB — the fallback is re-attempted by a
+        Celery task off the hot-path.
+        """
         self._db = db
         self._organization_id = organization_id
         self._settings = app_settings or settings
+        self._allow_blocking_stripe_calls = allow_blocking_stripe_calls
 
     def _require_org_for_pull(self) -> str:
         if not self._organization_id:
@@ -100,10 +112,23 @@ class StripeSyncService:
         return mo
 
     async def _resolve_org_balance_tx(self, obj: dict[str, Any]) -> str | None:
+        """Resolve org for a balance-transaction row.
+
+        Order:
+            1. ``metadata.organization_id`` on the row (fast, DB-free).
+            2. (**Only when ``allow_blocking_stripe_calls`` is True**) issue
+               a live ``Charge.retrieve`` to read the source metadata.
+
+        On the webhook hot-path the second step is **disabled**; the caller
+        is expected to enqueue a Celery task that retries this resolution
+        asynchronously (see ``app.workers.tasks.stripe``).
+        """
         mo = M.metadata_org(obj)
         if self._organization_id:
             if mo == self._organization_id:
                 return self._organization_id
+            if not self._allow_blocking_stripe_calls:
+                return None
             src = M.source_id(obj.get("source"))
             if src and src.startswith("ch_"):
                 org = await self._org_from_charge_id(src)
@@ -112,6 +137,8 @@ class StripeSyncService:
             return None
         if mo:
             return mo
+        if not self._allow_blocking_stripe_calls:
+            return None
         src = M.source_id(obj.get("source"))
         if src and src.startswith("ch_"):
             return await self._org_from_charge_id(src)
@@ -120,9 +147,18 @@ class StripeSyncService:
     async def _org_from_charge_id(self, charge_id: str) -> str | None:
         """Slow fallback: retrieve charge + PI to read metadata.organization_id.
 
-        **IMPORTANT:** never invoke this on the webhook hot-path — it blocks the
-        ack. The webhook controller enqueues a Celery task that runs this.
+        **IMPORTANT:** never invoke this on the webhook hot-path — it blocks
+        the ack. The webhook dispatcher constructs this service with
+        ``allow_blocking_stripe_calls=False`` so accidental invocations are
+        short-circuited; the Celery task in ``app.workers.tasks.stripe``
+        re-runs this resolution off the hot-path.
         """
+        if not self._allow_blocking_stripe_calls:
+            logger.debug(
+                "_org_from_charge_id short-circuited (blocking disabled) for %s",
+                charge_id,
+            )
+            return None
         try:
             ch = await asyncio.to_thread(
                 lambda: stripe.Charge.retrieve(charge_id, expand=["payment_intent"]),
@@ -513,12 +549,24 @@ class StripeSyncService:
         )
 
     async def apply_charge(self, obj: Any) -> bool:
-        """Persist balance transaction from a charge when present (treasury)."""
+        """Persist balance transaction from a charge when present (treasury).
+
+        On the webhook hot-path (``allow_blocking_stripe_calls=False``) we
+        never fetch the ``BalanceTransaction`` synchronously — the dispatch
+        layer enqueues ``app.workers.tasks.stripe.resync_charge_balance``
+        instead. On pull-sync / admin paths the retrieve runs inline.
+        """
         d = M.as_dict(obj)
         bt = d.get("balance_transaction")
         if isinstance(bt, dict) and bt.get("object") == "balance_transaction":
             return await self.apply_balance_transaction(bt)
         if isinstance(bt, str):
+            if not self._allow_blocking_stripe_calls:
+                logger.debug(
+                    "apply_charge skipped Stripe retrieve (hot-path); Celery task will reconcile %s",
+                    bt,
+                )
+                return False
             try:
                 full = await asyncio.to_thread(lambda: stripe.BalanceTransaction.retrieve(bt))
                 return await self.apply_balance_transaction(full)

@@ -27,6 +27,7 @@ celery_app = Celery(
         "app.workers.tasks.gmail",
         "app.workers.tasks.future_agents",
         "app.workers.tasks.maintenance",
+        "app.workers.tasks.stripe",
     ],
 )
 
