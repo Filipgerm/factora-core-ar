@@ -28,14 +28,14 @@ const ITEMS: ReadonlyArray<LogoItem> = [
   {
     id: "banking",
     frame:
-      "bg-slate-50 ring-slate-200/70 shadow-[0_10px_36px_-12px] shadow-slate-400/25 dark:bg-slate-900/50 dark:ring-slate-600/50 dark:shadow-slate-900/30",
+      "bg-slate-50 ring-slate-200/70 shadow-[0_8px_28px_-12px] shadow-slate-400/25 dark:bg-slate-900/50 dark:ring-slate-600/50 dark:shadow-slate-900/30",
     frameSize: "mark",
     logo: { kind: "lucide", className: "text-slate-700" },
   },
   {
     id: "hubspot",
     frame:
-      "bg-orange-50/80 ring-orange-200/60 shadow-[0_10px_40px_-12px] shadow-orange-400/30 dark:bg-orange-950/25 dark:ring-orange-800/40 dark:shadow-orange-900/20",
+      "bg-orange-50/80 ring-orange-200/60 shadow-[0_8px_28px_-12px] shadow-orange-400/28 dark:bg-orange-950/25 dark:ring-orange-800/40 dark:shadow-orange-900/20",
     frameSize: "mark",
     logo: {
       kind: "image",
@@ -46,7 +46,7 @@ const ITEMS: ReadonlyArray<LogoItem> = [
   {
     id: "stripe",
     frame:
-      "bg-violet-50/80 ring-violet-200/60 shadow-[0_12px_44px_-12px] shadow-violet-400/28 dark:bg-violet-950/25 dark:ring-violet-800/40 dark:shadow-violet-900/20",
+      "bg-violet-50/80 ring-violet-200/60 shadow-[0_10px_32px_-12px] shadow-violet-400/25 dark:bg-violet-950/25 dark:ring-violet-800/40 dark:shadow-violet-900/20",
     frameSize: "wordmark",
     logo: {
       kind: "image",
@@ -58,7 +58,7 @@ const ITEMS: ReadonlyArray<LogoItem> = [
   {
     id: "snowflake",
     frame:
-      "bg-sky-50/80 ring-sky-200/60 shadow-[0_10px_40px_-12px] shadow-sky-400/28 dark:bg-sky-950/25 dark:ring-sky-800/40 dark:shadow-sky-900/20",
+      "bg-sky-50/80 ring-sky-200/60 shadow-[0_8px_28px_-12px] shadow-sky-400/25 dark:bg-sky-950/25 dark:ring-sky-800/40 dark:shadow-sky-900/20",
     frameSize: "mark",
     logo: {
       kind: "image",
@@ -85,7 +85,7 @@ export function HomeIntegrationsSection({ className }: { className?: string }) {
         </h2>
       </header>
 
-      <ul className="flex flex-wrap items-center justify-center gap-x-10 gap-y-8 sm:gap-x-14 md:justify-start">
+      <ul className="flex flex-nowrap items-center justify-between gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:justify-start sm:gap-2 md:justify-between md:gap-3 [&::-webkit-scrollbar]:hidden">
         {ITEMS.map((item, i) => (
           <motion.li
             key={item.id}
@@ -96,34 +96,34 @@ export function HomeIntegrationsSection({ className }: { className?: string }) {
           >
             <div
               className={cn(
-                "flex items-center justify-center overflow-hidden rounded-xl px-4 py-4 ring-1 ring-inset transition-all duration-200 hover:brightness-[1.03] dark:hover:brightness-110",
+                "flex items-center justify-center overflow-hidden rounded-lg px-2 py-2 ring-1 ring-inset transition-all duration-200 hover:brightness-[1.03] dark:hover:brightness-110 sm:rounded-xl sm:px-2.5 sm:py-2.5",
                 item.frameSize === "wordmark"
-                  ? "min-h-[5rem] min-w-[min(92vw,15.5rem)] sm:min-h-[5.5rem] sm:min-w-[17rem]"
-                  : "aspect-square min-h-[6.25rem] min-w-[6.25rem] sm:min-h-[7rem] sm:min-w-[7rem]",
+                  ? "min-h-[3rem] min-w-[6.75rem] sm:min-h-[3.25rem] sm:min-w-[8.25rem]"
+                  : "aspect-square min-h-[3rem] min-w-[3rem] sm:min-h-[3.25rem] sm:min-w-[3.25rem]",
                 item.frame
               )}
             >
               {item.logo.kind === "lucide" ? (
                 <Landmark
-                  className={cn("size-14 sm:size-16", item.logo.className)}
+                  className={cn("size-9 sm:size-10", item.logo.className)}
                   aria-hidden
                 />
               ) : (
                 <Image
                   src={item.logo.src}
                   alt={item.logo.alt}
-                  width={item.logo.shape === "wordmark" ? 200 : 96}
-                  height={item.logo.shape === "wordmark" ? 56 : 96}
+                  width={item.logo.shape === "wordmark" ? 132 : 64}
+                  height={item.logo.shape === "wordmark" ? 36 : 64}
                   sizes={
                     item.logo.shape === "wordmark"
-                      ? "(max-width: 640px) 180px, 220px"
-                      : "(max-width: 640px) 72px, 96px"
+                      ? "(max-width: 768px) 108px, 132px"
+                      : "(max-width: 768px) 36px, 44px"
                   }
                   className={cn(
                     "h-auto w-auto object-contain",
                     item.logo.shape === "wordmark"
-                      ? "max-h-11 min-h-[2.75rem] w-auto max-w-[min(92vw,13rem)] sm:max-h-14 sm:min-h-[3.25rem] sm:max-w-[15rem]"
-                      : "max-h-14 min-h-[3.25rem] max-w-[6.5rem] sm:max-h-[4.25rem] sm:min-h-[4.25rem] sm:max-w-[7.5rem]"
+                      ? "max-h-7 w-auto max-w-[6rem] sm:max-h-8 sm:max-w-[7.25rem]"
+                      : "max-h-8 max-w-8 sm:max-h-9 sm:max-w-9"
                   )}
                 />
               )}
