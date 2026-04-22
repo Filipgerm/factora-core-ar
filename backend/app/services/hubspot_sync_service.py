@@ -451,7 +451,26 @@ class HubspotSyncService:
             "owner_id": _s(props.get("hubspot_owner_id"), 64),
             "lifecycle_stage": _s(props.get("lifecyclestage"), 64),
         }
-        return await self._upsert(HubspotCompany, dto.id, row, payload)
+        company = await self._upsert(HubspotCompany, dto.id, row, payload)
+        # Resolve/bootstrap the unified Counterparty so downstream
+        # readers (contract bridge, dashboards, agents) can treat the
+        # company as a first-class business entity immediately.
+        try:
+            from app.services.customer_bootstrapper_service import (
+                CustomerBootstrapperService,
+            )
+
+            await CustomerBootstrapperService(self._db).from_hubspot_company(
+                company
+            )
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning(
+                "CustomerBootstrapperService failed org=%s hs_company=%s: %s",
+                self._conn.organization_id,
+                dto.id,
+                exc,
+            )
+        return company
 
     # --- Shared writer path ---------------------------------------------
 

@@ -269,14 +269,16 @@ class StripeSyncService:
         return handled
 
     async def _link_customer_to_counterparty(self, obj: Any) -> None:
-        """Opportunistically resolve the Counterparty for a Stripe customer.
+        """Opportunistically resolve (or bootstrap) the Counterparty.
 
-        Imported locally to avoid a service-layer import cycle (the matcher
-        reads ``Counterparty`` + ``StripeCustomer`` which this service already
-        owns).
+        Delegates to :class:`CustomerBootstrapperService` which first runs
+        :class:`StripeCustomerCounterpartyMatcher` and — on no-match —
+        decides whether to auto-create a ``Counterparty`` from the Stripe
+        customer fields. Imported locally to avoid a service-layer
+        import cycle.
         """
-        from app.services.stripe_customer_matcher import (
-            StripeCustomerCounterpartyMatcher,
+        from app.services.customer_bootstrapper_service import (
+            CustomerBootstrapperService,
         )
 
         d = M.as_dict(obj)
@@ -287,8 +289,8 @@ class StripeSyncService:
         row = await self._load_row(StripeCustomer, org, sid)
         if row is None:
             return
-        matcher = StripeCustomerCounterpartyMatcher(self._db)
-        await matcher.match_and_link(row)
+        bootstrapper = CustomerBootstrapperService(self._db)
+        await bootstrapper.from_stripe_customer(row)
 
     async def apply_subscription(self, obj: Any, *, deleted: bool = False) -> bool:
         d = M.as_dict(obj)
