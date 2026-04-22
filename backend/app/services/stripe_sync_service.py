@@ -261,7 +261,34 @@ class StripeSyncService:
         return await self._upsert(model=StripePayout, mapper=M.map_payout, obj=obj, deleted=deleted)
 
     async def apply_customer(self, obj: Any, *, deleted: bool = False) -> bool:
-        return await self._upsert(model=StripeCustomer, mapper=M.map_customer, obj=obj, deleted=deleted)
+        handled = await self._upsert(
+            model=StripeCustomer, mapper=M.map_customer, obj=obj, deleted=deleted
+        )
+        if handled and not deleted:
+            await self._link_customer_to_counterparty(obj)
+        return handled
+
+    async def _link_customer_to_counterparty(self, obj: Any) -> None:
+        """Opportunistically resolve the Counterparty for a Stripe customer.
+
+        Imported locally to avoid a service-layer import cycle (the matcher
+        reads ``Counterparty`` + ``StripeCustomer`` which this service already
+        owns).
+        """
+        from app.services.stripe_customer_matcher import (
+            StripeCustomerCounterpartyMatcher,
+        )
+
+        d = M.as_dict(obj)
+        org = self._resolve_org(d)
+        sid = d.get("id")
+        if not org or not isinstance(sid, str):
+            return
+        row = await self._load_row(StripeCustomer, org, sid)
+        if row is None:
+            return
+        matcher = StripeCustomerCounterpartyMatcher(self._db)
+        await matcher.match_and_link(row)
 
     async def apply_subscription(self, obj: Any, *, deleted: bool = False) -> bool:
         d = M.as_dict(obj)

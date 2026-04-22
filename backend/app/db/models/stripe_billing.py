@@ -137,10 +137,24 @@ class StripeBalanceSnapshot(Base):
 
 
 class StripeCustomer(_StripeOrgScoped):
-    """Stripe Customer — AR/billing counterpart."""
+    """Stripe Customer — AR/billing counterpart.
+
+    ``counterparty_id`` links the Stripe customer back to the unified
+    ``counterparties`` table so AR invoices, revrec schedules, and
+    collections automation share a single canonical business entity.
+    The link is nullable — resolution happens opportunistically by the
+    ``StripeCustomerCounterpartyMatcher`` service on upsert; unresolved
+    rows are surfaced for manual review.
+    """
 
     __tablename__ = "stripe_customers"
 
+    counterparty_id: Mapped[str | None] = mapped_column(
+        PGUUID(as_uuid=False),
+        ForeignKey("counterparties.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str | None] = mapped_column(String(512), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -157,6 +171,11 @@ class StripeCustomer(_StripeOrgScoped):
     __table_args__ = (
         UniqueConstraint("organization_id", "stripe_id", name="uq_stripe_cus_org_stripe_id"),
         Index("ix_stripe_cus_org_email", "organization_id", "email"),
+        Index(
+            "ix_stripe_cus_org_counterparty",
+            "organization_id",
+            "counterparty_id",
+        ),
     )
 
 
