@@ -98,8 +98,12 @@ export function HomeIntegrationsSection({ className }: { className?: string }) {
               className={cn(
                 "flex items-center justify-center overflow-hidden rounded-lg px-2 py-2 ring-1 ring-inset transition-all duration-200 hover:brightness-[1.03] dark:hover:brightness-110 sm:rounded-xl sm:px-2.5 sm:py-2.5",
                 item.frameSize === "wordmark"
-                  ? "min-h-[3rem] min-w-[6.75rem] sm:min-h-[3.25rem] sm:min-w-[8.25rem]"
-                  : "aspect-square min-h-[3rem] min-w-[3rem] sm:min-h-[3.25rem] sm:min-w-[3.25rem]",
+                  ? item.id === "stripe"
+                    ? "min-h-[2.75rem] min-w-[6rem] sm:min-h-[3rem] sm:min-w-[7.25rem]"
+                    : "min-h-[3rem] min-w-[6.75rem] sm:min-h-[3.25rem] sm:min-w-[8.25rem]"
+                  : item.id === "hubspot" || item.id === "snowflake"
+                    ? "aspect-square min-h-[3.25rem] min-w-[3.25rem] sm:min-h-[3.5rem] sm:min-w-[3.5rem]"
+                    : "aspect-square min-h-[3rem] min-w-[3rem] sm:min-h-[3.25rem] sm:min-w-[3.25rem]",
                 item.frame
               )}
             >
@@ -122,8 +126,12 @@ export function HomeIntegrationsSection({ className }: { className?: string }) {
                   className={cn(
                     "h-auto w-auto object-contain",
                     item.logo.shape === "wordmark"
-                      ? "max-h-7 w-auto max-w-[6rem] sm:max-h-8 sm:max-w-[7.25rem]"
-                      : "max-h-8 max-w-8 sm:max-h-9 sm:max-w-9"
+                      ? item.id === "stripe"
+                        ? "max-h-6 w-auto max-w-[5.75rem] sm:max-h-7 sm:max-w-[7rem]"
+                        : "max-h-7 w-auto max-w-[6rem] sm:max-h-8 sm:max-w-[7.25rem]"
+                      : item.id === "hubspot" || item.id === "snowflake"
+                        ? "max-h-10 max-w-10 sm:max-h-[2.75rem] sm:max-w-[2.75rem]"
+                        : "max-h-8 max-w-8 sm:max-h-9 sm:max-w-9"
                   )}
                 />
               )}

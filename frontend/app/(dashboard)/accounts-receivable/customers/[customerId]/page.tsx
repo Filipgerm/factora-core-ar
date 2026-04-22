@@ -10,7 +10,7 @@ export default function ArCustomerDetailPage() {
   const params = useParams();
   const customerId =
     typeof params.customerId === "string" ? params.customerId : "";
-  const { customer, isLoading } = useArCustomerRoute(customerId);
+  const { customer, counterparty, isLoading } = useArCustomerRoute(customerId);
 
   if (isLoading) {
     return (
@@ -22,15 +22,9 @@ export default function ArCustomerDetailPage() {
     );
   }
 
-  if (!customer) {
+  if (!customer || !counterparty) {
     notFound();
   }
 
-  return (
-    <ArCustomerHubView
-      customerId={customer.id}
-      legalName={customer.legalName}
-      country={customer.country}
-    />
-  );
+  return <ArCustomerHubView counterparty={counterparty} />;
 }

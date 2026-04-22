@@ -9,12 +9,12 @@ import {
   BillingScheduleChart,
   RevenueScheduleChart,
 } from "@/components/features/accounts-receivable/ar-schedule-charts";
-import { getProductDetailDemo } from "@/lib/views/ar-customer-demo-data";
+import { productDetailFromCounterparty } from "@/lib/views/ar-counterparty-context";
+import type { CounterpartyResponse } from "@/lib/schemas/organization";
 import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
 
 type Props = {
-  customerId: string;
-  legalName: string;
+  counterparty: CounterpartyResponse;
   productSlug: string;
 };
 
@@ -27,12 +27,13 @@ function fmtChart(n: number, currency: string) {
 }
 
 export function ArCustomerProductDetailView({
-  customerId,
-  legalName,
+  counterparty,
   productSlug,
 }: Props) {
+  const customerId = counterparty.id;
+  const legalName = counterparty.name;
   const base = `/accounts-receivable/customers/${customerId}`;
-  const demo = getProductDetailDemo(customerId, productSlug);
+  const demo = productDetailFromCounterparty(counterparty, productSlug);
 
   if (!demo) {
     return (

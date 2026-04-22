@@ -24,7 +24,7 @@ import {
   isCustomerType,
 } from "@/lib/organization/counterparty-mappers";
 import type { ArCountry, ArCustomer } from "@/lib/views/ar";
-import { enrichArCustomerRow } from "@/lib/views/ar-customer-demo-data";
+import { enrichArCustomerRow } from "@/lib/views/ar-counterparty-context";
 import { cn } from "@/lib/utils";
 
 function fmtEUR(n: number) {
@@ -49,7 +49,9 @@ export function ArCustomersView() {
     () =>
       (counterparties ?? [])
         .filter((c) => isCustomerType(c.type))
-        .map((c) => enrichArCustomerRow(counterpartyToArCustomer(c))),
+        .map((c) =>
+          enrichArCustomerRow(counterpartyToArCustomer(c), c)
+        ),
     [counterparties]
   );
 

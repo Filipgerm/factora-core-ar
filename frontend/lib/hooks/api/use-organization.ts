@@ -20,7 +20,6 @@ import {
   type CounterpartyUpdate,
   type OrganizationSetupRequest,
 } from "@/lib/schemas/organization";
-import { mergeSeedOrgCounterparties } from "@/lib/demo/demo-counterparty-fixtures";
 import { useAuthSession } from "@/lib/hooks/api/use-auth";
 
 async function parseJson<T>(
@@ -123,8 +122,6 @@ export function useCounterpartiesQuery() {
       return z.array(counterpartyResponseSchema).parse(json);
     },
     enabled,
-    select: (rows: CounterpartyResponse[]) =>
-      mergeSeedOrgCounterparties(rows, organizationId),
   });
 }
 

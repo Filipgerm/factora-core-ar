@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, Circle } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, Circle, Package } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,23 +14,52 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { ArCustomerCrumbBar } from "@/components/features/accounts-receivable/ar-customer-nav";
+import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
+import type { CounterpartyResponse } from "@/lib/schemas/organization";
 import {
-  getCustomerProductGroups,
+  productGroupsFromCounterparty,
   type ProductGroupDemo,
-} from "@/lib/views/ar-customer-demo-data";
+} from "@/lib/views/ar-counterparty-context";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  customerId: string;
-  legalName: string;
+  counterparty: CounterpartyResponse;
 };
 
-export function ArCustomerProductsView({ customerId, legalName }: Props) {
-  const groups = getCustomerProductGroups(customerId);
+export function ArCustomerProductsView({ counterparty }: Props) {
+  const customerId = counterparty.id;
+  const legalName = counterparty.name;
+  const groups = productGroupsFromCounterparty(counterparty);
   const base = `/accounts-receivable/customers/${customerId}`;
-  const [open, setOpen] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(groups.map((g) => [g.id, true]))
+  const defaultOpen = useMemo(
+    () => Object.fromEntries(groups.map((g) => [g.id, true])),
+    [groups]
   );
+  const [open, setOpen] = useState<Record<string, boolean>>(defaultOpen);
+  useEffect(() => {
+    setOpen(defaultOpen);
+  }, [defaultOpen]);
+
+  if (groups.length === 0) {
+    return (
+      <div className="space-y-6">
+        <ArCustomerCrumbBar
+          segments={[
+            { label: "Customer", href: "/accounts-receivable/customers" },
+            { label: legalName, href: base },
+            { label: "Products" },
+          ]}
+        />
+        <FeatureEmptyState
+          icon={Package}
+          title="No products"
+          description="This customer has no demo product catalog in the database yet."
+          ctaHref={base}
+          ctaLabel="Back to customer"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

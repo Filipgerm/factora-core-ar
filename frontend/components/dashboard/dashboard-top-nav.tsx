@@ -11,11 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthSession, useLogoutMutation } from "@/lib/hooks/api/use-auth";
 import { useCounterpartiesQuery } from "@/lib/hooks/api/use-organization";
-import {
-  DEMO_COUNTERPARTY_NAME_BY_ID,
-  isLikelyUuid,
-} from "@/lib/demo/demo-counterparty-fixtures";
 import { cn } from "@/lib/utils";
+
+const UUID_SEGMENT_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isLikelyUuidSegment(segment: string): boolean {
+  return UUID_SEGMENT_RE.test(segment);
+}
 
 /** First path segment → section title */
 const ROOT_SEGMENT_LABEL: Record<string, string> = {
@@ -67,8 +70,8 @@ function labelForSegment(
   if (fromCp) {
     return fromCp;
   }
-  if (isLikelyUuid(segment)) {
-    return DEMO_COUNTERPARTY_NAME_BY_ID[segment] ?? "Customer";
+  if (isLikelyUuidSegment(segment)) {
+    return "Customer";
   }
   if (index === 0) {
     return ROOT_SEGMENT_LABEL[segment] ?? segment.replace(/-/g, " ");

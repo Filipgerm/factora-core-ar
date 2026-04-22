@@ -12,7 +12,7 @@ export default function ArCustomerProductDetailPage() {
     typeof params.customerId === "string" ? params.customerId : "";
   const productSlug =
     typeof params.productId === "string" ? params.productId : "";
-  const { customer, isLoading } = useArCustomerRoute(customerId);
+  const { customer, counterparty, isLoading } = useArCustomerRoute(customerId);
 
   if (isLoading) {
     return (
@@ -25,14 +25,13 @@ export default function ArCustomerProductDetailPage() {
     );
   }
 
-  if (!customer) {
+  if (!customer || !counterparty) {
     notFound();
   }
 
   return (
     <ArCustomerProductDetailView
-      customerId={customer.id}
-      legalName={customer.legalName}
+      counterparty={counterparty}
       productSlug={productSlug}
     />
   );

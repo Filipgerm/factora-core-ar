@@ -81,6 +81,7 @@ export const counterpartyResponseSchema = z.object({
   registry_data: z
     .union([z.record(z.unknown()), z.null()])
     .optional(),
+  ar_demo_context: z.union([z.record(z.unknown()), z.null()]).optional(),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),
 });

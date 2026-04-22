@@ -7,7 +7,7 @@ import {
   counterpartyToArCustomer,
   isCustomerType,
 } from "@/lib/organization/counterparty-mappers";
-import { enrichArCustomerRow } from "@/lib/views/ar-customer-demo-data";
+import { enrichArCustomerRow } from "@/lib/views/ar-counterparty-context";
 import type { ArCustomer } from "@/lib/views/ar";
 import type { CounterpartyResponse } from "@/lib/schemas/organization";
 
@@ -28,7 +28,7 @@ export function useArCustomerRoute(customerId: string | undefined): {
     if (!raw) {
       return { isLoading, customer: null, counterparty: null };
     }
-    const customer = enrichArCustomerRow(counterpartyToArCustomer(raw));
+    const customer = enrichArCustomerRow(counterpartyToArCustomer(raw), raw);
     return { isLoading, customer, counterparty: raw };
   }, [counterparties, isLoading, customerId]);
 }

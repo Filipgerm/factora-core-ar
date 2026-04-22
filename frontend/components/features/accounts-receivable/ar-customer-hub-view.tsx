@@ -13,8 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ArCustomerCrumbBar } from "@/components/features/accounts-receivable/ar-customer-nav";
-import { getCustomerHubDemo } from "@/lib/views/ar-customer-demo-data";
-import type { ArCountry } from "@/lib/views/ar";
+import { hubDemoFromCounterparty } from "@/lib/views/ar-counterparty-context";
+import type { CounterpartyResponse } from "@/lib/schemas/organization";
 import { cn } from "@/lib/utils";
 
 function fmtMoney(n: number, currency: string) {
@@ -26,17 +26,13 @@ function fmtMoney(n: number, currency: string) {
 }
 
 type Props = {
-  customerId: string;
-  legalName: string;
-  country: ArCountry;
+  counterparty: CounterpartyResponse;
 };
 
-export function ArCustomerHubView({
-  customerId,
-  legalName,
-  country,
-}: Props) {
-  const demo = getCustomerHubDemo(customerId, legalName, country);
+export function ArCustomerHubView({ counterparty }: Props) {
+  const demo = hubDemoFromCounterparty(counterparty);
+  const customerId = counterparty.id;
+  const legalName = counterparty.name;
   const productsHref = `/accounts-receivable/customers/${customerId}/products`;
 
   return (
