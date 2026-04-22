@@ -77,6 +77,9 @@ class Counterparty(Base):
     )
     registry_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    #: Demo-only AR hub/products payload (seeded); null in production counterparties.
+    ar_demo_context: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

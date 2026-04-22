@@ -470,15 +470,24 @@ async def _insert_demo_org(session: AsyncSession, org_id: str) -> None:
 
 
 async def _insert_counterparties(session: AsyncSession, org_id: str) -> None:
+    from app.core.demo_ar_counterparty_context import ar_demo_context_for_counterparty
     from app.core.demo import get_demo_payload
     from app.db.models.counterparty import Counterparty, CounterpartyType
 
     rows = get_demo_payload("organization_counterparties")["counterparties"]
     for r in rows:
         ctype = CounterpartyType(str(r["type"]).lower())
+        ctype_str = str(r["type"])
+        cid = str(r["id"])
+        ar_ctx = ar_demo_context_for_counterparty(
+            cid,
+            ctype_str,
+            r.get("country"),
+            str(r["name"]),
+        )
         session.add(
             Counterparty(
-                id=str(r["id"]),
+                id=cid,
                 organization_id=org_id,
                 name=r["name"],
                 vat_number=r.get("vat_number"),
@@ -491,6 +500,7 @@ async def _insert_counterparties(session: AsyncSession, org_id: str) -> None:
                 contact_info=r.get("contact_info"),
                 default_category_id=r.get("default_category_id"),
                 registry_data=r.get("registry_data"),
+                ar_demo_context=ar_ctx,
                 created_at=_parse_dt(r["created_at"]),
                 updated_at=_parse_dt(r["updated_at"]),
             )

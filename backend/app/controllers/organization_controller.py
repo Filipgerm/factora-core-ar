@@ -67,6 +67,7 @@ class OrganizationController:
                 UUID(cp.default_category_id) if cp.default_category_id else None
             ),
             registry_data=cp.registry_data,
+            ar_demo_context=cp.ar_demo_context,
             created_at=cp.created_at,
             updated_at=cp.updated_at,
         )

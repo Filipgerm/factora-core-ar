@@ -117,6 +117,8 @@ class CounterpartyResponse(BaseModel):
     contact_info: dict | None
     default_category_id: UUID | None
     registry_data: dict | None
+    #: Optional AR customer hub/products demo JSON (present when seeded).
+    ar_demo_context: dict | None = None
     created_at: datetime
     updated_at: datetime
 
