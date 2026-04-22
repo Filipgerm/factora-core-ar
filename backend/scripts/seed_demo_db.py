@@ -800,6 +800,15 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
         GlRevenueRecognitionScheduleLine,
         GlSubledgerKind,
     )
+    from app.db.models.contracts import (
+        AllocationMethod,
+        BillingSystem,
+        Contract,
+        ContractSource,
+        ContractStatus,
+        PerformanceObligation,
+        PerformanceObligationKind,
+    )
 
     e1 = "00000000-0000-6000-8000-000000000001"
     e2 = "00000000-0000-6000-8000-000000000002"
@@ -1513,12 +1522,105 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
         )
     )
 
+    # IFRS 15 schedules require Contract + PerformanceObligation FKs (see gl.py).
+    ctr_eur = "00000000-0000-7000-8000-0000000000C1"
+    po_eur = "00000000-0000-7000-8000-0000000000D1"
+    ctr_usd = "00000000-0000-7000-8000-0000000000C2"
+    po_usd = "00000000-0000-7000-8000-0000000000D2"
+    acme_cp = "f6a7b8c9-d0e1-42f3-a4b5-c6d7e8f90102"
+
+    session.add(
+        Contract(
+            id=ctr_eur,
+            organization_id=org_id,
+            legal_entity_id=e1,
+            counterparty_id=acme_cp,
+            name="Acme — 12-month enterprise",
+            external_reference="demo-seed-acme-eur-12mo",
+            source=ContractSource.MANUAL,
+            status=ContractStatus.ACTIVE,
+            billing_system=BillingSystem.MANUAL,
+            billing_contract_ref="demo-eur-ctr-001",
+            currency="EUR",
+            total_transaction_price=Decimal("12000.00"),
+            allocation_variance=Decimal("0"),
+            service_start_date=date(2026, 1, 1),
+            service_end_date=date(2026, 12, 31),
+            deleted_at=None,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+    session.add(
+        PerformanceObligation(
+            id=po_eur,
+            organization_id=org_id,
+            contract_id=ctr_eur,
+            sequence=0,
+            name="Enterprise subscription (straight-line)",
+            kind=PerformanceObligationKind.OVER_TIME_STRAIGHT_LINE,
+            allocation_method=AllocationMethod.RELATIVE_SSP,
+            standalone_selling_price=Decimal("12000.00"),
+            allocated_transaction_price=Decimal("12000.00"),
+            currency="EUR",
+            service_start_date=date(2026, 1, 1),
+            service_end_date=date(2026, 12, 31),
+            billing_system=BillingSystem.MANUAL,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+    session.add(
+        Contract(
+            id=ctr_usd,
+            organization_id=org_id,
+            legal_entity_id=e2,
+            counterparty_id=acme_cp,
+            name="US API metering contract",
+            external_reference="demo-seed-us-api-meter",
+            source=ContractSource.MANUAL,
+            status=ContractStatus.ACTIVE,
+            billing_system=BillingSystem.MANUAL,
+            billing_contract_ref="demo-usd-ctr-001",
+            currency="USD",
+            total_transaction_price=Decimal("48000.00"),
+            allocation_variance=Decimal("0"),
+            service_start_date=date(2026, 1, 1),
+            service_end_date=date(2026, 12, 31),
+            deleted_at=None,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+    session.add(
+        PerformanceObligation(
+            id=po_usd,
+            organization_id=org_id,
+            contract_id=ctr_usd,
+            sequence=0,
+            name="API usage (usage-based recognition)",
+            kind=PerformanceObligationKind.OVER_TIME_USAGE_BASED,
+            allocation_method=AllocationMethod.RELATIVE_SSP,
+            standalone_selling_price=Decimal("48000.00"),
+            allocated_transaction_price=Decimal("48000.00"),
+            currency="USD",
+            service_start_date=date(2026, 1, 1),
+            service_end_date=date(2026, 12, 31),
+            billing_system=BillingSystem.MANUAL,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+    )
+    await session.flush()
+
     sch_id = "00000000-0000-6000-8000-000000000080"
     session.add(
         GlRevenueRecognitionSchedule(
             id=sch_id,
             organization_id=org_id,
             legal_entity_id=e1,
+            contract_id=ctr_eur,
+            performance_obligation_id=po_eur,
             contract_name="Acme — 12-month enterprise (IFRS 15 schedule)",
             currency="EUR",
             total_contract_value=Decimal("12000.00"),
@@ -1551,6 +1653,8 @@ async def _insert_gl(session: AsyncSession, org_id: str) -> None:
             id=sch_us,
             organization_id=org_id,
             legal_entity_id=e2,
+            contract_id=ctr_usd,
+            performance_obligation_id=po_usd,
             contract_name="US sub — API metering (usage-based recognition)",
             currency="USD",
             total_contract_value=Decimal("48000.00"),
