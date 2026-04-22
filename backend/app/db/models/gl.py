@@ -479,16 +479,20 @@ class GlRevenueRecognitionSchedule(Base):
         nullable=False,
         index=True,
     )
-    contract_id: Mapped[str | None] = mapped_column(
+    # Every revrec schedule MUST be bound to a specific Contract +
+    # Performance Obligation — it is the IFRS 15 unit of recognition.
+    # ``ondelete=RESTRICT`` guarantees we never orphan a financial
+    # artifact by cascading a contract delete.
+    contract_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
-        ForeignKey("contracts.id", ondelete="SET NULL"),
-        nullable=True,
+        ForeignKey("contracts.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
     )
-    performance_obligation_id: Mapped[str | None] = mapped_column(
+    performance_obligation_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
-        ForeignKey("performance_obligations.id", ondelete="SET NULL"),
-        nullable=True,
+        ForeignKey("performance_obligations.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
     )
     contract_name: Mapped[str] = mapped_column(String(255), nullable=False)
