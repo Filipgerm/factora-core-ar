@@ -23,28 +23,34 @@ class SaltEdgeClient:
     """Thin HTTP client for Salt Edge v6.
 
     Handles base URL, auth headers (App-id & Secret), timeouts, and retries.
+
+    When ``settings.demo_mode`` is True, **no** ``httpx.Client`` is created and all
+    requests are satisfied by :meth:`_demo_saltedge_response` (no outbound HTTP).
     """
 
     def __init__(
         self, settings: Settings, *, transport: httpx.BaseTransport | None = None
     ) -> None:
         self.settings = settings
-        self._client = httpx.Client(
-            base_url=getattr(
-                self.settings, "SALTEDGE_BASE_URL", "https://www.saltedge.com/api/v6"
-            ),
-            timeout=30,
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "App-id": self.settings.SALTEDGE_APP_ID,
-                "Secret": self.settings.SALTEDGE_SECRET,
-            },
-            transport=transport,
-        )
+        self._sync_client: httpx.Client | None = None
+        if not settings.demo_mode:
+            self._sync_client = httpx.Client(
+                base_url=getattr(
+                    self.settings, "SALTEDGE_BASE_URL", "https://www.saltedge.com/api/v6"
+                ),
+                timeout=30,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "App-id": self.settings.SALTEDGE_APP_ID,
+                    "Secret": self.settings.SALTEDGE_SECRET,
+                },
+                transport=transport,
+            )
 
     def close(self) -> None:
-        self._client.close()
+        if self._sync_client is not None:
+            self._sync_client.close()
 
     def _demo_saltedge_response(
         self,
@@ -283,8 +289,12 @@ class SaltEdgeClient:
                 method, url, json_body=json, params=params
             )
             return self._handle_response(demo_resp)
+        if self._sync_client is None:
+            raise RuntimeError(
+                "Salt Edge HTTP client is unavailable (demo_mode was True at construction)"
+            )
         try:
-            resp = self._client.request(
+            resp = self._sync_client.request(
                 method, url, headers=headers, json=json, params=params
             )
         except httpx.TimeoutException as e:
