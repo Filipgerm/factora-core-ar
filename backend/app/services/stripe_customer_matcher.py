@@ -77,19 +77,25 @@ class StripeCustomerCounterpartyMatcher:
 
     @staticmethod
     def _extract_vat(customer: StripeCustomer) -> str | None:
-        """Pull a VAT number from Stripe's customer object or metadata."""
+        """Pull a VAT number from Stripe's customer object or metadata.
+
+        Checked in order:
+            1. ``raw_stripe_object.tax_ids.data[*].value`` (Stripe's Tax ID
+               collection on the customer).
+            2. ``stripe_metadata.vat_number`` / ``tax_id`` / ``vat`` (our own
+               ingestion convention).
+        """
         raw: dict[str, Any] | None = customer.raw_stripe_object
-        if not isinstance(raw, dict):
-            return None
-        tax_ids = raw.get("tax_ids")
-        if isinstance(tax_ids, dict):
-            data = tax_ids.get("data")
-            if isinstance(data, list):
-                for entry in data:
-                    if isinstance(entry, dict):
-                        val = entry.get("value")
-                        if isinstance(val, str) and val.strip():
-                            return val.strip().upper()
+        if isinstance(raw, dict):
+            tax_ids = raw.get("tax_ids")
+            if isinstance(tax_ids, dict):
+                data = tax_ids.get("data")
+                if isinstance(data, list):
+                    for entry in data:
+                        if isinstance(entry, dict):
+                            val = entry.get("value")
+                            if isinstance(val, str) and val.strip():
+                                return val.strip().upper()
         md = customer.stripe_metadata or {}
         if isinstance(md, dict):
             for key in ("vat_number", "tax_id", "vat"):
