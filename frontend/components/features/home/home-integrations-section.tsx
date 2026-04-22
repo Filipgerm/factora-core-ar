@@ -69,7 +69,7 @@ export function HomeIntegrationsSection({ className }: { className?: string }) {
         </h2>
       </header>
 
-      <ul className="flex flex-wrap items-center gap-x-10 gap-y-6 sm:gap-x-12">
+      <ul className="flex flex-wrap items-center justify-center gap-x-12 gap-y-8 sm:gap-x-16 md:justify-start">
         {ITEMS.map((item, i) => (
           <motion.li
             key={item.id}
@@ -79,18 +79,26 @@ export function HomeIntegrationsSection({ className }: { className?: string }) {
             className="flex shrink-0 items-center justify-center"
           >
             {item.logo.kind === "lucide" ? (
-              <Landmark className={cn("size-8", item.logo.className)} aria-hidden />
+              <Landmark
+                className={cn("size-14 sm:size-16", item.logo.className)}
+                aria-hidden
+              />
             ) : (
               <Image
                 src={item.logo.src}
                 alt={item.logo.alt}
-                width={item.logo.shape === "wordmark" ? 88 : 48}
-                height={48}
-                className={cn(
-                  "h-auto max-h-10 w-auto object-contain",
+                width={item.logo.shape === "wordmark" ? 200 : 96}
+                height={item.logo.shape === "wordmark" ? 56 : 96}
+                sizes={
                   item.logo.shape === "wordmark"
-                    ? "max-w-[5rem]"
-                    : "max-w-10"
+                    ? "(max-width: 640px) 180px, 220px"
+                    : "(max-width: 640px) 72px, 96px"
+                }
+                className={cn(
+                  "h-auto w-auto object-contain",
+                  item.logo.shape === "wordmark"
+                    ? "max-h-11 min-h-[2.75rem] w-auto max-w-[min(92vw,13rem)] sm:max-h-14 sm:min-h-[3.25rem] sm:max-w-[15rem]"
+                    : "max-h-14 min-h-[3.25rem] max-w-[6.5rem] sm:max-h-[4.25rem] sm:min-h-[4.25rem] sm:max-w-[7.5rem]"
                 )}
               />
             )}
