@@ -5,11 +5,11 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple, Sequence
 
-from sqlalchemy import and_, case, distinct, func, select
+from sqlalchemy import String, and_, case, cast, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ExternalServiceError, NotFoundError
-from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
+from app.db.models.aade import AadeInvoiceModel, InvoiceDirection
 from app.db.models.alerts import Alert
 from app.db.models.banking import (
     BankAccountModel,
@@ -19,6 +19,7 @@ from app.db.models.banking import (
     TransactionMode,
     TransactionStatus,
 )
+from app.db.models.invoices import Invoice, InvoiceSource
 from app.models.dashboard import (
     AadeDocumentsRequest,
     DashboardMetricsRequest,
@@ -607,25 +608,60 @@ class DashboardService:
         all_months = sorted(set(revenue_dict.keys()) | set(expenses_dict.keys()))
         return [{"month": month, "value": None} for month in all_months]
 
+    # ------------------------------------------------------------------
+    # AADE dashboard queries
+    # ------------------------------------------------------------------
+    #
+    # Reads go through the unified ``invoices`` table so AR/AP dashboards
+    # see the same canonical row regardless of source. AADE-specific columns
+    # (direction, VAT breakdown, uid/mark) are still joined from
+    # ``aade_invoices`` because they are Greek-tax-domain concerns that do
+    # not belong on the generic ``Invoice`` contract.
+    #
+    # Join key: ``Invoice.external_id = CAST(AadeInvoiceModel.mark AS VARCHAR)``
+    # with ``COALESCE(mark::text, uid)`` to cover invoices without a mark.
+    # Step 4 swaps this for a proper ``invoice_id`` FK; the behaviour stays
+    # identical so dashboards do not need another pass after the migration.
+
+    @staticmethod
+    def _aade_external_id():
+        """Expression that mirrors ``AadeInvoiceBridgeService._external_id``."""
+        return func.coalesce(cast(AadeInvoiceModel.mark, String), AadeInvoiceModel.uid)
+
+    @classmethod
+    def _aade_join(cls):
+        return Invoice.external_id == cls._aade_external_id()
+
+    def _aade_base_select(self, *entities):
+        """Return a ``SELECT`` tuple over unified invoices ⨝ AADE mirror."""
+        return (
+            select(*entities)
+            .join(
+                AadeInvoiceModel,
+                and_(
+                    AadeInvoiceModel.organization_id == Invoice.organization_id,
+                    self._aade_join(),
+                ),
+            )
+            .where(
+                Invoice.organization_id == self.organization_id,
+                Invoice.source == InvoiceSource.AADE,
+                Invoice.deleted_at.is_(None),
+            )
+        )
+
     @staticmethod
     def _apply_invoice_filters(query, request: "AadeDocumentsRequest"):
         """Apply optional AadeDocumentsRequest filters to any SQLAlchemy select.
 
-        Centralises the five optional filter conditions so that the data query
-        and the count query in :meth:`get_aade_documents` share a single source
-        of truth.
-
-        Args:
-            query: A SQLAlchemy ``Select`` statement targeting ``AadeInvoiceModel``.
-            request: The filter / pagination request object.
-
-        Returns:
-            The query with all applicable ``WHERE`` clauses appended.
+        Date filters target ``Invoice.issue_date`` (the canonical date on
+        the unified row); AADE-specific filters (``invoice_type``,
+        ``issuer_vat``, ``counterpart_vat``) still target the AADE mirror.
         """
         if request.date_from:
-            query = query.where(AadeInvoiceModel.issue_date >= request.date_from)
+            query = query.where(Invoice.issue_date >= request.date_from)
         if request.date_to:
-            query = query.where(AadeInvoiceModel.issue_date <= request.date_to)
+            query = query.where(Invoice.issue_date <= request.date_to)
         if request.invoice_type:
             query = query.where(AadeInvoiceModel.invoice_type == request.invoice_type)
         if request.issuer_vat:
@@ -638,57 +674,31 @@ class DashboardService:
 
     async def get_aade_documents(
         self, request: AadeDocumentsRequest
-    ) -> Tuple[Sequence[AadeInvoiceModel], int]:
+    ) -> Tuple[Sequence[Tuple[AadeInvoiceModel, Invoice]], int]:
+        """Paginated AADE invoices with filtering, sourced from unified invoices.
+
+        Returns ``((aade_row, unified_row), total)`` tuples so the controller
+        can map AADE-specific fields from one side and financial fields
+        (issue_date, currency, amount) from the unified side.
         """
-        Get AADE invoices with filtering and pagination.
+        base = self._aade_base_select(AadeInvoiceModel, Invoice)
+        base = self._apply_invoice_filters(base, request)
 
-        Args:
-            request: AadeDocumentsRequest with filters and pagination
-
-        Returns:
-            AadeDocumentsResponse with paginated invoice list
-        """
-        # Build base query - join invoices with documents to filter by organization_id
-        query = (
-            select(AadeInvoiceModel)
-            .join(
-                AadeDocumentModel, AadeInvoiceModel.document_id == AadeDocumentModel.id
-            )
-            .where(AadeDocumentModel.organization_id == self.organization_id)
-        )
-
-        # Apply the same optional filters to both the data query and the count
-        # query via a shared helper to avoid copy-pasting five conditions.
-        query = self._apply_invoice_filters(query, request)
-
-        count_query = (
-            select(func.count(AadeInvoiceModel.id))
-            .select_from(AadeInvoiceModel)
-            .join(
-                AadeDocumentModel,
-                AadeInvoiceModel.document_id == AadeDocumentModel.id,
-            )
-            .where(AadeDocumentModel.organization_id == self.organization_id)
-        )
+        count_query = self._aade_base_select(func.count(Invoice.id))
         count_query = self._apply_invoice_filters(count_query, request)
 
-        count_result = await self.db.execute(count_query)
-        total = count_result.scalar_one()
+        total = (await self.db.execute(count_query)).scalar_one() or 0
 
-        # Apply ordering (newest first by issue_date, then by created_at)
-        query = query.order_by(
-            AadeInvoiceModel.issue_date.desc().nulls_last(),
-            AadeInvoiceModel.created_at.desc(),
-        )
+        base = base.order_by(
+            Invoice.issue_date.desc().nulls_last(),
+            Invoice.created_at.desc(),
+        ).offset(request.offset).limit(request.limit)
 
-        # Apply pagination
-        query = query.offset(request.offset).limit(request.limit)
-
-        # Execute query
-        result = await self.db.execute(query)
-        invoices = result.scalars().all()
-
-        return invoices, total
+        rows = (await self.db.execute(base)).all()
+        pairs: List[Tuple[AadeInvoiceModel, Invoice]] = [
+            (row[0], row[1]) for row in rows
+        ]
+        return pairs, total
 
     async def get_aade_summary(
         self,
@@ -748,7 +758,12 @@ class DashboardService:
     # ---------- helpers ----------
 
     def _signed_expr(self, column):
-        """Return a direction-aware signed expression for a numeric column."""
+        """Return a direction-aware signed expression for a numeric column.
+
+        Direction still lives on the AADE mirror; the signed expression is
+        reused for both VAT columns (on AADE) and the gross total (on the
+        unified ``Invoice``) so all three sums share one accounting rule.
+        """
         return case(
             (
                 AadeInvoiceModel.direction == InvoiceDirection.TRANSMITTED,
@@ -764,23 +779,20 @@ class DashboardService:
     async def _get_totals(
         self, db: AsyncSession, organization_id: str
     ) -> Tuple[Decimal, Decimal, Decimal]:
-        """Compute global direction-aware totals across all invoices for a buyer."""
+        """Compute global direction-aware totals across AADE invoices for an org.
+
+        Net / VAT breakdown are AADE-specific and come from the mirror;
+        gross total flows from the unified ``Invoice.amount`` so it stays
+        consistent with every other AR/AP dashboard downstream.
+        """
         signed_net = self._signed_expr(AadeInvoiceModel.total_net_value)
         signed_vat = self._signed_expr(AadeInvoiceModel.total_vat_amount)
-        signed_gross = self._signed_expr(AadeInvoiceModel.total_gross_value)
+        signed_gross = self._signed_expr(Invoice.amount)
 
-        totals_query = (
-            select(
-                func.coalesce(func.sum(signed_net), 0).label("total_net_value_sum"),
-                func.coalesce(func.sum(signed_vat), 0).label("total_vat_amount_sum"),
-                func.coalesce(func.sum(signed_gross), 0).label("total_gross_value_sum"),
-            )
-            .select_from(AadeInvoiceModel)
-            .join(
-                AadeDocumentModel,
-                AadeInvoiceModel.document_id == AadeDocumentModel.id,
-            )
-            .where(AadeDocumentModel.organization_id == organization_id)
+        totals_query = self._aade_base_select(
+            func.coalesce(func.sum(signed_net), 0).label("total_net_value_sum"),
+            func.coalesce(func.sum(signed_vat), 0).label("total_vat_amount_sum"),
+            func.coalesce(func.sum(signed_gross), 0).label("total_gross_value_sum"),
         )
 
         result = await db.execute(totals_query)
@@ -800,22 +812,10 @@ class DashboardService:
         vat_column,
     ) -> int:
         """Count distinct counterpart/supplier VATs for a given direction."""
-        query = (
-            select(func.count(distinct(vat_column)))
-            .select_from(AadeInvoiceModel)
-            .join(
-                AadeDocumentModel,
-                AadeInvoiceModel.document_id == AadeDocumentModel.id,
-            )
-            .where(
-                and_(
-                    AadeDocumentModel.organization_id == organization_id,
-                    AadeInvoiceModel.direction == direction,
-                    vat_column.isnot(None),
-                )
-            )
+        query = self._aade_base_select(func.count(distinct(vat_column))).where(
+            AadeInvoiceModel.direction == direction,
+            vat_column.isnot(None),
         )
-
         result = await db.execute(query)
         return result.scalar_one() or 0
 
@@ -827,38 +827,28 @@ class DashboardService:
         vat_column,
         is_supplier: bool,
     ) -> List[PartySummary]:
-        """
-        Build per-party breakdown (customer or supplier) for a given direction.
-        - direction=TRANSMITTED + vat_column=counterpart_vat → customers (income)
-        - direction=RECEIVED + vat_column=issuer_vat → suppliers (expenses)
+        """Per-party breakdown (customer for TRANSMITTED, supplier for RECEIVED).
+
+        Invoice count and gross total are taken from the unified ``Invoice``
+        table; net / VAT breakdown from the AADE mirror (Greek-tax-specific).
         """
         breakdown_query = (
-            select(
+            self._aade_base_select(
                 vat_column.label("vat"),
-                func.count(AadeInvoiceModel.id).label("invoice_count"),
+                func.count(Invoice.id).label("invoice_count"),
                 func.coalesce(func.sum(AadeInvoiceModel.total_net_value), 0).label(
                     "total_net_value_sum"
                 ),
                 func.coalesce(func.sum(AadeInvoiceModel.total_vat_amount), 0).label(
                     "total_vat_amount_sum"
                 ),
-                func.coalesce(func.sum(AadeInvoiceModel.total_gross_value), 0).label(
+                func.coalesce(func.sum(Invoice.amount), 0).label(
                     "total_gross_value_sum"
                 ),
             )
-            .select_from(AadeInvoiceModel)
-            .join(
-                AadeDocumentModel,
-                AadeInvoiceModel.document_id == AadeDocumentModel.id,
-            )
-            .where(
-                and_(
-                    AadeDocumentModel.organization_id == organization_id,
-                    AadeInvoiceModel.direction == direction,
-                )
-            )
+            .where(AadeInvoiceModel.direction == direction)
             .group_by(vat_column)
-            .order_by(func.sum(AadeInvoiceModel.total_gross_value).desc())
+            .order_by(func.sum(Invoice.amount).desc())
         )
 
         result = await db.execute(breakdown_query)
