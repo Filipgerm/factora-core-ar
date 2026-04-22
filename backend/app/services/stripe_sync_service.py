@@ -297,7 +297,39 @@ class StripeSyncService:
         )
         if handled and not deleted:
             await self._upsert_subscription_items_from_subscription(d)
+            await self._bootstrap_contract_from_subscription(d)
         return handled
+
+    async def _bootstrap_contract_from_subscription(
+        self, d: dict[str, Any]
+    ) -> None:
+        """Turn a live Stripe Subscription into a Contract + POs.
+
+        Uses the mirror tables we just upserted — no Stripe HTTP calls —
+        so safe on the webhook hot-path. Errors are logged and swallowed
+        because a failure to bootstrap the contract must never prevent
+        the billing mirror from acking the webhook.
+        """
+        from app.services.contract_bootstrapper_service import (
+            ContractBootstrapperService,
+        )
+
+        org = self._resolve_org(d)
+        sid = d.get("id")
+        if not org or not isinstance(sid, str):
+            return
+        try:
+            bootstrapper = ContractBootstrapperService(self._db)
+            await bootstrapper.from_stripe_subscription(
+                organization_id=org, stripe_subscription_id=sid
+            )
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning(
+                "ContractBootstrapper failed for org=%s sub=%s: %s",
+                org,
+                sid,
+                exc,
+            )
 
     async def _upsert_subscription_items_from_subscription(
         self, d: dict[str, Any]
