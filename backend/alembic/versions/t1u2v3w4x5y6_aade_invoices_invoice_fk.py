@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects.postgresql import UUID
 
 
 revision = "t1u2v3w4x5y6"
@@ -31,9 +32,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Must match ``invoices.id`` (native UUID) — VARCHAR(36) cannot reference UUID PK.
     op.add_column(
         "aade_invoices",
-        sa.Column("invoice_id", sa.String(length=36), nullable=True),
+        sa.Column("invoice_id", UUID(as_uuid=False), nullable=True),
     )
     op.create_foreign_key(
         "fk_aade_invoices_invoice_id_invoices",

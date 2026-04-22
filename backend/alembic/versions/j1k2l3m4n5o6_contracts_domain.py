@@ -28,6 +28,10 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+# ``create_type=False`` on column enums: upgrade() pre-creates each type via
+# ``.create(bind, checkfirst=True)`` below. Leaving ``create_type=True`` on the
+# column definitions makes SQLAlchemy emit a second CREATE TYPE during
+# create_table(), which fails with duplicate_object on Postgres.
 _contract_status = postgresql.ENUM(
     "draft",
     "active",
@@ -36,7 +40,7 @@ _contract_status = postgresql.ENUM(
     "canceled",
     "terminated",
     name="contractstatus",
-    create_type=True,
+    create_type=False,
 )
 _contract_source = postgresql.ENUM(
     "manual",
@@ -46,7 +50,7 @@ _contract_source = postgresql.ENUM(
     "ocr_pdf",
     "import_csv",
     name="contractsource",
-    create_type=True,
+    create_type=False,
 )
 _po_kind = postgresql.ENUM(
     "point_in_time",
@@ -54,7 +58,7 @@ _po_kind = postgresql.ENUM(
     "over_time_milestone",
     "over_time_usage_based",
     name="performanceobligationkind",
-    create_type=True,
+    create_type=False,
 )
 _alloc_method = postgresql.ENUM(
     "relative_ssp",
@@ -62,7 +66,7 @@ _alloc_method = postgresql.ENUM(
     "equal_split",
     "explicit",
     name="allocationmethod",
-    create_type=True,
+    create_type=False,
 )
 _alloc_source = postgresql.ENUM(
     "stripe_invoice_line_item",
@@ -71,14 +75,14 @@ _alloc_source = postgresql.ENUM(
     "invoice",
     "manual",
     name="contractallocationsource",
-    create_type=True,
+    create_type=False,
 )
 _mod_type = postgresql.ENUM(
     "separate_contract",
     "termination_and_new",
     "cumulative_catchup",
     name="contractmodificationtype",
-    create_type=True,
+    create_type=False,
 )
 
 

@@ -109,7 +109,7 @@ class AadeInvoiceModel(Base):
     # ``AadeInvoiceBridgeService``). Do NOT re-add them here — the mirror
     # is intentionally slim and Greek-tax-only.
     invoice_id: Mapped[Optional[str]] = mapped_column(
-        String(36),
+        PGUUID(as_uuid=False),
         ForeignKey("invoices.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
