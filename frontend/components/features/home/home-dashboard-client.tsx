@@ -23,7 +23,7 @@ import { HomeDashboardGreeting } from "./home-dashboard-greeting";
 import { HomeKpiBento } from "./home-kpi-bento";
 import { HomeKpiBentoSkeleton } from "./home-kpi-skeleton";
 import { HomeReportsSection } from "./home-reports-section";
-import { HomeTechStackSection } from "./home-tech-stack-section";
+import { HomeIntegrationsSection } from "./home-integrations-section";
 
 export function HomeDashboardClient() {
   const { data: session } = useAuthSession();
@@ -133,7 +133,7 @@ export function HomeDashboardClient() {
             <ActionItemsList items={actionItems} />
           )}
 
-          {hasOrg ? <HomeTechStackSection /> : null}
+          {hasOrg ? <HomeIntegrationsSection /> : null}
         </div>
         <div className="min-h-0 space-y-6 lg:col-span-5">
           <HomeReportsSection className="h-full" />
