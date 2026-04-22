@@ -34,6 +34,16 @@ from app.db.models.contracts import (
     PerformanceObligationKind,
 )
 from app.db.models.stripe_connect import StripeAccountConnection
+from app.db.models.hubspot import (
+    HubspotAssociation,
+    HubspotCompany,
+    HubspotConnection,
+    HubspotDeal,
+    HubspotFile,
+    HubspotLineItem,
+    HubspotProduct,
+    HubspotQuote,
+)
 
 __all__ = [
     # identity
@@ -75,4 +85,13 @@ __all__ = [
     "PerformanceObligationKind",
     # stripe connect
     "StripeAccountConnection",
+    # hubspot
+    "HubspotAssociation",
+    "HubspotCompany",
+    "HubspotConnection",
+    "HubspotDeal",
+    "HubspotFile",
+    "HubspotLineItem",
+    "HubspotProduct",
+    "HubspotQuote",
 ]
