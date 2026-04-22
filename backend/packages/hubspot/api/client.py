@@ -42,10 +42,18 @@ token persistence is the caller's concern.
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping, Sequence
+import time
+from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 import httpx
 
+from packages._http import (
+    log_outbound_request,
+    log_outbound_response,
+    new_correlation_id,
+    retry_async,
+)
+from packages._http.retry import OutboundError, RetryDecision, parse_retry_after
 from packages.hubspot.models.common import (
     HubspotCompany,
     HubspotDeal,
@@ -61,8 +69,25 @@ from packages.hubspot.models.common import (
 
 logger = logging.getLogger(__name__)
 
+# HubSpot returns this header on every response — pair with our
+# ``correlation_id`` so support tickets can be cross-referenced.
+_HUBSPOT_REQUEST_ID_HEADER = "X-HubSpot-Correlation-Id"
 
-class HubspotError(Exception):
+# Status codes we retry — all non-idempotent writes are opted out by
+# using the retry loop only inside ``_request_json`` GET paths today.
+_RETRYABLE_STATUSES: frozenset[int] = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+# Transport exceptions we retry (network flakes, not protocol errors).
+_RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.RemoteProtocolError,
+    httpx.PoolTimeout,
+)
+
+
+class HubspotError(OutboundError):
     """Raised on any non-2xx HubSpot API response.
 
     Attributes
@@ -73,11 +98,17 @@ class HubspotError(Exception):
         Parsed JSON body (when possible) — HubSpot returns a structured
         error envelope: ``{"category": "...", "message": "...",
         "correlationId": "..."}``.
+    retry_after:
+        Seconds the server requested us to wait before retrying (from
+        ``Retry-After``). ``None`` means "fall back to local backoff".
     """
 
-    def __init__(self, *, status: int, body: Any) -> None:
+    def __init__(
+        self, *, status: int, body: Any, retry_after: float | None = None
+    ) -> None:
         self.status = status
         self.body = body
+        self.retry_after = retry_after
         super().__init__(f"HubSpot API error {status}: {body}")
 
 
@@ -201,12 +232,34 @@ class HubspotClient:
         client_secret: str | None = None,
         timeout: httpx.Timeout = _DEFAULT_TIMEOUT,
         http: httpx.AsyncClient | None = None,
+        refresh_access_token_hook: (
+            Callable[[], Awaitable[str]] | None
+        ) = None,
+        max_attempts: int = 4,
     ) -> None:
+        """Construct a tenant-scoped HubSpot client.
+
+        Args:
+            access_token: Current Bearer token. Caller owns persistence.
+            client_id / client_secret: Dev app credentials for OAuth.
+            timeout: Per-request ``httpx.Timeout``.
+            http: Optional ``httpx.AsyncClient`` override (for tests).
+            refresh_access_token_hook: Optional async callable invoked on
+                401 to refresh the access token out-of-band. When it
+                succeeds, its returned token replaces the in-memory one
+                and the failing request is retried exactly once. When it
+                raises, the original 401 bubbles unchanged.
+            max_attempts: Bounded retry count for 429 / 5xx / transient
+                network failures (1 = no retry).
+        """
         self._access_token = access_token
         self._client_id = client_id
         self._client_secret = client_secret
         self._timeout = timeout
         self._http_override = http
+        self._refresh_hook = refresh_access_token_hook
+        self._max_attempts = max(1, max_attempts)
+        self._refresh_attempted = False
 
     # ------------------------------------------------------------------
     # Context-managed AsyncClient
@@ -237,20 +290,110 @@ class HubspotClient:
         params: Mapping[str, Any] | None = None,
         json_body: Any | None = None,
     ) -> Any:
-        headers = self._auth_headers(access_token)
-        async with self._client() as http:
-            resp = await http.request(
-                method, path, headers=headers, params=params, json=json_body
+        """Issue a HubSpot API call with retry + 401-refresh + structured logs.
+
+        Retry policy (GETs + searches are idempotent):
+            * 429 / 408 / 5xx / transient network errors → exponential
+              backoff respecting ``Retry-After``.
+            * 401 once → run ``refresh_access_token_hook`` if supplied,
+              then retry the same call with the new token.
+            * All other 4xx → raise immediately.
+        """
+        correlation_id = new_correlation_id()
+        self._refresh_attempted = False
+
+        async def _attempt(attempt: int) -> Any:
+            headers = self._auth_headers(access_token)
+            start = time.perf_counter()
+            log_outbound_request(
+                integration="hubspot",
+                method=method,
+                url=f"{_API_BASE}{path}",
+                correlation_id=correlation_id,
+                headers=headers,
+                extra={"attempt": attempt},
             )
-        if resp.status_code >= 400:
-            try:
-                body = resp.json()
-            except Exception:  # pragma: no cover — body may not be JSON
-                body = resp.text
-            raise HubspotError(status=resp.status_code, body=body)
-        if resp.status_code == 204 or not resp.content:
-            return None
-        return resp.json()
+            async with self._client() as http:
+                resp = await http.request(
+                    method, path, headers=headers, params=params, json=json_body
+                )
+            duration_ms = (time.perf_counter() - start) * 1000
+            log_outbound_response(
+                integration="hubspot",
+                method=method,
+                url=f"{_API_BASE}{path}",
+                correlation_id=correlation_id,
+                status=resp.status_code,
+                duration_ms=duration_ms,
+                remote_request_id=resp.headers.get(_HUBSPOT_REQUEST_ID_HEADER),
+                attempt=attempt,
+            )
+            if resp.status_code >= 400:
+                try:
+                    body = resp.json()
+                except Exception:  # pragma: no cover — body may not be JSON
+                    body = resp.text
+                raise HubspotError(
+                    status=resp.status_code,
+                    body=body,
+                    retry_after=parse_retry_after(resp.headers.get("Retry-After")),
+                )
+            if resp.status_code == 204 or not resp.content:
+                return None
+            return resp.json()
+
+        return await retry_async(
+            _attempt,
+            decide=self._build_retry_decider(access_token),
+            max_attempts=self._max_attempts,
+        )
+
+    def _build_retry_decider(
+        self, per_call_token: str | None
+    ) -> Callable[[Any, BaseException | None, int], RetryDecision]:
+        """Return a retry-decision closure for the current call.
+
+        The closure is stateful w.r.t. a single ``_request_json`` call so
+        we can implement "refresh access token exactly once" without
+        affecting concurrent calls.
+        """
+
+        def _decide(
+            _result: Any, exc: BaseException | None, _attempt: int
+        ) -> RetryDecision:
+            if exc is None:
+                return RetryDecision(retry=False)
+            if isinstance(exc, _RETRYABLE_EXCEPTIONS):
+                return RetryDecision(retry=True)
+            if isinstance(exc, HubspotError):
+                # 401: attempt a one-shot refresh via the hook.
+                if (
+                    exc.status == 401
+                    and self._refresh_hook is not None
+                    and not self._refresh_attempted
+                    and per_call_token is None
+                ):
+                    self._refresh_attempted = True
+                    return RetryDecision(retry=True, on_retry=self._refresh_token)
+                if exc.status in _RETRYABLE_STATUSES:
+                    return RetryDecision(
+                        retry=True, retry_after_s=exc.retry_after
+                    )
+            return RetryDecision(retry=False)
+
+        return _decide
+
+    async def _refresh_token(self) -> None:
+        """Call the injected refresh hook and swap the in-memory token."""
+        if self._refresh_hook is None:
+            return
+        new_token = await self._refresh_hook()
+        if new_token:
+            self._access_token = new_token
+            logger.info(
+                "hubspot access_token refreshed via hook",
+                extra={"integration": "hubspot"},
+            )
 
     # ------------------------------------------------------------------
     # OAuth

@@ -33,7 +33,7 @@ from packages.hubspot.api.client import HubspotClient, HubspotError
 
 from app.config import settings
 from app.core.exceptions import ExternalServiceError, ValidationError
-from app.core.security.field_encryption import encrypt_secret
+from app.core.security.field_encryption import decrypt_secret, encrypt_secret
 from app.core.security.jwt import (
     decode_hubspot_oauth_state,
     encode_hubspot_oauth_state,
@@ -192,6 +192,71 @@ class HubspotConnectService:
             .order_by(HubspotConnection.connected_at.desc())
         )
         return list(rows)
+
+    # ------------------------------------------------------------------
+    # Tenant-scoped client construction (for Sync / Bridge services)
+    # ------------------------------------------------------------------
+
+    def build_tenant_client(
+        self, connection: HubspotConnection
+    ) -> HubspotClient:
+        """Return a ``HubspotClient`` bound to ``connection``'s tokens.
+
+        Wires a 401-refresh hook that:
+            1. Calls HubSpot's token endpoint with the stored refresh token.
+            2. Re-encrypts the new access token via ``encrypt_secret``.
+            3. Updates ``connection.access_token_encrypted`` and
+               ``connection.access_token_expires_at`` on the current
+               ``AsyncSession`` — the caller is responsible for the
+               commit (same pattern as the rest of the service layer).
+            4. Returns the plain-text new access token so the HTTP retry
+               loop can swap it into the in-memory client.
+
+        When the connection has no refresh token (e.g. imported from a
+        legacy flow) the hook is omitted and 401s bubble unchanged.
+        """
+        access_token = decrypt_secret(connection.access_token_encrypted)
+        refresh_token_plain: str | None = None
+        if connection.refresh_token_encrypted:
+            try:
+                refresh_token_plain = decrypt_secret(
+                    connection.refresh_token_encrypted
+                )
+            except Exception:  # pragma: no cover — treat as no-refresh
+                refresh_token_plain = None
+
+        async def _refresh() -> str:
+            if not refresh_token_plain:
+                raise ExternalServiceError(
+                    "HubSpot connection has no refresh token.",
+                    code="external.hubspot_oauth",
+                )
+            tokens = await self._client.refresh_access_token(
+                refresh_token=refresh_token_plain
+            )
+            connection.access_token_encrypted = encrypt_secret(
+                tokens.access_token
+            )
+            if tokens.refresh_token:
+                connection.refresh_token_encrypted = encrypt_secret(
+                    tokens.refresh_token
+                )
+            connection.access_token_expires_at = utcnow() + timedelta(
+                seconds=max(int(tokens.expires_in), 60)
+            )
+            # Flush so the row is stamped on this session before the
+            # retry uses the new token (commit is the caller's job).
+            await self._db.flush()
+            return tokens.access_token
+
+        return HubspotClient(
+            access_token=access_token,
+            client_id=settings.HUBSPOT_CLIENT_ID or None,
+            client_secret=settings.HUBSPOT_CLIENT_SECRET or None,
+            refresh_access_token_hook=(
+                _refresh if refresh_token_plain else None
+            ),
+        )
 
     async def disconnect(
         self, *, organization_id: str, hub_id: int

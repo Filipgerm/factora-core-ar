@@ -23,7 +23,6 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from packages.hubspot.api.client import HubspotClient
 from packages.hubspot.api.webhooks import (
     HubspotSignatureError,
     parse_webhook_event,
@@ -31,7 +30,6 @@ from packages.hubspot.api.webhooks import (
 )
 
 from app.config import settings
-from app.core.security.field_encryption import decrypt_secret
 from app.db.models.hubspot import (
     HubspotCompany,
     HubspotConnection,
@@ -190,15 +188,10 @@ class HubspotController:
                 )
                 continue
             try:
-                access_token = decrypt_secret(conn.access_token_encrypted)
+                client = self._connect.build_tenant_client(conn)
             except Exception as exc:
-                logger.warning("Failed to decrypt HubSpot access token: %s", exc)
+                logger.warning("Failed to build HubSpot tenant client: %s", exc)
                 continue
-            client = HubspotClient(
-                access_token=access_token,
-                client_id=settings.HUBSPOT_CLIENT_ID or None,
-                client_secret=settings.HUBSPOT_CLIENT_SECRET or None,
-            )
             sync = HubspotSyncService(self._db, connection=conn, client=client)
             for event in portal_events:
                 try:
@@ -330,18 +323,13 @@ class HubspotController:
                 detail="HubSpot connection not found.",
             )
         try:
-            access_token = decrypt_secret(conn.access_token_encrypted)
+            client = self._connect.build_tenant_client(conn)
         except Exception as exc:
-            logger.warning("Decrypting HubSpot token failed: %s", exc)
+            logger.warning("Building HubSpot tenant client failed: %s", exc)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to decrypt HubSpot token.",
             )
-        client = HubspotClient(
-            access_token=access_token,
-            client_id=settings.HUBSPOT_CLIENT_ID or None,
-            client_secret=settings.HUBSPOT_CLIENT_SECRET or None,
-        )
         sync = HubspotSyncService(self._db, connection=conn, client=client)
         upserted = await sync.backfill_deals()
         await self._db.commit()
