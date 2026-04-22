@@ -27,20 +27,19 @@ prospective vs cumulative catch-up).
 Billing-system abstraction
 --------------------------
 Stripe is the first billing engine we integrate with, but the domain must
-scale to multiple engines (HubSpot CPQ, Chargebee, custom billing, manual
+scale to multiple engines (HubSpot, Chargebee, custom billing, manual
 sales-led contracts). Therefore:
 
-* ``BillingSystem`` is an open enum describing the *system of record* for a
+* ``BillingSystem`` is an enum describing the *system of record* for a
   contract / PO / allocation.
-* ``PerformanceObligation`` carries generic ``billing_system`` +
-  ``billing_*_ref`` columns that work for any engine. The legacy
-  ``stripe_*`` columns remain as convenience mirrors (indexed joins in
-  Stripe-specific sync paths) — new engines only populate the generic
-  columns.
-* ``ContractAllocation`` carries ``billing_system`` + abstract source types
+* Every engine populates the **generic** ``billing_system`` +
+  ``billing_*_ref`` columns. No engine-specific columns live on this
+  domain — ``billing_system`` is how we identify the source, and the
+  ``billing_*_ref`` strings are opaque ids owned by that source system.
+* ``ContractAllocation.source_type`` uses engine-agnostic values
   (``BILLING_INVOICE_LINE``, ``BILLING_SUBSCRIPTION_ITEM``,
-  ``BILLING_USAGE_EVENT``) alongside the legacy Stripe-specific values so
-  existing data keeps working while new sources plug in cleanly.
+  ``BILLING_USAGE_EVENT``) so a single revrec pipeline consumes data
+  from every integration uniformly.
 
 Contract Invariants
 -------------------
@@ -156,24 +155,17 @@ class AllocationMethod(str, enum.Enum):
 class ContractAllocationSource(str, enum.Enum):
     """Which upstream row triggered this revenue allocation.
 
-    Engine-agnostic values (``BILLING_*``) are preferred for new code;
-    the engine-specific values are retained for direct joins into Stripe
-    mirror tables from legacy sync code paths.
+    Engine-agnostic by design — pair with ``billing_system`` to identify
+    the origin system, and ``source_id`` to identify the specific row in
+    that system. No engine-specific values.
     """
 
-    # Engine-agnostic — preferred for new billing integrations.
     BILLING_INVOICE_LINE = "billing_invoice_line"
     BILLING_SUBSCRIPTION_ITEM = "billing_subscription_item"
     BILLING_USAGE_EVENT = "billing_usage_event"
 
-    # Unified-invoice / manual — apply to any source.
     INVOICE = "invoice"
     MANUAL = "manual"
-
-    # Stripe-specific — kept for fast joins from the Stripe sync service.
-    STRIPE_INVOICE_LINE_ITEM = "stripe_invoice_line_item"
-    STRIPE_SUBSCRIPTION_ITEM = "stripe_subscription_item"
-    STRIPE_METER_EVENT_SUMMARY = "stripe_meter_event_summary"
 
 
 class ContractModificationType(str, enum.Enum):
@@ -238,9 +230,9 @@ class Contract(Base):
     )
 
     # Engine-agnostic billing handle — set for *any* integrated billing system.
-    # For Stripe, ``billing_contract_ref`` mirrors ``stripe_subscription_id`` /
-    # ``stripe_subscription_schedule_id`` so downstream services can treat all
-    # engines uniformly.
+    # ``billing_system`` identifies the source of truth (Stripe, HubSpot, …)
+    # and ``billing_contract_ref`` is the opaque id owned by that system
+    # (``sub_xxx`` for Stripe, deal id for HubSpot, quote id, etc.).
     billing_system: Mapped[BillingSystem | None] = mapped_column(
         Enum(
             BillingSystem,
@@ -253,13 +245,6 @@ class Contract(Base):
     )
     billing_contract_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     billing_account_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    # Legacy convenience mirrors (Stripe / HubSpot) — retained for fast direct
-    # joins from the Stripe sync service; new engines populate only the
-    # generic columns above.
-    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    stripe_subscription_schedule_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    hubspot_deal_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
     total_transaction_price: Mapped[Decimal] = mapped_column(
@@ -314,11 +299,6 @@ class Contract(Base):
             "source",
             "external_reference",
             name="uq_contracts_org_source_external",
-        ),
-        Index(
-            "ix_contracts_stripe_subscription",
-            "organization_id",
-            "stripe_subscription_id",
         ),
         Index(
             "ix_contracts_org_billing_contract",
@@ -405,14 +385,6 @@ class PerformanceObligation(Base):
     billing_item_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     billing_meter_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    # Legacy Stripe-specific mirrors — retained for direct joins from the
-    # Stripe sync path. Populated in addition to the generic columns above
-    # when ``billing_system == STRIPE``.
-    stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    stripe_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    stripe_subscription_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    stripe_meter_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
     revenue_account_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("gl_accounts.id", ondelete="SET NULL"),
@@ -446,16 +418,6 @@ class PerformanceObligation(Base):
             "ix_performance_obligations_contract_seq",
             "contract_id",
             "sequence",
-        ),
-        Index(
-            "ix_performance_obligations_org_stripe_price",
-            "organization_id",
-            "stripe_price_id",
-        ),
-        Index(
-            "ix_performance_obligations_org_stripe_sub_item",
-            "organization_id",
-            "stripe_subscription_item_id",
         ),
         Index(
             "ix_performance_obligations_org_billing_price",

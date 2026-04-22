@@ -190,29 +190,29 @@ class StripeInvoiceBridgeService:
     async def _match_performance_obligation(
         self, org_id: str, line: StripeInvoiceLineItem
     ) -> str | None:
-        """Find a PO whose generic billing_price_ref or billing_item_ref matches this line.
+        """Match a Stripe invoice line to a PO via generic billing refs.
 
-        Falls back to the legacy ``stripe_price_id`` / ``stripe_subscription_item_id``
-        columns to stay compatible with POs authored before the
-        multi-billing-engine abstraction migration.
+        Matching order (tighter specificity first):
+
+        1. ``(billing_system=STRIPE, billing_item_ref=<sub_item_id>)``
+           — a subscription-item match binds revenue to a single PO.
+        2. ``(billing_system=STRIPE, billing_price_ref=<price_id>)``
+           — used for non-subscription invoice lines (one-off charges,
+           metered invoice items created via the Invoices API).
+
+        Returns ``None`` when the line has no routable identifier OR
+        when the match is ambiguous (>1 PO). Ambiguous lines are
+        surfaced to the user via the ``requires_human_review`` flag on
+        the unified invoice.
         """
-        # Prefer a subscription-item match (tighter specificity).
         if line.subscription_item_stripe_id:
             stmt = (
                 select(PerformanceObligation.id)
                 .where(
                     PerformanceObligation.organization_id == org_id,
-                    (
-                        (PerformanceObligation.billing_system == BillingSystem.STRIPE)
-                        & (
-                            PerformanceObligation.billing_item_ref
-                            == line.subscription_item_stripe_id
-                        )
-                    )
-                    | (
-                        PerformanceObligation.stripe_subscription_item_id
-                        == line.subscription_item_stripe_id
-                    ),
+                    PerformanceObligation.billing_system == BillingSystem.STRIPE,
+                    PerformanceObligation.billing_item_ref
+                    == line.subscription_item_stripe_id,
                 )
                 .limit(2)
             )
@@ -224,11 +224,8 @@ class StripeInvoiceBridgeService:
                 select(PerformanceObligation.id)
                 .where(
                     PerformanceObligation.organization_id == org_id,
-                    (
-                        (PerformanceObligation.billing_system == BillingSystem.STRIPE)
-                        & (PerformanceObligation.billing_price_ref == line.price_stripe_id)
-                    )
-                    | (PerformanceObligation.stripe_price_id == line.price_stripe_id),
+                    PerformanceObligation.billing_system == BillingSystem.STRIPE,
+                    PerformanceObligation.billing_price_ref == line.price_stripe_id,
                 )
                 .limit(2)
             )

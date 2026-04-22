@@ -422,8 +422,9 @@ class StripeSubscriptionItem(_StripeOrgScoped):
     """Stripe SubscriptionItem — one per Price inside a Subscription.
 
     Each row is the atomic unit of revenue a subscription emits; for IFRS 15
-    mapping, a ``PerformanceObligation`` typically points at one of these via
-    ``performance_obligations.stripe_subscription_item_id``.
+    mapping, a ``PerformanceObligation`` typically points at one of these
+    via the generic ``performance_obligations.billing_item_ref`` column
+    (with ``billing_system == STRIPE``).
     """
 
     __tablename__ = "stripe_subscription_items"
