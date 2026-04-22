@@ -12,6 +12,7 @@ import {
   type SaltEdgeCustomer,
 } from "@/lib/schemas/saltedge/customers";
 import { useAuthSession } from "@/lib/hooks/api/use-auth";
+import { isApiError } from "@/lib/api/types";
 
 async function parseJson<T>(
   res: Response,
@@ -71,6 +72,15 @@ export function useSaltEdgeCustomersQuery() {
       return parseJson(res, customersResponseSchema);
     },
     enabled: hasOrg,
+    /** Customer list is stable for minutes; avoids hammering Salt Edge on navigation. */
+    staleTime: 5 * 60 * 1000,
+    /** Do not retry client errors (4xx including 409 Conflict); retry transient 5xx sparingly. */
+    retry: (failureCount, error) => {
+      if (isApiError(error) && error.status >= 400 && error.status < 500) {
+        return false;
+      }
+      return failureCount < 2;
+    },
   });
 }
 
