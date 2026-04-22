@@ -21,6 +21,7 @@ from app.db.models.banking import (
 from app.db.models.aade import AadeDocumentModel, AadeInvoiceModel, InvoiceDirection
 from app.db.models.contracts import (
     AllocationMethod,
+    BillingSystem,
     Contract,
     ContractAllocation,
     ContractAllocationSource,
@@ -32,6 +33,7 @@ from app.db.models.contracts import (
     PerformanceObligation,
     PerformanceObligationKind,
 )
+from app.db.models.stripe_connect import StripeAccountConnection
 
 __all__ = [
     # identity
@@ -60,6 +62,7 @@ __all__ = [
     "InvoiceDirection",
     # contracts
     "AllocationMethod",
+    "BillingSystem",
     "Contract",
     "ContractAllocation",
     "ContractAllocationSource",
@@ -70,4 +73,6 @@ __all__ = [
     "ContractStatus",
     "PerformanceObligation",
     "PerformanceObligationKind",
+    # stripe connect
+    "StripeAccountConnection",
 ]

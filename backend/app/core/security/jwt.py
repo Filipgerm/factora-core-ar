@@ -182,3 +182,51 @@ def decode_gmail_oauth_state(token: str) -> dict[str, Any]:
             "Invalid Gmail OAuth state type", code="auth.gmail_state_invalid"
         )
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Stripe Connect OAuth CSRF state (short-lived HS256 JWT)
+# ---------------------------------------------------------------------------
+
+STRIPE_CONNECT_OAUTH_STATE_TTL_MINUTES: int = 15
+
+
+def encode_stripe_connect_state(*, user_id: str, organization_id: str) -> str:
+    """Return a JWT used as ``state`` for Stripe Connect OAuth redirect."""
+    now = now_utc()
+    expires_at = now + timedelta(minutes=STRIPE_CONNECT_OAUTH_STATE_TTL_MINUTES)
+    payload: dict[str, Any] = {
+        "typ": "stripe_connect_oauth",
+        "sub": user_id,
+        "organization_id": organization_id,
+        "iat": now,
+        "exp": expires_at,
+    }
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=_ALGORITHM)
+
+
+def decode_stripe_connect_state(token: str) -> dict[str, Any]:
+    """Decode and validate Stripe Connect OAuth ``state`` JWT."""
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[_ALGORITHM],
+            options={"require": ["sub", "exp", "iat", "typ", "organization_id"]},
+        )
+    except ExpiredSignatureError:
+        raise AuthError(
+            "Stripe Connect OAuth state has expired",
+            code="auth.stripe_state_expired",
+        )
+    except InvalidTokenError as exc:
+        raise AuthError(
+            f"Invalid Stripe Connect OAuth state: {exc}",
+            code="auth.stripe_state_invalid",
+        )
+    if payload.get("typ") != "stripe_connect_oauth":
+        raise AuthError(
+            "Invalid Stripe Connect OAuth state type",
+            code="auth.stripe_state_invalid",
+        )
+    return payload

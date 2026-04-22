@@ -154,6 +154,74 @@ class StripeClient:
         tx = tx_cls.create_from_calculation(calculation=calculation, reference=reference)
         return stripe_object_to_dict(tx)
 
+    # ------------------------------------------------------------------
+    # Stripe Connect OAuth
+    # ------------------------------------------------------------------
+
+    def build_connect_authorize_url(
+        self,
+        *,
+        client_id: str,
+        redirect_uri: str,
+        state: str,
+        scope: str = "read_write",
+    ) -> str:
+        """Build Stripe Connect Standard OAuth authorize URL.
+
+        Stripe's docs: https://docs.stripe.com/connect/oauth-reference
+        """
+        from urllib.parse import urlencode
+
+        params = {
+            "response_type": "code",
+            "client_id": client_id,
+            "scope": scope,
+            "redirect_uri": redirect_uri,
+            "state": state,
+        }
+        return "https://connect.stripe.com/oauth/authorize?" + urlencode(params)
+
+    def exchange_connect_authorization_code(
+        self, *, code: str
+    ) -> dict[str, Any]:
+        """Exchange Connect OAuth code → connected ``stripe_user_id``.
+
+        Returns the raw ``OAuthToken`` object (``stripe_user_id``,
+        ``access_token``, ``refresh_token``, ``scope``, ``livemode`` …).
+        """
+        if not self.is_configured():
+            return {
+                "stripe_user_id": "acct_stub",
+                "access_token": "sk_stub",
+                "refresh_token": "rt_stub",
+                "livemode": False,
+                "scope": "read_write",
+                "token_type": "bearer",
+                "stub": True,
+            }
+        oauth_cls = getattr(stripe, "OAuth", None)
+        if oauth_cls is None or not hasattr(oauth_cls, "token"):
+            raise RuntimeError("stripe.OAuth.token unavailable in this SDK version")
+        tok = oauth_cls.token(grant_type="authorization_code", code=code)
+        return stripe_object_to_dict(tok)
+
+    def deauthorize_connected_account(
+        self, *, client_id: str, stripe_user_id: str
+    ) -> dict[str, Any]:
+        """Revoke the platform's access to a connected account."""
+        if not self.is_configured():
+            return {"stripe_user_id": stripe_user_id, "stub": True}
+        oauth_cls = getattr(stripe, "OAuth", None)
+        if oauth_cls is None or not hasattr(oauth_cls, "deauthorize"):
+            raise RuntimeError(
+                "stripe.OAuth.deauthorize unavailable in this SDK version"
+            )
+        res = oauth_cls.deauthorize(
+            client_id=client_id,
+            stripe_user_id=stripe_user_id,
+        )
+        return stripe_object_to_dict(res)
+
     def create_payment_intent_stub(
         self,
         *,

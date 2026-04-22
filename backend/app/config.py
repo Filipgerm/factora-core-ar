@@ -131,6 +131,26 @@ class Settings(BaseSettings):
         description="Pinned Stripe API version (must match webhook/dashboard settings)",
     )
 
+    # --- Stripe Connect (per-tenant OAuth onboarding) ---
+    STRIPE_CONNECT_CLIENT_ID: str = Field(
+        default="",
+        description=(
+            "Stripe Connect client id (ca_xxx). Required to issue OAuth authorize "
+            "URLs for tenants to link their Stripe accounts."
+        ),
+    )
+    STRIPE_CONNECT_REDIRECT_URI: str = Field(
+        default="",
+        description=(
+            "OAuth redirect for Stripe Connect, e.g. "
+            "https://api.factora.eu/v1/stripe/connect/callback"
+        ),
+    )
+    STRIPE_CONNECT_SCOPE: Literal["read_write", "read_only"] = Field(
+        default="read_write",
+        description="OAuth scope requested by Stripe Connect authorize URL.",
+    )
+
     # --- Security ---
     CODE_PEPPER: str = Field(
         ..., description="Server-side pepper for Argon2 hashes (>= 16 random chars)"
