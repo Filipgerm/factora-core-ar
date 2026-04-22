@@ -133,6 +133,9 @@ class AadeInvoiceBridgeService:
                 requires_human_review=counterparty_id is None,
             )
             self._db.add(unified)
+            # Link the AADE mirror row back to the unified row so Step 5
+            # can swap dashboard joins onto the structural FK.
+            aade_invoice.invoice_id = unified.id
             return unified
 
         existing.counterparty_id = counterparty_id or existing.counterparty_id
@@ -143,6 +146,7 @@ class AadeInvoiceBridgeService:
         existing.currency = currency
         existing.issue_date = issue
         existing.accounting_kind = kind
+        aade_invoice.invoice_id = existing.id
         return existing
 
     # --- Internals ------------------------------------------------------

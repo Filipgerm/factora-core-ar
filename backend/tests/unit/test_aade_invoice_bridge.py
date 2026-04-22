@@ -222,3 +222,36 @@ async def test_missing_organization_returns_none() -> None:
 
     unified = await bridge.upsert_from_aade_invoice(_aade(org=""))
     assert unified is None
+
+
+@pytest.mark.asyncio
+async def test_insert_sets_invoice_id_fk_on_aade_mirror() -> None:
+    session = _Recorder(existing=None, counterparty_ids=[])
+    bridge = AadeInvoiceBridgeService(session)  # type: ignore[arg-type]
+    aade = _aade()
+
+    unified = await bridge.upsert_from_aade_invoice(aade)
+
+    assert unified is not None
+    assert aade.invoice_id == unified.id
+
+
+@pytest.mark.asyncio
+async def test_update_sets_invoice_id_fk_on_aade_mirror() -> None:
+    existing = SimpleNamespace(
+        id="unified-77",
+        organization_id="org-1",
+        counterparty_id=None,
+        counterparty_display_name=None,
+        amount=Decimal("0.00"),
+        currency="USD",
+        issue_date=date(2020, 1, 1),
+        accounting_kind=None,
+        requires_human_review=True,
+    )
+    session = _Recorder(existing=existing, counterparty_ids=[])
+    bridge = AadeInvoiceBridgeService(session)  # type: ignore[arg-type]
+    aade = _aade()
+
+    await bridge.upsert_from_aade_invoice(aade)
+    assert aade.invoice_id == "unified-77"

@@ -107,6 +107,18 @@ class AadeInvoiceModel(Base):
     total_net_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     total_vat_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     total_gross_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    invoice_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("invoices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc=(
+            "FK to the unified invoices row this AADE mirror was bridged to. "
+            "Nullable while the backfill completes; once populated it is the "
+            "canonical link dashboards and revrec should prefer over the "
+            "external_id join."
+        ),
+    )
     normalized_data: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"), onupdate=func.now())
