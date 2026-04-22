@@ -46,6 +46,12 @@ import {
   usePatchGlAccountMutation,
 } from "@/lib/hooks/api/use-general-ledger";
 import type { GlAccount } from "@/lib/schemas/general-ledger";
+import {
+  glTableBodyRow,
+  glTableContainer,
+  glTableHeaderRow,
+  glTablePlaceholderRow,
+} from "@/components/features/general-ledger/gl-table-surface";
 
 const accountFormSchema = z.object({
   code: z.string().min(1).max(32),
@@ -361,10 +367,10 @@ export function GlCoaView() {
         </Dialog>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-100">
+      <div className={glTableContainer}>
         <Table>
           <TableHeader>
-            <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-slate-50/80">
+            <TableRow className={glTableHeaderRow}>
               <TableHead className="text-xs">Account</TableHead>
               <TableHead className="text-xs">Type</TableHead>
               <TableHead className="text-xs">Status</TableHead>
@@ -373,14 +379,14 @@ export function GlCoaView() {
           </TableHeader>
           <TableBody>
             {isLoading && (
-              <TableRow>
+              <TableRow className={glTablePlaceholderRow}>
                 <TableCell colSpan={4} className="text-xs text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && rows.length === 0 && (
-              <TableRow>
+              <TableRow className={glTablePlaceholderRow}>
                 <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
                   No accounts. Create one or run demo seed.
                 </TableCell>
@@ -389,10 +395,7 @@ export function GlCoaView() {
             {rows.map((a) => {
               const depth = accountDepth(byId, a.id);
               return (
-                <TableRow
-                  key={a.id}
-                  className="border-slate-100 transition-colors duration-200 hover:bg-slate-50/80"
-                >
+                <TableRow key={a.id} className={glTableBodyRow}>
                   <TableCell className="text-xs">
                     <span
                       style={{ paddingLeft: `${Math.min(depth, 6) * 12}px` }}

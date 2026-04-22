@@ -27,6 +27,13 @@ import { isApiError } from "@/lib/api/types";
 import { useToast } from "@/hooks/use-toast";
 import { useLedgerView } from "@/components/features/general-ledger/ledger-view-context";
 import { formatLedgerMoney } from "@/components/features/general-ledger/gl-money";
+import {
+  glTableBodyRow,
+  glTableContainer,
+  glTableHeaderRow,
+  glTablePlaceholderRow,
+} from "@/components/features/general-ledger/gl-table-surface";
+import { cn } from "@/lib/utils";
 import type {
   GlAccount,
   GlJournalEntry,
@@ -170,10 +177,10 @@ export function GlJournalsView() {
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-100">
+      <div className={glTableContainer}>
         <Table>
           <TableHeader>
-            <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-slate-50/80">
+            <TableRow className={glTableHeaderRow}>
               <TableHead className="text-xs">Date</TableHead>
               <TableHead className="text-xs">Status</TableHead>
               <TableHead className="text-xs">Memo</TableHead>
@@ -183,14 +190,14 @@ export function GlJournalsView() {
           </TableHeader>
           <TableBody>
             {isLoading && (
-              <TableRow>
+              <TableRow className={glTablePlaceholderRow}>
                 <TableCell colSpan={5} className="text-xs text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && entries.length === 0 && (
-              <TableRow>
+              <TableRow className={glTablePlaceholderRow}>
                 <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                   No journal entries match filters.
                 </TableCell>
@@ -199,7 +206,7 @@ export function GlJournalsView() {
             {entries.map((e) => (
               <TableRow
                 key={e.id}
-                className="cursor-pointer border-slate-100 transition-colors duration-200 hover:bg-slate-50/80"
+                className={cn("cursor-pointer", glTableBodyRow)}
                 onClick={() => setSheetId(e.id)}
               >
                 <TableCell className="text-xs tabular-nums text-muted-foreground">

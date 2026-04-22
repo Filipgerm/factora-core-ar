@@ -13,6 +13,13 @@ import { useGlAccountsQuery } from "@/lib/hooks/api/use-general-ledger";
 import { useGlRecurringTemplatesQuery } from "@/lib/hooks/api/use-general-ledger";
 import { useLedgerView } from "@/components/features/general-ledger/ledger-view-context";
 import { formatLedgerMoney } from "@/components/features/general-ledger/gl-money";
+import {
+  glTableBodyRow,
+  glTableContainer,
+  glTableHeaderRow,
+  glTablePlaceholderRow,
+} from "@/components/features/general-ledger/gl-table-surface";
+import { cn } from "@/lib/utils";
 
 export function GlRecurringView() {
   const { effectiveEntityId, consolidated } = useLedgerView();
@@ -29,10 +36,10 @@ export function GlRecurringView() {
         Recurring entry templates (monthly / quarterly, day-of-month). Automated
         posting is out of scope — this is template management only.
       </p>
-      <div className="overflow-hidden rounded-xl border border-slate-100">
+      <div className={glTableContainer}>
         <Table>
           <TableHeader>
-            <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-slate-50/80">
+            <TableRow className={glTableHeaderRow}>
               <TableHead className="text-xs">Template</TableHead>
               <TableHead className="text-xs">Frequency</TableHead>
               <TableHead className="text-xs">Day</TableHead>
@@ -41,24 +48,21 @@ export function GlRecurringView() {
           </TableHeader>
           <TableBody>
             {isLoading && (
-              <TableRow>
+              <TableRow className={glTablePlaceholderRow}>
                 <TableCell colSpan={4} className="text-xs text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && templates.length === 0 && (
-              <TableRow>
+              <TableRow className={glTablePlaceholderRow}>
                 <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
                   No templates.
                 </TableCell>
               </TableRow>
             )}
             {templates.map((t) => (
-              <TableRow
-                key={t.id}
-                className="border-slate-100 align-top transition-colors duration-200 hover:bg-slate-50/80"
-              >
+              <TableRow key={t.id} className={cn("align-top", glTableBodyRow)}>
                 <TableCell className="text-xs">
                   <div className="font-medium">{t.name}</div>
                   {t.memo && (

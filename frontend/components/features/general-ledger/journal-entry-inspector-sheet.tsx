@@ -27,6 +27,11 @@ import {
   useReverseGlJournalMutation,
 } from "@/lib/hooks/api/use-general-ledger";
 import { formatLedgerMoney } from "@/components/features/general-ledger/gl-money";
+import {
+  glTableBodyRow,
+  glTableContainer,
+  glTableHeaderRow,
+} from "@/components/features/general-ledger/gl-table-surface";
 import { useLedgerView } from "@/components/features/general-ledger/ledger-view-context";
 import { useToast } from "@/hooks/use-toast";
 import { isApiError } from "@/lib/api/types";
@@ -133,26 +138,24 @@ export function JournalEntryInspectorSheet({
                   {entry.memo && (
                     <p className="text-sm text-foreground/90">{entry.memo}</p>
                   )}
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-slate-100 hover:bg-transparent">
-                        <TableHead className="text-xs">Account</TableHead>
-                        <TableHead className="text-right text-xs">
-                          Debit
-                        </TableHead>
-                        <TableHead className="text-right text-xs">
-                          Credit
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(entry.lines ?? []).map((ln) => {
-                        const a = accMap[ln.account_id];
-                        return (
-                          <TableRow
-                            key={ln.id}
-                            className="border-slate-100 transition-colors duration-200 hover:bg-slate-50/80"
-                          >
+                  <div className={glTableContainer}>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className={glTableHeaderRow}>
+                          <TableHead className="text-xs">Account</TableHead>
+                          <TableHead className="text-right text-xs">
+                            Debit
+                          </TableHead>
+                          <TableHead className="text-right text-xs">
+                            Credit
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(entry.lines ?? []).map((ln) => {
+                          const a = accMap[ln.account_id];
+                          return (
+                            <TableRow key={ln.id} className={glTableBodyRow}>
                             <TableCell className="text-xs">
                               <span className="font-medium">{a?.code}</span>{" "}
                               <span className="text-muted-foreground">
@@ -175,11 +178,12 @@ export function JournalEntryInspectorSheet({
                                 )
                                 : "—"}
                             </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
                   <div className="flex justify-between border-t border-slate-100 pt-3 text-xs">
                     <span className="text-muted-foreground">Totals</span>
                     <span className="tabular-nums text-foreground">

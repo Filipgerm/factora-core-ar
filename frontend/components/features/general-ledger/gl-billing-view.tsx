@@ -15,6 +15,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { useGlBillingBatchesQuery } from "@/lib/hooks/api/use-general-ledger";
 import { formatLedgerMoney } from "@/components/features/general-ledger/gl-money";
+import {
+  glTableBodyRow,
+  glTableContainer,
+  glTableHeaderRow,
+  glTablePlaceholderRow,
+} from "@/components/features/general-ledger/gl-table-surface";
 
 export function GlBillingView() {
   const searchParams = useSearchParams();
@@ -27,10 +33,10 @@ export function GlBillingView() {
         Aggregated usage batches from external billing engines (demo integrations).
         Raw micro-events are not stored — only rollups.
       </p>
-      <div className="overflow-hidden rounded-xl border border-slate-100">
+      <div className={glTableContainer}>
         <Table>
           <TableHeader>
-            <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-slate-50/80">
+            <TableRow className={glTableHeaderRow}>
               <TableHead className="text-xs">Batch ID</TableHead>
               <TableHead className="text-xs">Source</TableHead>
               <TableHead className="text-right text-xs">Events</TableHead>
@@ -41,14 +47,14 @@ export function GlBillingView() {
           </TableHeader>
           <TableBody>
             {isLoading && (
-              <TableRow>
+              <TableRow className={glTablePlaceholderRow}>
                 <TableCell colSpan={6} className="text-xs text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && batches.length === 0 && (
-              <TableRow>
+              <TableRow className={glTablePlaceholderRow}>
                 <TableCell colSpan={6} className="py-10 text-center">
                   <div className="mx-auto flex max-w-md flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-8">
                     <Database className="size-8 text-slate-300" aria-hidden />
@@ -61,10 +67,7 @@ export function GlBillingView() {
               </TableRow>
             )}
             {batches.map((b) => (
-              <TableRow
-                key={b.id}
-                className="border-slate-100 transition-colors duration-200 hover:bg-slate-50/80"
-              >
+              <TableRow key={b.id} className={glTableBodyRow}>
                 <TableCell className="font-mono text-xs">
                   {b.external_batch_id}
                 </TableCell>

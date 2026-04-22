@@ -18,6 +18,12 @@ import { useGlJournalEntriesQuery } from "@/lib/hooks/api/use-general-ledger";
 import { useGlTrialBalanceQuery } from "@/lib/hooks/api/use-general-ledger";
 import { useLedgerView } from "@/components/features/general-ledger/ledger-view-context";
 import { formatLedgerMoney } from "@/components/features/general-ledger/gl-money";
+import {
+  glTableBodyRow,
+  glTableContainer,
+  glTableHeaderRow,
+  glTablePlaceholderRow,
+} from "@/components/features/general-ledger/gl-table-surface";
 
 export function GlOverviewView() {
   const { effectiveEntityId, consolidated, displayCurrency } = useLedgerView();
@@ -94,10 +100,10 @@ export function GlOverviewView() {
             </Link>
           </Button>
         </div>
-        <div className="overflow-hidden rounded-xl border border-slate-100">
+        <div className={glTableContainer}>
           <Table>
             <TableHeader>
-              <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-slate-50/80">
+              <TableRow className={glTableHeaderRow}>
                 <TableHead className="text-xs">Account</TableHead>
                 <TableHead className="text-xs">Type</TableHead>
                 <TableHead className="text-right text-xs">Debit</TableHead>
@@ -107,14 +113,14 @@ export function GlOverviewView() {
             </TableHeader>
             <TableBody>
               {tbLoading && (
-                <TableRow>
+                <TableRow className={glTablePlaceholderRow}>
                   <TableCell colSpan={5} className="text-xs text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               )}
               {!tbLoading && tb.length === 0 && (
-                <TableRow>
+                <TableRow className={glTablePlaceholderRow}>
                   <TableCell colSpan={5} className="py-10 text-center">
                     <div className="mx-auto flex max-w-sm flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-6">
                       <BookOpen
@@ -141,10 +147,7 @@ export function GlOverviewView() {
                 </TableRow>
               )}
               {tb.map((row) => (
-                <TableRow
-                  key={row.account_id}
-                  className="border-slate-100 transition-colors duration-200 hover:bg-slate-50/80"
-                >
+                <TableRow key={row.account_id} className={glTableBodyRow}>
                   <TableCell className="text-xs">
                     <span className="font-medium">{row.account_code}</span>{" "}
                     <span className="text-muted-foreground">

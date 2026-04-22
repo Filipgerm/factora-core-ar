@@ -14,6 +14,10 @@ import {
 import { useLedgerView } from "@/components/features/general-ledger/ledger-view-context";
 import { formatLedgerMoney } from "@/components/features/general-ledger/gl-money";
 import { RevenueWaterfallChart } from "@/components/features/general-ledger/revenue-waterfall-chart";
+import {
+  glTableBodyRow,
+  glTableHeaderRow,
+} from "@/components/features/general-ledger/gl-table-surface";
 import { cn } from "@/lib/utils";
 
 const CARD_SPRING = { type: "spring" as const, stiffness: 620, damping: 42 };
@@ -327,10 +331,10 @@ export function GlPrepaidView() {
               />
             </div>
 
-            <div className="border-t border-slate-100">
+            <div className="border-t border-slate-100 bg-white">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-slate-100 bg-slate-50/60 hover:bg-slate-50/60">
+                  <TableRow className={glTableHeaderRow}>
                     <TableHead className="pl-6 text-xs">Month</TableHead>
                     <TableHead className="text-right text-xs">
                       Prepaid opening
@@ -347,7 +351,7 @@ export function GlPrepaidView() {
                   {sch.lines.map((l) => (
                     <TableRow
                       key={`${sch.id}-${l.period_month}`}
-                      className="border-slate-100 transition-colors duration-200 hover:bg-slate-50/80"
+                      className={glTableBodyRow}
                     >
                       <TableCell className="pl-6 text-xs">
                         {l.period_month}

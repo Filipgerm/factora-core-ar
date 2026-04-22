@@ -21,6 +21,12 @@ import {
   usePatchGlPeriodMutation,
 } from "@/lib/hooks/api/use-general-ledger";
 import type { GlAccountingPeriod } from "@/lib/schemas/general-ledger";
+import {
+  glTableBodyRow,
+  glTableContainer,
+  glTableHeaderRow,
+  glTablePlaceholderRow,
+} from "@/components/features/general-ledger/gl-table-surface";
 
 function statusBadge(s: GlAccountingPeriod["status"]) {
   if (s === "open")
@@ -37,10 +43,10 @@ export function GlPeriodsView() {
   const patch = usePatchGlPeriodMutation();
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-100">
+    <div className={glTableContainer}>
       <Table>
         <TableHeader>
-          <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-slate-50/80">
+          <TableRow className={glTableHeaderRow}>
             <TableHead className="text-xs">Period</TableHead>
             <TableHead className="text-xs">Range</TableHead>
             <TableHead className="text-xs">Status</TableHead>
@@ -49,24 +55,21 @@ export function GlPeriodsView() {
         </TableHeader>
         <TableBody>
           {isLoading && (
-            <TableRow>
+            <TableRow className={glTablePlaceholderRow}>
               <TableCell colSpan={4} className="text-xs text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
           )}
           {!isLoading && periods.length === 0 && (
-            <TableRow>
+            <TableRow className={glTablePlaceholderRow}>
               <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
                 No periods. Run demo seed.
               </TableCell>
             </TableRow>
           )}
           {periods.map((p) => (
-            <TableRow
-              key={p.id}
-              className="border-slate-100 transition-colors duration-200 hover:bg-slate-50/80"
-            >
+            <TableRow key={p.id} className={glTableBodyRow}>
               <TableCell className="text-xs font-medium">{p.label}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {p.period_start} → {p.period_end}
