@@ -12,10 +12,11 @@ price** (ATP). The ratio of SSP → ATP performs IFRS 15 relative-standalone-sel
 allocation when a contract bundles unequal goods/services.
 
 ``ContractAllocation`` links a revenue-emitting *source row* (Stripe invoice line,
-unified invoice, manual journal memo) to the ``PerformanceObligation`` whose
-revenue it represents. This mapping is the single source of truth for
-"which cash event satisfies which obligation" and is consumed by the revrec
-scheduler to emit ``GlRevenueRecognitionScheduleLine`` entries.
+unified invoice, HubSpot quote item, manual journal memo, …) to the
+``PerformanceObligation`` whose revenue it represents. This mapping is the single
+source of truth for "which cash event satisfies which obligation" and is
+consumed by the revrec scheduler to emit
+``GlRevenueRecognitionScheduleLine`` entries.
 
 ``ContractDocument`` links supporting documents (PDF contract, order form,
 amendment, SOW) stored via the unified ``invoices`` table or object storage.
@@ -23,7 +24,24 @@ amendment, SOW) stored via the unified ``invoices`` table or object storage.
 ``ContractModification`` captures amendment history (IFRS 15.20–21 accounting —
 prospective vs cumulative catch-up).
 
-Contract
+Billing-system abstraction
+--------------------------
+Stripe is the first billing engine we integrate with, but the domain must
+scale to multiple engines (HubSpot CPQ, Chargebee, custom billing, manual
+sales-led contracts). Therefore:
+
+* ``BillingSystem`` is an open enum describing the *system of record* for a
+  contract / PO / allocation.
+* ``PerformanceObligation`` carries generic ``billing_system`` +
+  ``billing_*_ref`` columns that work for any engine. The legacy
+  ``stripe_*`` columns remain as convenience mirrors (indexed joins in
+  Stripe-specific sync paths) — new engines only populate the generic
+  columns.
+* ``ContractAllocation`` carries ``billing_system`` + abstract source types
+  (``BILLING_INVOICE_LINE``, ``BILLING_SUBSCRIPTION_ITEM``,
+  ``BILLING_USAGE_EVENT``) alongside the legacy Stripe-specific values so
+  existing data keeps working while new sources plug in cleanly.
+
 Contract Invariants
 -------------------
 * ``total_transaction_price`` ≈ Σ ``performance_obligations.allocated_transaction_price``
@@ -76,6 +94,24 @@ class ContractStatus(str, enum.Enum):
     TERMINATED = "terminated"
 
 
+class BillingSystem(str, enum.Enum):
+    """System of record for a contract / PO / allocation.
+
+    An engine-agnostic handle used alongside generic ``*_ref`` columns so
+    contracts, POs, and allocations from any billing source slot into the
+    same revrec pipeline.
+    """
+
+    STRIPE = "stripe"
+    HUBSPOT = "hubspot"
+    CHARGEBEE = "chargebee"
+    RECURLY = "recurly"
+    ZUORA = "zuora"
+    CUSTOM = "custom"
+    MANUAL = "manual"
+    IMPORT = "import"
+
+
 class ContractSource(str, enum.Enum):
     """Where the contract originated — traces pull/push ingestion."""
 
@@ -83,6 +119,12 @@ class ContractSource(str, enum.Enum):
     STRIPE_SUBSCRIPTION = "stripe_subscription"
     STRIPE_SUBSCRIPTION_SCHEDULE = "stripe_subscription_schedule"
     HUBSPOT_DEAL = "hubspot_deal"
+    HUBSPOT_QUOTE = "hubspot_quote"
+    CHARGEBEE_SUBSCRIPTION = "chargebee_subscription"
+    RECURLY_SUBSCRIPTION = "recurly_subscription"
+    ZUORA_SUBSCRIPTION = "zuora_subscription"
+    CUSTOM_BILLING = "custom_billing"
+    SALES_CRM = "sales_crm"
     OCR_PDF = "ocr_pdf"
     IMPORT_CSV = "import_csv"
 
@@ -112,13 +154,26 @@ class AllocationMethod(str, enum.Enum):
 
 
 class ContractAllocationSource(str, enum.Enum):
-    """Which upstream row triggered this revenue allocation."""
+    """Which upstream row triggered this revenue allocation.
 
+    Engine-agnostic values (``BILLING_*``) are preferred for new code;
+    the engine-specific values are retained for direct joins into Stripe
+    mirror tables from legacy sync code paths.
+    """
+
+    # Engine-agnostic — preferred for new billing integrations.
+    BILLING_INVOICE_LINE = "billing_invoice_line"
+    BILLING_SUBSCRIPTION_ITEM = "billing_subscription_item"
+    BILLING_USAGE_EVENT = "billing_usage_event"
+
+    # Unified-invoice / manual — apply to any source.
+    INVOICE = "invoice"
+    MANUAL = "manual"
+
+    # Stripe-specific — kept for fast joins from the Stripe sync service.
     STRIPE_INVOICE_LINE_ITEM = "stripe_invoice_line_item"
     STRIPE_SUBSCRIPTION_ITEM = "stripe_subscription_item"
     STRIPE_METER_EVENT_SUMMARY = "stripe_meter_event_summary"
-    INVOICE = "invoice"
-    MANUAL = "manual"
 
 
 class ContractModificationType(str, enum.Enum):
@@ -182,6 +237,26 @@ class Contract(Base):
         default=ContractStatus.DRAFT,
     )
 
+    # Engine-agnostic billing handle — set for *any* integrated billing system.
+    # For Stripe, ``billing_contract_ref`` mirrors ``stripe_subscription_id`` /
+    # ``stripe_subscription_schedule_id`` so downstream services can treat all
+    # engines uniformly.
+    billing_system: Mapped[BillingSystem | None] = mapped_column(
+        Enum(
+            BillingSystem,
+            name="billingsystem",
+            create_type=True,
+            values_callable=_enum_values,
+        ),
+        nullable=True,
+        index=True,
+    )
+    billing_contract_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_account_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Legacy convenience mirrors (Stripe / HubSpot) — retained for fast direct
+    # joins from the Stripe sync service; new engines populate only the
+    # generic columns above.
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_subscription_schedule_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     hubspot_deal_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -244,6 +319,12 @@ class Contract(Base):
             "ix_contracts_stripe_subscription",
             "organization_id",
             "stripe_subscription_id",
+        ),
+        Index(
+            "ix_contracts_org_billing_contract",
+            "organization_id",
+            "billing_system",
+            "billing_contract_ref",
         ),
     )
 
@@ -308,6 +389,25 @@ class PerformanceObligation(Base):
     total_units: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
     unit_of_measure: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # Engine-agnostic billing references — preferred for new integrations.
+    billing_system: Mapped[BillingSystem | None] = mapped_column(
+        Enum(
+            BillingSystem,
+            name="billingsystem",
+            create_type=False,
+            values_callable=_enum_values,
+        ),
+        nullable=True,
+        index=True,
+    )
+    billing_product_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_price_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_item_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_meter_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Legacy Stripe-specific mirrors — retained for direct joins from the
+    # Stripe sync path. Populated in addition to the generic columns above
+    # when ``billing_system == STRIPE``.
     stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_subscription_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -357,6 +457,18 @@ class PerformanceObligation(Base):
             "organization_id",
             "stripe_subscription_item_id",
         ),
+        Index(
+            "ix_performance_obligations_org_billing_price",
+            "organization_id",
+            "billing_system",
+            "billing_price_ref",
+        ),
+        Index(
+            "ix_performance_obligations_org_billing_item",
+            "organization_id",
+            "billing_system",
+            "billing_item_ref",
+        ),
         CheckConstraint(
             "allocated_transaction_price >= 0 AND standalone_selling_price >= 0",
             name="ck_performance_obligations_non_negative_prices",
@@ -401,6 +513,16 @@ class ContractAllocation(Base):
             values_callable=_enum_values,
         ),
         nullable=False,
+    )
+    billing_system: Mapped[BillingSystem | None] = mapped_column(
+        Enum(
+            BillingSystem,
+            name="billingsystem",
+            create_type=False,
+            values_callable=_enum_values,
+        ),
+        nullable=True,
+        index=True,
     )
     source_id: Mapped[str] = mapped_column(String(255), nullable=False)
     invoice_id: Mapped[str | None] = mapped_column(
