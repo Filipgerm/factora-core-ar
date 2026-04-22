@@ -1,15 +1,48 @@
 """Stripe SDK wrapper — API key configuration, customers, payment intents, webhooks.
 
 No application imports; callers supply keys and secrets explicitly.
+
+**Hardening notes**
+    The Stripe SDK already ships with bounded retries, ``stripe-request-id``
+    capture, and rate-limit backoff. What it does NOT give you is a
+    per-operation **idempotency key** — that's our responsibility because
+    Stripe keys are scoped to the *logical operation* we're doing, not the
+    HTTP retry. Wrapping writes in :meth:`_stripe_write` guarantees:
+
+        1. Every write gets an idempotency key (caller-supplied or a UUID4
+           fallback — ``idempotency_key=None`` is never passed to Stripe).
+        2. ``stripe-request-id`` is captured from ``obj.last_response`` and
+           logged through the shared outbound observability middleware so
+           support tickets can be cross-referenced with Stripe dashboards.
 """
 from __future__ import annotations
 
-from typing import Any
+import logging
+import time
+import uuid
+from typing import Any, Callable
 
 import stripe
 
+from packages._http import (
+    log_outbound_request,
+    log_outbound_response,
+    new_correlation_id,
+)
 from packages.stripe.api.serialize import stripe_object_to_dict
 from packages.stripe.api.webhooks import construct_verified_event
+
+logger = logging.getLogger(__name__)
+
+
+def _new_idempotency_key(prefix: str = "fact") -> str:
+    """Return a random, high-entropy key Stripe will accept for dedup.
+
+    Stripe requires keys ≤ 255 chars and recommends UUIDs. The short
+    prefix makes server-side log-diving trivial (``grep fact_`` finds
+    every one of our idempotent writes).
+    """
+    return f"{prefix}_{uuid.uuid4().hex}"
 
 
 class StripeClient:
@@ -52,11 +85,108 @@ class StripeClient:
             payload, stripe_signature, self._webhook_secret
         )
 
-    def create_customer(self, *, email: str, name: str | None = None) -> dict[str, Any]:
-        """Create a Stripe customer; returns a dict with at least ``id``."""
+    # ------------------------------------------------------------------
+    # Observability wrapper (every write flows through this)
+    # ------------------------------------------------------------------
+
+    def _stripe_write(
+        self,
+        op: str,
+        call: Callable[..., Any],
+        /,
+        *,
+        idempotency_key: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Invoke a Stripe write with idempotency + observability.
+
+        Guarantees
+        ----------
+        * ``idempotency_key`` is always set on outgoing requests. When
+          callers pass one (a bridge key derived from our domain id) it
+          is used as-is; otherwise we generate a fresh UUID so the
+          write is at worst "once per process call" rather than "every
+          SDK retry re-charges".
+        * ``stripe-request-id`` is captured from the returned object's
+          ``last_response`` metadata and logged.
+
+        Caller contract
+        ---------------
+        * ``op`` is a short, dot-delimited operation name (``customer.create``,
+          ``tax.transaction.create_from_calculation``).
+        * ``call`` is the raw SDK entrypoint (e.g.
+          ``stripe.Customer.create``) — kwargs forward unchanged. The
+          helper injects ``idempotency_key`` only when it is not already
+          present in ``kwargs``.
+        """
+        kwargs.setdefault(
+            "idempotency_key", idempotency_key or _new_idempotency_key()
+        )
+        correlation_id = new_correlation_id()
+        start = time.perf_counter()
+        log_outbound_request(
+            integration="stripe",
+            method="POST",
+            url=f"https://api.stripe.com/<{op}>",
+            correlation_id=correlation_id,
+            extra={
+                "op": op,
+                "idempotency_key": kwargs["idempotency_key"],
+            },
+        )
+        try:
+            obj = call(**kwargs)
+        except stripe.error.StripeError as exc:  # type: ignore[attr-defined]
+            duration_ms = (time.perf_counter() - start) * 1000
+            log_outbound_response(
+                integration="stripe",
+                method="POST",
+                url=f"https://api.stripe.com/<{op}>",
+                correlation_id=correlation_id,
+                status=getattr(exc, "http_status", 0) or 0,
+                duration_ms=duration_ms,
+                remote_request_id=getattr(exc, "request_id", None),
+                extra={"op": op, "error": exc.__class__.__name__},
+            )
+            raise
+        duration_ms = (time.perf_counter() - start) * 1000
+        last_resp = getattr(obj, "last_response", None)
+        remote_rid = getattr(last_resp, "request_id", None) if last_resp else None
+        http_status = getattr(last_resp, "code", None) if last_resp else None
+        log_outbound_response(
+            integration="stripe",
+            method="POST",
+            url=f"https://api.stripe.com/<{op}>",
+            correlation_id=correlation_id,
+            status=int(http_status or 200),
+            duration_ms=duration_ms,
+            remote_request_id=remote_rid,
+            extra={"op": op},
+        )
+        return obj
+
+    def create_customer(
+        self,
+        *,
+        email: str,
+        name: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a Stripe customer; returns a dict with at least ``id``.
+
+        Pass ``idempotency_key`` when you can derive a deterministic one
+        from your domain (e.g. ``f"cp_{counterparty_id}"``) so retries
+        at the caller level don't create duplicate customers.
+        """
         if not self.is_configured():
             return {"id": "stub_cus", "email": email, "name": name}
-        cust = stripe.Customer.create(email=email, name=name)
+        cust = self._stripe_write(
+            "customer.create",
+            stripe.Customer.create,
+            idempotency_key=idempotency_key,
+            email=email,
+            name=name,
+        )
         return {
             "id": cust.id,
             "email": getattr(cust, "email", email),
@@ -89,7 +219,15 @@ class StripeClient:
             params["identifier"] = identifier
         if timestamp is not None:
             params["timestamp"] = timestamp
-        ev = meter_event_cls.create(**params)
+        # Meter events already carry Stripe's native ``identifier`` for
+        # server-side dedup; we mirror it as the HTTP idempotency key so
+        # retries at the HTTP layer collapse onto the same event.
+        ev = self._stripe_write(
+            "billing.meter_event.create",
+            meter_event_cls.create,
+            idempotency_key=f"meter_{identifier}" if identifier else None,
+            **params,
+        )
         return stripe_object_to_dict(ev)
 
     def list_meter_event_summaries(
@@ -124,6 +262,7 @@ class StripeClient:
         currency: str,
         line_items: list[dict[str, Any]],
         customer_details: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """Call Stripe Tax API's Calculation endpoint."""
         if not self.is_configured():
@@ -134,7 +273,12 @@ class StripeClient:
         params: dict[str, Any] = {"currency": currency, "line_items": line_items}
         if customer_details:
             params["customer_details"] = customer_details
-        calc = calc_cls.create(**params)
+        calc = self._stripe_write(
+            "tax.calculation.create",
+            calc_cls.create,
+            idempotency_key=idempotency_key,
+            **params,
+        )
         return stripe_object_to_dict(calc)
 
     def create_tax_transaction_from_calculation(
@@ -143,7 +287,12 @@ class StripeClient:
         calculation: str,
         reference: str,
     ) -> dict[str, Any]:
-        """Persist a Tax Calculation into a Tax Transaction (post-commit)."""
+        """Persist a Tax Calculation into a Tax Transaction (post-commit).
+
+        ``reference`` is the caller's domain id (typically invoice id) —
+        we reuse it as the idempotency key so a retry of the same
+        invoice's tax posting lands on the same Stripe transaction.
+        """
         if not self.is_configured():
             return {"id": "stub_tx", "reference": reference}
         tx_cls = getattr(getattr(stripe, "tax", None), "Transaction", None)
@@ -151,7 +300,13 @@ class StripeClient:
             raise RuntimeError(
                 "stripe.tax.Transaction is unavailable in this SDK version"
             )
-        tx = tx_cls.create_from_calculation(calculation=calculation, reference=reference)
+        tx = self._stripe_write(
+            "tax.transaction.create_from_calculation",
+            tx_cls.create_from_calculation,
+            idempotency_key=f"taxtx_{reference}",
+            calculation=calculation,
+            reference=reference,
+        )
         return stripe_object_to_dict(tx)
 
     # ------------------------------------------------------------------
@@ -244,7 +399,11 @@ class StripeClient:
         }
         if customer_id and not customer_id.startswith("stub_"):
             params["customer"] = customer_id
-        pi = stripe.PaymentIntent.create(**params)
+        pi = self._stripe_write(
+            "payment_intent.create",
+            stripe.PaymentIntent.create,
+            **params,
+        )
         return {
             "id": pi.id,
             "client_secret": getattr(pi, "client_secret", None),
