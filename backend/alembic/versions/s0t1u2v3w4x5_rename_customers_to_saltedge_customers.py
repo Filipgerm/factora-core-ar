@@ -5,6 +5,10 @@ SaltEdge's customer concept is a banking integration detail, not a business
 sequences) so the schema self-describes. The ORM class stays as
 ``CustomerModel`` to minimize caller churn; only the underlying table changes.
 
+Works in both **offline** (``--sql``) and **online** Alembic modes by
+using Postgres-native ``IF EXISTS`` guards and DO blocks (no Python-side
+introspection of the bind, which returns ``None`` in offline mode).
+
 Revision ID: s0t1u2v3w4x5
 Revises: r9s0t1u2v3w4
 Create Date: 2026-04-21
@@ -12,7 +16,6 @@ Create Date: 2026-04-21
 
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "s0t1u2v3w4x5"
@@ -25,120 +28,74 @@ _OLD = "customers"
 _NEW = "saltedge_customers"
 
 
-def _exists(bind, kind: str, name: str) -> bool:
-    """Return True if a Postgres object of the given kind/name exists."""
-    if kind == "index":
-        q = sa.text(
-            "SELECT 1 FROM pg_indexes WHERE indexname = :n LIMIT 1"
-        )
-    elif kind == "constraint":
-        q = sa.text(
-            "SELECT 1 FROM pg_constraint WHERE conname = :n LIMIT 1"
-        )
-    elif kind == "table":
-        q = sa.text(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = :n LIMIT 1"
-        )
-    else:
-        raise ValueError(f"unknown kind: {kind}")
-    return bind.execute(q, {"n": name}).first() is not None
+def _rename_constraint_if_exists(table: str, old: str, new: str) -> str:
+    """Return a DO block that renames a table constraint iff it exists."""
+    return f"""
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = '{old}'
+    ) THEN
+        EXECUTE 'ALTER TABLE "{table}" RENAME CONSTRAINT "{old}" TO "{new}"';
+    END IF;
+END
+$$;
+"""
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    if not _exists(bind, "table", _OLD):
-        return
+    op.execute(f'ALTER TABLE IF EXISTS "{_OLD}" RENAME TO "{_NEW}"')
 
-    op.rename_table(_OLD, _NEW)
+    index_renames: list[tuple[str, str]] = [
+        ("ix_customers_identifier", "ix_saltedge_customers_identifier"),
+        ("ix_customers_email", "ix_saltedge_customers_email"),
+        ("ix_customers_organization_id", "ix_saltedge_customers_organization_id"),
+    ]
+    for old, new in index_renames:
+        op.execute(f'ALTER INDEX IF EXISTS "{old}" RENAME TO "{new}"')
 
-    # Rename sequences/PKs/FKs/indexes/constraints deterministically so pg_dump
-    # output is stable and callers querying pg_catalog by name keep working.
-    rename_map: list[tuple[str, str, str]] = [
-        # (kind, old, new)
-        ("index", "ix_customers_identifier", "ix_saltedge_customers_identifier"),
-        ("index", "ix_customers_email", "ix_saltedge_customers_email"),
+    constraint_renames: list[tuple[str, str, str]] = [
+        (_NEW, "uq_customers_identifier", "uq_saltedge_customers_identifier"),
+        (_NEW, "uq_customers_email", "uq_saltedge_customers_email"),
         (
-            "index",
-            "ix_customers_organization_id",
-            "ix_saltedge_customers_organization_id",
-        ),
-        (
-            "constraint",
-            "uq_customers_identifier",
-            "uq_saltedge_customers_identifier",
-        ),
-        ("constraint", "uq_customers_email", "uq_saltedge_customers_email"),
-        (
-            "constraint",
+            _NEW,
             "customer_categorization_chk",
             "saltedge_customer_categorization_chk",
         ),
+        (
+            "connections",
+            "fk_connections_customer_id_customers",
+            "fk_connections_customer_id_saltedge_customers",
+        ),
     ]
-
-    for kind, old, new in rename_map:
-        if kind == "index" and _exists(bind, "index", old):
-            op.execute(sa.text(f'ALTER INDEX "{old}" RENAME TO "{new}"'))
-        elif kind == "constraint" and _exists(bind, "constraint", old):
-            op.execute(
-                sa.text(
-                    f'ALTER TABLE "{_NEW}" RENAME CONSTRAINT "{old}" TO "{new}"'
-                )
-            )
-
-    # Rename the connections→customers FK so it reflects the new parent.
-    fk_old = "fk_connections_customer_id_customers"
-    fk_new = "fk_connections_customer_id_saltedge_customers"
-    if _exists(bind, "constraint", fk_old):
-        op.execute(
-            sa.text(
-                f'ALTER TABLE "connections" RENAME CONSTRAINT "{fk_old}" TO "{fk_new}"'
-            )
-        )
+    for table, old, new in constraint_renames:
+        op.execute(_rename_constraint_if_exists(table, old, new))
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    if not _exists(bind, "table", _NEW):
-        return
+    op.execute(f'ALTER TABLE IF EXISTS "{_NEW}" RENAME TO "{_OLD}"')
 
-    op.rename_table(_NEW, _OLD)
+    index_renames: list[tuple[str, str]] = [
+        ("ix_saltedge_customers_identifier", "ix_customers_identifier"),
+        ("ix_saltedge_customers_email", "ix_customers_email"),
+        ("ix_saltedge_customers_organization_id", "ix_customers_organization_id"),
+    ]
+    for old, new in index_renames:
+        op.execute(f'ALTER INDEX IF EXISTS "{old}" RENAME TO "{new}"')
 
-    rename_map: list[tuple[str, str, str]] = [
-        ("index", "ix_saltedge_customers_identifier", "ix_customers_identifier"),
-        ("index", "ix_saltedge_customers_email", "ix_customers_email"),
+    constraint_renames: list[tuple[str, str, str]] = [
+        (_OLD, "uq_saltedge_customers_identifier", "uq_customers_identifier"),
+        (_OLD, "uq_saltedge_customers_email", "uq_customers_email"),
         (
-            "index",
-            "ix_saltedge_customers_organization_id",
-            "ix_customers_organization_id",
-        ),
-        (
-            "constraint",
-            "uq_saltedge_customers_identifier",
-            "uq_customers_identifier",
-        ),
-        ("constraint", "uq_saltedge_customers_email", "uq_customers_email"),
-        (
-            "constraint",
+            _OLD,
             "saltedge_customer_categorization_chk",
             "customer_categorization_chk",
         ),
+        (
+            "connections",
+            "fk_connections_customer_id_saltedge_customers",
+            "fk_connections_customer_id_customers",
+        ),
     ]
-
-    for kind, old, new in rename_map:
-        if kind == "index" and _exists(bind, "index", old):
-            op.execute(sa.text(f'ALTER INDEX "{old}" RENAME TO "{new}"'))
-        elif kind == "constraint" and _exists(bind, "constraint", old):
-            op.execute(
-                sa.text(
-                    f'ALTER TABLE "{_OLD}" RENAME CONSTRAINT "{old}" TO "{new}"'
-                )
-            )
-
-    fk_old = "fk_connections_customer_id_saltedge_customers"
-    fk_new = "fk_connections_customer_id_customers"
-    if _exists(bind, "constraint", fk_old):
-        op.execute(
-            sa.text(
-                f'ALTER TABLE "connections" RENAME CONSTRAINT "{fk_old}" TO "{fk_new}"'
-            )
-        )
+    for table, old, new in constraint_renames:
+        op.execute(_rename_constraint_if_exists(table, old, new))
