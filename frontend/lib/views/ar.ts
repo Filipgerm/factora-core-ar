@@ -13,7 +13,7 @@ export type ArMydataTransmission =
   | "error"
   | "not_applicable";
 
-export type ArCountry = "GR" | "DE" | "NL" | "FR" | "IE";
+export type ArCountry = "GR" | "DE" | "NL" | "FR" | "IE" | "SE" | "EE";
 
 export interface ArInvoiceRow {
   id: string;

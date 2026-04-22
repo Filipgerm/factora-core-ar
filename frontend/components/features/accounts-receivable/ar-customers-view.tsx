@@ -1,19 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 import { format, parseISO } from "date-fns";
 import { Users } from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 import { DataTable } from "@/components/ui/data-table";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -22,13 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
 import { CounterpartyVatDialog } from "@/components/features/organization/counterparty-vat-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +24,7 @@ import {
   isCustomerType,
 } from "@/lib/organization/counterparty-mappers";
 import type { ArCountry, ArCustomer } from "@/lib/views/ar";
+import { enrichArCustomerRow } from "@/lib/views/ar-customer-demo-data";
 import { cn } from "@/lib/utils";
 
 function fmtEUR(n: number) {
@@ -51,19 +38,18 @@ function fmtEUR(n: number) {
 const PAYMENT_TERMS = ["all", "Net 14", "Net 30", "Net 45"] as const;
 
 export function ArCustomersView() {
+  const router = useRouter();
   const { data: counterparties, isLoading } = useCounterpartiesQuery();
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [country, setCountry] = useState<ArCountry | "all">("all");
   const [terms, setTerms] = useState<(typeof PAYMENT_TERMS)[number]>("all");
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [active, setActive] = useState<ArCustomer | null>(null);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
 
   const customers = useMemo(
     () =>
       (counterparties ?? [])
         .filter((c) => isCustomerType(c.type))
-        .map(counterpartyToArCustomer),
+        .map((c) => enrichArCustomerRow(counterpartyToArCustomer(c))),
     [counterparties]
   );
 
@@ -150,15 +136,6 @@ export function ArCustomersView() {
     []
   );
 
-  const chartData = active
-    ? [
-        { bucket: "Current", amount: active.aging.current },
-        { bucket: "1–30", amount: active.aging.d1_30 },
-        { bucket: "31–60", amount: active.aging.d31_60 },
-        { bucket: "60+", amount: active.aging.d60plus },
-      ]
-    : [];
-
   if (isLoading) {
     return (
       <div className="space-y-5">
@@ -228,6 +205,8 @@ export function ArCustomersView() {
               <SelectItem value="NL">Netherlands</SelectItem>
               <SelectItem value="FR">France</SelectItem>
               <SelectItem value="IE">Ireland</SelectItem>
+              <SelectItem value="SE">Sweden</SelectItem>
+              <SelectItem value="EE">Estonia</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -258,93 +237,9 @@ export function ArCustomersView() {
         data={filtered}
         getRowId={(r) => r.id}
         onRowClick={(row) => {
-          setActive(row);
-          setSheetOpen(true);
+          router.push(`/accounts-receivable/customers/${row.id}`);
         }}
       />
-
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-lg">
-          <SheetHeader className="border-b border-slate-100 pb-4 text-left dark:border-slate-800">
-            <SheetTitle className="text-lg">{active?.legalName}</SheetTitle>
-            <SheetDescription className="font-mono text-xs">
-              {active?.vatNumber} · {active?.country}
-            </SheetDescription>
-          </SheetHeader>
-          {active ? (
-            <div className="flex flex-1 flex-col gap-6 p-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                  AR aging
-                </p>
-                <div className="mt-2 h-40 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `€${v / 1000}k`} />
-                      <Bar
-                        dataKey="amount"
-                        fill="var(--brand-primary, #2f9a8a)"
-                        radius={[4, 4, 0, 0]}
-                        className="fill-[var(--brand-primary)]"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                  Open invoices
-                </p>
-                <ul className="mt-2 space-y-2">
-                  {active.invoices.length === 0 ? (
-                    <li className="text-sm text-muted-foreground">None open</li>
-                  ) : (
-                    active.invoices.map((inv) => (
-                      <li
-                        key={inv.id}
-                        className="flex items-center justify-between rounded-lg border border-slate-200/80 px-3 py-2 text-sm dark:border-slate-800"
-                      >
-                        <span className="font-mono text-xs">{inv.number}</span>
-                        <span className="font-mono font-semibold tabular-nums">
-                          {fmtEUR(inv.amount)}
-                        </span>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                  Payment history
-                </p>
-                <ul className="mt-2 space-y-2">
-                  {active.payments.length === 0 ? (
-                    <li className="text-sm text-muted-foreground">No payments</li>
-                  ) : (
-                    active.payments.map((p) => (
-                      <li
-                        key={p.id}
-                        className="rounded-lg border border-slate-200/80 px-3 py-2 text-sm dark:border-slate-800"
-                      >
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            {format(parseISO(p.date), "d MMM yyyy")}
-                          </span>
-                          <Badge variant="secondary">{p.method}</Badge>
-                        </div>
-                        <p className="mt-1 font-mono font-semibold tabular-nums">
-                          {p.amount}
-                        </p>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-            </div>
-          ) : null}
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }

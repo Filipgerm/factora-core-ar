@@ -1,0 +1,39 @@
+"use client";
+
+import { notFound, useParams } from "next/navigation";
+
+import { ArCustomerProductDetailView } from "@/components/features/accounts-receivable/ar-customer-product-detail-view";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useArCustomerRoute } from "@/lib/hooks/use-ar-customer-route";
+
+export default function ArCustomerProductDetailPage() {
+  const params = useParams();
+  const customerId =
+    typeof params.customerId === "string" ? params.customerId : "";
+  const productSlug =
+    typeof params.productId === "string" ? params.productId : "";
+  const { customer, isLoading } = useArCustomerRoute(customerId);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-80 rounded-lg" />
+        <Skeleton className="h-32 w-full rounded-2xl" />
+        <Skeleton className="h-80 w-full rounded-xl" />
+        <Skeleton className="h-80 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  if (!customer) {
+    notFound();
+  }
+
+  return (
+    <ArCustomerProductDetailView
+      customerId={customer.id}
+      legalName={customer.legalName}
+      productSlug={productSlug}
+    />
+  );
+}

@@ -4,7 +4,15 @@ import type { ArCountry, ArCustomer } from "@/lib/views/ar";
 
 function asArCountry(c: string | null | undefined): ArCountry {
   const u = (c ?? "GR").toUpperCase();
-  if (u === "GR" || u === "DE" || u === "NL" || u === "FR" || u === "IE")
+  if (
+    u === "GR" ||
+    u === "DE" ||
+    u === "NL" ||
+    u === "FR" ||
+    u === "IE" ||
+    u === "SE" ||
+    u === "EE"
+  )
     return u;
   return "GR";
 }
