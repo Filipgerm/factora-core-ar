@@ -538,7 +538,21 @@ class StripeSyncService:
                 )
             )
         await self._upsert_invoice_lines(org, sid, d)
+        # After the Stripe mirror (invoice + lines) is consistent, bridge
+        # through to the unified invoices table + revrec allocations. This
+        # is DB-only (no Stripe HTTP), so it is safe on the webhook hot-path.
+        await self._bridge_invoice_to_unified(org, sid)
         return True
+
+    async def _bridge_invoice_to_unified(self, org: str, stripe_id: str) -> None:
+        """Mirror the StripeInvoice row into the unified ``invoices`` + allocations."""
+        from app.services.stripe_invoice_bridge import StripeInvoiceBridgeService
+
+        stripe_row = await self._load_row(StripeInvoice, org, stripe_id)
+        if stripe_row is None:
+            return
+        bridge = StripeInvoiceBridgeService(self._db)
+        await bridge.upsert_from_stripe_invoice(stripe_row)
 
     async def apply_credit_note(self, obj: Any, *, deleted: bool = False) -> bool:
         return await self._upsert(
