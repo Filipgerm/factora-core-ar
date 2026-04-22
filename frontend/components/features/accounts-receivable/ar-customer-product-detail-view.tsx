@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { Package, Pencil } from "lucide-react";
-import { BarChart } from "@tremor/react";
 
 import { Button } from "@/components/ui/button";
 import { ArCustomerCrumbBar } from "@/components/features/accounts-receivable/ar-customer-nav";
+import {
+  BillingScheduleChart,
+  RevenueScheduleChart,
+} from "@/components/features/accounts-receivable/ar-schedule-charts";
 import { getProductDetailDemo } from "@/lib/views/ar-customer-demo-data";
 import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
 
@@ -121,17 +124,15 @@ export function ArCustomerProductDetailView({
             Edit billing
           </Button>
         </div>
-        <div className="rounded-xl border border-slate-200/90 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-          <BarChart
-            className="h-72"
-            data={demo.billingSchedule.chart}
-            index="month"
-            categories={["Billed", "Unbilled"]}
-            colors={["teal", "slate"]}
-            yAxisWidth={56}
-            valueFormatter={(v) => fmtChart(Number(v), cur)}
-            showLegend
-          />
+        <div className="rounded-xl border border-slate-200/90 bg-white p-4 pt-6 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.6)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none">
+          <div className="h-[min(22rem,55vh)] w-full min-h-[18rem]">
+            <BillingScheduleChart
+              data={demo.billingSchedule.chart}
+              currency={cur}
+              valueFormatter={(v) => fmtChart(v, cur)}
+              className="h-full w-full"
+            />
+          </div>
         </div>
         <dl className="grid gap-4 border-t border-slate-100 pt-4 text-sm sm:grid-cols-2 lg:grid-cols-4 dark:border-slate-800">
           <div>
@@ -169,17 +170,15 @@ export function ArCustomerProductDetailView({
             Edit revenue
           </Button>
         </div>
-        <div className="rounded-xl border border-slate-200/90 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-          <BarChart
-            className="h-72"
-            data={demo.revenueSchedule.chart}
-            index="month"
-            categories={["Actual", "Forecasted"]}
-            colors={["rose", "pink"]}
-            yAxisWidth={56}
-            valueFormatter={(v) => fmtChart(Number(v), cur)}
-            showLegend
-          />
+        <div className="rounded-xl border border-slate-200/90 bg-white p-4 pt-6 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.6)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none">
+          <div className="h-[min(22rem,55vh)] w-full min-h-[18rem]">
+            <RevenueScheduleChart
+              data={demo.revenueSchedule.chart}
+              currency={cur}
+              valueFormatter={(v) => fmtChart(v, cur)}
+              className="h-full w-full"
+            />
+          </div>
         </div>
         <dl className="grid gap-4 border-t border-slate-100 pt-4 text-sm sm:grid-cols-3 dark:border-slate-800">
           <div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronRight, Search } from "lucide-react";
 
@@ -9,6 +10,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthSession, useLogoutMutation } from "@/lib/hooks/api/use-auth";
+import { useCounterpartiesQuery } from "@/lib/hooks/api/use-organization";
+import {
+  DEMO_COUNTERPARTY_NAME_BY_ID,
+  isLikelyUuid,
+} from "@/lib/demo/demo-counterparty-fixtures";
 import { cn } from "@/lib/utils";
 
 /** First path segment → section title */
@@ -47,17 +53,33 @@ const LEAF_LABEL: Record<string, string> = {
   "recurring-templates": "Recurring entries",
 };
 
-function labelForSegment(segment: string, index: number): string {
+function humanizeSlug(segment: string): string {
+  const words = segment.replace(/-/g, " ").trim();
+  return words.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function labelForSegment(
+  segment: string,
+  index: number,
+  idToName?: Map<string, string>
+): string {
+  const fromCp = idToName?.get(segment);
+  if (fromCp) {
+    return fromCp;
+  }
+  if (isLikelyUuid(segment)) {
+    return DEMO_COUNTERPARTY_NAME_BY_ID[segment] ?? "Customer";
+  }
   if (index === 0) {
     return ROOT_SEGMENT_LABEL[segment] ?? segment.replace(/-/g, " ");
   }
-  return (
-    LEAF_LABEL[segment] ??
-    segment.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-  );
+  return LEAF_LABEL[segment] ?? humanizeSlug(segment);
 }
 
-function breadcrumbsForPath(pathname: string) {
+function breadcrumbsForPath(
+  pathname: string,
+  idToName?: Map<string, string>
+) {
   const raw = pathname.replace(/^\//, "").split("/").filter(Boolean);
   if (raw.length === 0) {
     return [{ href: "/home", label: "Home" }];
@@ -69,7 +91,7 @@ function breadcrumbsForPath(pathname: string) {
     acc += `/${raw[i]}`;
     items.push({
       href: acc,
-      label: labelForSegment(raw[i], i),
+      label: labelForSegment(raw[i], i, idToName),
     });
   }
   return items;
@@ -78,7 +100,18 @@ function breadcrumbsForPath(pathname: string) {
 export function DashboardTopNav() {
   const pathname = usePathname() || "/home";
   const router = useRouter();
-  const crumbs = breadcrumbsForPath(pathname);
+  const { data: counterparties } = useCounterpartiesQuery();
+  const counterpartyNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of counterparties ?? []) {
+      m.set(c.id, c.name);
+    }
+    return m;
+  }, [counterparties]);
+  const crumbs = useMemo(
+    () => breadcrumbsForPath(pathname, counterpartyNameById),
+    [pathname, counterpartyNameById]
+  );
   const { data: session } = useAuthSession();
   const logout = useLogoutMutation();
   const displayName = session?.profile?.username ?? "Guest";

@@ -20,6 +20,7 @@ import {
   type CounterpartyUpdate,
   type OrganizationSetupRequest,
 } from "@/lib/schemas/organization";
+import { mergeSeedOrgCounterparties } from "@/lib/demo/demo-counterparty-fixtures";
 import { useAuthSession } from "@/lib/hooks/api/use-auth";
 
 async function parseJson<T>(
@@ -110,12 +111,11 @@ export function useSetupOrganizationMutation() {
 
 export function useCounterpartiesQuery() {
   const { data: session } = useAuthSession();
-  const enabled = Boolean(
-    session?.hasToken && session.profile?.organization_id
-  );
+  const organizationId = session?.profile?.organization_id ?? null;
+  const enabled = Boolean(session?.hasToken && organizationId);
 
   return useQuery({
-    queryKey: queryKeys.organization.counterparties(),
+    queryKey: [...queryKeys.organization.counterparties(), organizationId ?? ""],
     queryFn: async (): Promise<CounterpartyResponse[]> => {
       const res = await apiFetch("/v1/organization/counterparties");
       if (!res.ok) throw await apiErrorFromResponse(res);
@@ -123,6 +123,8 @@ export function useCounterpartiesQuery() {
       return z.array(counterpartyResponseSchema).parse(json);
     },
     enabled,
+    select: (rows: CounterpartyResponse[]) =>
+      mergeSeedOrgCounterparties(rows, organizationId),
   });
 }
 
