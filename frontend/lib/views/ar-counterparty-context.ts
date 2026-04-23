@@ -28,15 +28,23 @@ export type CustomerHubDemo = {
   productPricingRows: { product: string; pricing: string }[];
 };
 
+export type ProductTierRowDemo = {
+  label: string;
+  price: string;
+};
+
 export type ProductRowDemo = {
   id: string;
   name: string;
   kindLabel: string;
+  /** Tag color variant — Usage/Platform vs Seats in designer reference. */
+  kindTone?: "usage" | "platform" | "seats";
   serviceRange: string;
   invoicingLabel: string;
   invoicingTone: "complete" | "partial";
   priceLabel: string;
   activePeriod?: boolean;
+  tieredPricing?: ProductTierRowDemo[];
 };
 
 export type ProductGroupDemo = {

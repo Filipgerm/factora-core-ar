@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, Circle, Package } from "lucide-react";
+import {
+  ArrowUpDown,
+  ChevronDown,
+  Circle,
+  Filter,
+  MoreVertical,
+  Package,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +26,7 @@ import type { CounterpartyResponse } from "@/lib/schemas/organization";
 import {
   productGroupsFromCounterparty,
   type ProductGroupDemo,
+  type ProductRowDemo,
 } from "@/lib/views/ar-counterparty-context";
 import { cn } from "@/lib/utils";
 
@@ -112,6 +120,14 @@ export function ArCustomerProductsView({ counterparty }: Props) {
             </SelectContent>
           </Select>
         </div>
+        <div className="ml-auto flex shrink-0 gap-0.5">
+          <Button type="button" variant="ghost" size="icon" className="size-9" disabled aria-label="Sort">
+            <ArrowUpDown className="size-4 text-muted-foreground" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="size-9" disabled aria-label="Filter">
+            <Filter className="size-4 text-muted-foreground" />
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_220px]">
@@ -163,6 +179,16 @@ export function ArCustomerProductsView({ counterparty }: Props) {
   );
 }
 
+function kindTagClass(tone: ProductRowDemo["kindTone"]): string {
+  if (tone === "seats") {
+    return "font-semibold text-orange-600 dark:text-orange-400";
+  }
+  if (tone === "usage" || tone === "platform") {
+    return "font-semibold text-blue-600 dark:text-blue-400";
+  }
+  return "font-semibold text-[color:var(--brand-primary)]";
+}
+
 function ProductGroupCard({
   group,
   basePath,
@@ -179,15 +205,18 @@ function ProductGroupCard({
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 text-left transition-colors duration-200 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-900/50"
+        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-left transition-colors duration-200 hover:bg-slate-100/80 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:bg-slate-900/60"
       >
         <span className="text-sm font-semibold">{group.title}</span>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-            open ? "rotate-0" : "-rotate-90"
-          )}
-        />
+        <span className="flex shrink-0 items-center gap-1">
+          <MoreVertical className="size-4 text-muted-foreground" aria-hidden />
+          <ChevronDown
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+              open ? "rotate-0" : "-rotate-90"
+            )}
+          />
+        </span>
       </button>
       {open ? (
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -195,19 +224,29 @@ function ProductGroupCard({
             <Link
               key={row.id}
               href={`${basePath}/products/${row.id}`}
-              className="flex flex-col gap-3 px-4 py-4 transition-colors duration-200 hover:bg-[var(--brand-primary-subtle)]/50 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-3 px-4 py-4 transition-colors duration-200 hover:bg-[var(--brand-primary-subtle)]/50 sm:flex-row sm:items-start sm:justify-between"
             >
               <div className="flex min-w-0 items-start gap-3">
                 <span
-                  className="mt-1 inline-block size-3.5 shrink-0 rounded-full border border-slate-300 dark:border-slate-600"
+                  className="mt-1 inline-flex size-4 shrink-0 items-center justify-center rounded-sm border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-950"
                   aria-hidden
                 />
                 <div className="min-w-0">
                   <p className="font-semibold text-foreground">{row.name}</p>
-                  <p className="text-xs text-[color:var(--brand-primary)]">
+                  <p className={cn("text-xs", kindTagClass(row.kindTone))}>
                     {row.kindLabel}
                   </p>
-                  <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {row.tieredPricing?.length ? (
+                    <ul className="mt-2 space-y-1 border-l border-slate-200 pl-3 text-xs text-muted-foreground dark:border-slate-700">
+                      {row.tieredPricing.map((t) => (
+                        <li key={t.label} className="flex justify-between gap-6 tabular-nums">
+                          <span>{t.label}</span>
+                          <span className="font-mono text-foreground/90">{t.price}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Circle
                       className={cn(
                         "size-2.5 shrink-0 fill-current",
@@ -221,10 +260,10 @@ function ProductGroupCard({
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-4 sm:justify-end">
+              <div className="flex flex-wrap items-start gap-x-6 gap-y-1 sm:min-w-[280px] sm:flex-nowrap sm:justify-end">
                 <span
                   className={cn(
-                    "text-xs font-medium",
+                    "text-xs font-medium sm:text-right",
                     row.invoicingTone === "complete"
                       ? "text-emerald-600 dark:text-emerald-400"
                       : "text-foreground"
@@ -232,7 +271,7 @@ function ProductGroupCard({
                 >
                   {row.invoicingLabel}
                 </span>
-                <span className="font-mono text-sm font-semibold tabular-nums">
+                <span className="font-mono text-sm font-semibold tabular-nums sm:text-right">
                   {row.priceLabel}
                 </span>
               </div>

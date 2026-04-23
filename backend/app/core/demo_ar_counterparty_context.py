@@ -146,6 +146,193 @@ def _generic_shell(
 # --- Digital Consulting (full designer narrative) --------------------------------
 
 _DC = "f6a7b8c9-d0e1-42f3-a4b5-c6d7e8f90101"
+_ACME_ID = "f6a7b8c9-d0e1-42f3-a4b5-c6d7e8f90102"
+
+
+def _acme_monthly_demo(amount: float) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Billing/revenue chart rows using shared MONTHS_DC."""
+    return _billing_monthly(amount), _revenue_monthly(amount)
+
+
+def _acme_product_detail(
+    slug: str,
+    title: str,
+    *,
+    monthly_amount: float,
+    pricing_model: str = "Usage / recurring (demo)",
+    qty: int = 1,
+    unit_price: float | None = None,
+    currency: str = "USD",
+    period_label: str = "Oct 27 '24 – Oct 26 '27 (demo cadence)",
+    svc_period: str = "Oct 27 '24 – Oct 26 '27",
+) -> dict[str, Any]:
+    """Compact IFRS-style schedule payload for ACME SKU drill-down."""
+    unit = unit_price if unit_price is not None else monthly_amount
+    bill_r, rev_r = _acme_monthly_demo(monthly_amount)
+    annual = monthly_amount * 12
+    return {
+        "slug": slug,
+        "title": title,
+        "summaryStrip": {
+            "totalContracted": annual,
+            "pricingModel": pricing_model,
+            "unitPrice": unit,
+            "qty": qty,
+            "invoiceAmount": monthly_amount,
+            "currency": currency,
+        },
+        "billingSchedule": {
+            "frequency": "Monthly · aligned to subscription term",
+            "paymentTerms": "Net 14",
+            "periodLabel": period_label,
+            "billedTotal": annual,
+            "chart": bill_r,
+        },
+        "revenueSchedule": {
+            "servicePeriod": svc_period,
+            "recognized": annual,
+            "remainingLabel": "—",
+            "chart": rev_r,
+        },
+    }
+
+
+def _acme_corporation_context(ar_customer: dict[str, Any]) -> dict[str, Any]:
+    """Rich catalog for ACME Corporation — matches designer reference (tiered usage SKUs)."""
+    hub = _fallback_hub("ACME Corporation", "USD")
+    hub["productPricingRows"] = [
+        {"product": "API Call Blocks", "pricing": "$0.04 – $0.08 /unit/mo"},
+        {"product": "Core Platform: Starter", "pricing": "$1,000.00 /mo"},
+        {"product": "Data Processing Credits", "pricing": "$0.05 – $0.18 /unit/mo"},
+        {"product": "Report Exports", "pricing": "$0.00 – $0.50 /unit/mo"},
+        {"product": "User Seats", "pricing": "$50.00 /unit/mo"},
+    ]
+    svc = "Service Oct 27 '24 – Oct 26 '27"
+    product_groups = [
+        {
+            "id": "og-acme-enterprise",
+            "title": "ACME Enterprise Order Form",
+            "rows": [
+                {
+                    "id": "api-call-blocks",
+                    "name": "API Call Blocks",
+                    "kindLabel": "Usage",
+                    "kindTone": "usage",
+                    "serviceRange": svc,
+                    "invoicingLabel": "11 of 36 invoiced",
+                    "invoicingTone": "partial",
+                    "priceLabel": "$0.04 – $0.08 /unit/mo",
+                    "activePeriod": True,
+                    "tieredPricing": [
+                        {"label": "0–1000 Blocks", "price": "$0.08"},
+                        {"label": "1000–5000 Blocks", "price": "$0.06"},
+                        {"label": "5000+ Blocks", "price": "$0.04"},
+                    ],
+                },
+                {
+                    "id": "core-platform-starter",
+                    "name": "Core Platform: Starter",
+                    "kindLabel": "Platform",
+                    "kindTone": "platform",
+                    "serviceRange": svc,
+                    "invoicingLabel": "12 of 36 invoiced",
+                    "invoicingTone": "partial",
+                    "priceLabel": "$1,000.00 /mo",
+                    "activePeriod": True,
+                },
+                {
+                    "id": "data-processing-credits",
+                    "name": "Data Processing Credits",
+                    "kindLabel": "Usage",
+                    "kindTone": "usage",
+                    "serviceRange": svc,
+                    "invoicingLabel": "11 of 36 invoiced",
+                    "invoicingTone": "partial",
+                    "priceLabel": "$0.05 – $0.18 /unit/mo",
+                    "activePeriod": True,
+                    "tieredPricing": [
+                        {"label": "0–100000 credits", "price": "$0.10"},
+                        {"label": "400000–500000 credits", "price": "$0.18"},
+                        {"label": "500000+ credits", "price": "$0.05"},
+                    ],
+                },
+                {
+                    "id": "report-exports",
+                    "name": "Report Exports",
+                    "kindLabel": "Usage",
+                    "kindTone": "usage",
+                    "serviceRange": svc,
+                    "invoicingLabel": "11 of 36 invoiced",
+                    "invoicingTone": "partial",
+                    "priceLabel": "$0.00 – $0.50 /unit/mo",
+                    "activePeriod": True,
+                    "tieredPricing": [
+                        {"label": "0–1000 exports", "price": "$0.00"},
+                        {"label": "1000+ exports", "price": "$0.50"},
+                    ],
+                },
+                {
+                    "id": "user-seats",
+                    "name": "User Seats",
+                    "kindLabel": "Seats",
+                    "kindTone": "seats",
+                    "serviceRange": svc,
+                    "invoicingLabel": "11 of 36 invoiced",
+                    "invoicingTone": "partial",
+                    "priceLabel": "$50.00 /unit/mo",
+                    "activePeriod": True,
+                },
+            ],
+        }
+    ]
+
+    product_details = {
+        "api-call-blocks": _acme_product_detail(
+            "api-call-blocks",
+            "API Call Blocks",
+            monthly_amount=720.0,
+            unit_price=0.06,
+            pricing_model="Tiered usage (demo midpoint)",
+        ),
+        "core-platform-starter": _acme_product_detail(
+            "core-platform-starter",
+            "Core Platform: Starter",
+            monthly_amount=1000.0,
+            unit_price=1000.0,
+            pricing_model="Flat recurring",
+        ),
+        "data-processing-credits": _acme_product_detail(
+            "data-processing-credits",
+            "Data Processing Credits",
+            monthly_amount=1850.0,
+            unit_price=0.115,
+            pricing_model="Tiered usage (demo midpoint)",
+        ),
+        "report-exports": _acme_product_detail(
+            "report-exports",
+            "Report Exports",
+            monthly_amount=275.0,
+            unit_price=0.25,
+            pricing_model="Tiered usage (demo midpoint)",
+        ),
+        "user-seats": _acme_product_detail(
+            "user-seats",
+            "User Seats",
+            monthly_amount=3500.0,
+            qty=70,
+            unit_price=50.0,
+            pricing_model="Per-seat subscription",
+        ),
+    }
+
+    out: dict[str, Any] = {
+        "hub": hub,
+        "product_groups": product_groups,
+        "product_details": product_details,
+    }
+    if ar_customer:
+        out["ar_customer"] = ar_customer
+    return out
 
 _DC_AR_CUSTOMER = {
     "totalOutstanding": 48250,
@@ -406,6 +593,10 @@ def ar_demo_context_for_counterparty(
 
     overlay = _OVERLAYS.get(counterparty_id, {})
     ar_customer = dict(overlay) if overlay else {}
+
+    if counterparty_id == _ACME_ID:
+        return _acme_corporation_context(ar_customer)
+
     return _generic_shell(
         country=country,
         legal_name=legal_name,
