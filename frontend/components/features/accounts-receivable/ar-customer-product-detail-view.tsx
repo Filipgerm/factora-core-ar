@@ -201,7 +201,7 @@ export function ArCustomerProductDetailView({
         </dl>
         <p className="text-xs text-muted-foreground">
           Scroll this page to compare billing recognition vs revenue recognition for the
-          same service window (demo).
+          same service window.
         </p>
       </section>
 

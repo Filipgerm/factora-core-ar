@@ -102,7 +102,7 @@ export function ArCustomerHubView({ counterparty }: Props) {
             </div>
             <div>
               <dt className="text-[10px] font-semibold uppercase tracking-wide text-violet-900/70 dark:text-violet-200/80">
-                Billed through Tabs
+                Billed through Factora
               </dt>
               <dd className="mt-1 font-semibold tabular-nums text-violet-950 dark:text-violet-50">
                 {fmtMoney(demo.billedThroughTabs, demo.currency)}
@@ -168,7 +168,7 @@ export function ArCustomerHubView({ counterparty }: Props) {
                 href="/accounts-receivable/invoices"
                 className="text-sm font-semibold text-foreground underline decoration-slate-300 underline-offset-4 transition-colors duration-200 hover:text-[color:var(--brand-primary)]"
               >
-                Invoices (demo)
+                Invoices
               </Link>
               <p className="mt-1 text-xs text-muted-foreground">
                 Open and posted invoices for this customer

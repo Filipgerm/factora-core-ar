@@ -51,7 +51,7 @@ export function TransactionDetailSheet({
           </SheetTitle>
           <SheetDescription className="text-xs tracking-tight text-muted-foreground">
             {contextLabel ??
-              "Mock ledger postings behind this balance (demo)."}
+              "Mock ledger postings behind this balance."}
           </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">

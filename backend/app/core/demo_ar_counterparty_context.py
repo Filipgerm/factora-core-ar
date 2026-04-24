@@ -63,7 +63,7 @@ def _generic_platform_product_detail(amount: float, currency: str) -> dict[str, 
         "billingSchedule": {
             "frequency": "Monthly",
             "paymentTerms": "Net 30",
-            "periodLabel": "Annual cycle (demo)",
+            "periodLabel": "Annual cycle",
             "billedTotal": amount * 12,
             "chart": _billing_monthly(amount),
         },
@@ -85,7 +85,7 @@ def _fallback_hub(legal_name: str, currency: str) -> dict[str, Any]:
         "remainingInvoices": 3,
         "billedThroughTabs": 18500,
         "revenueArr": 48000,
-        "revenueNote": "Contracted annual value (demo)",
+        "revenueNote": "Contracted annual value",
         "cashCollected90d": 9200,
         "currency": currency,
         "billingSectionTitle": "Billing & revenue",
@@ -149,7 +149,9 @@ _DC = "f6a7b8c9-d0e1-42f3-a4b5-c6d7e8f90101"
 _ACME_ID = "f6a7b8c9-d0e1-42f3-a4b5-c6d7e8f90102"
 
 
-def _acme_monthly_demo(amount: float) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _acme_monthly_demo(
+    amount: float,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Billing/revenue chart rows using shared MONTHS_DC."""
     return _billing_monthly(amount), _revenue_monthly(amount)
 
@@ -159,7 +161,7 @@ def _acme_product_detail(
     title: str,
     *,
     monthly_amount: float,
-    pricing_model: str = "Usage / recurring (demo)",
+    pricing_model: str = "Usage / recurring",
     qty: int = 1,
     unit_price: float | None = None,
     currency: str = "USD",
@@ -334,6 +336,7 @@ def _acme_corporation_context(ar_customer: dict[str, Any]) -> dict[str, Any]:
         out["ar_customer"] = ar_customer
     return out
 
+
 _DC_AR_CUSTOMER = {
     "totalOutstanding": 48250,
     "overdueAmount": 0,
@@ -361,7 +364,7 @@ _DC_CHART_3K_R = _revenue_monthly(3000.0)
 
 def _digital_consulting_context() -> dict[str, Any]:
     hub = {
-        "metaLine": "CREATED APR 17, 2025 BY QBO · EXISTS IN QBO, SALESFORCE (demo)",
+        "metaLine": "CREATED APR 17, 2025 BY QBO · EXISTS IN QBO, SALESFORCE",
         "customerSinceYear": 2025,
         "termEndsLabel": "May 1, 2026",
         "remainingInvoices": 7,
@@ -439,7 +442,7 @@ def _digital_consulting_context() -> dict[str, Any]:
         currency: str = "USD",
         pricing_model: str = "Recurring",
         qty: int = 1,
-        period: str = "Annual cycle (demo)",
+        period: str = "Annual cycle",
         svc: str = "Aligned billing",
     ) -> dict[str, Any]:
         return {
@@ -498,7 +501,7 @@ def _digital_consulting_context() -> dict[str, Any]:
             "core-platform-legacy",
             "Core Platform",
             3000.0,
-            period="Annual cycle (demo)",
+            period="Annual cycle",
             svc="Aligned billing",
         ),
         "core-platform-renewal": _detail_generic_dc(
