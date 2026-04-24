@@ -48,7 +48,6 @@ const PAYMENT_TERMS = ["all", "Net 14", "Net 30", "Net 45"] as const;
 
 type ArCustomerTableRow = ArCustomer & {
   billingContact: string;
-  documentsCount: number;
   createdAt: Date;
 };
 
@@ -66,12 +65,42 @@ function billingEmailFromCounterparty(c: CounterpartyResponse): string {
   return `billing@${slug}.example`;
 }
 
-function documentsCountForCustomer(enriched: ArCustomer): number {
-  if (enriched.invoices.length > 0) {
-    return Math.min(5, enriched.invoices.length + 1);
-  }
-  const h = parseInt(enriched.id.replace(/-/g, "").slice(-6), 16);
-  return (h % 4) + 1;
+function escapeCsvCell(value: string) {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+function exportCustomersCsv(rows: ArCustomerTableRow[]) {
+  const headers = [
+    "Customer",
+    "Billing contact",
+    "VAT number",
+    "Outstanding",
+    "Overdue",
+    "Last payment",
+  ];
+  const lines = [
+    headers.join(","),
+    ...rows.map((r) =>
+      [
+        escapeCsvCell(r.legalName),
+        escapeCsvCell(r.billingContact),
+        escapeCsvCell(r.vatNumber),
+        String(r.totalOutstanding),
+        String(r.overdueAmount),
+        escapeCsvCell(r.lastPaymentDate ?? ""),
+      ].join(",")
+    ),
+  ];
+  const blob = new Blob([lines.join("\n")], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export function ArCustomersView() {
@@ -93,7 +122,6 @@ export function ArCustomersView() {
         return {
           ...enriched,
           billingContact: billingEmailFromCounterparty(cp),
-          documentsCount: documentsCountForCustomer(enriched),
           createdAt: new Date(cp.created_at),
         };
       });
@@ -180,15 +208,6 @@ export function ArCustomersView() {
         ),
       },
       {
-        id: "documentsCount",
-        header: () => <span>Documents</span>,
-        cell: ({ row }) => (
-          <span className="tabular-nums text-foreground">
-            {row.original.documentsCount}
-          </span>
-        ),
-      },
-      {
         accessorKey: "vatNumber",
         header: "VAT number",
         cell: ({ row }) => (
@@ -221,19 +240,6 @@ export function ArCustomersView() {
             {fmtEUR(row.original.overdueAmount)}
           </div>
         ),
-      },
-      {
-        accessorKey: "dsoDays",
-        header: () => <span className="text-right">DSO</span>,
-        cell: ({ row }) => (
-          <div className="text-right font-mono text-sm tabular-nums">
-            {row.original.dsoDays}d
-          </div>
-        ),
-      },
-      {
-        accessorKey: "paymentTerms",
-        header: "Payment terms",
       },
       {
         accessorKey: "lastPaymentDate",
@@ -353,13 +359,19 @@ export function ArCustomersView() {
           Customers
         </h1>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" className="rounded-lg" disabled>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-lg"
+            onClick={() => exportCustomersCsv(filtered)}
+          >
             Export
           </Button>
           <Button
             type="button"
             size="sm"
-            className="rounded-lg bg-[#c4a574] px-4 font-semibold text-slate-900 shadow-sm hover:bg-[#b89968]"
+            className="rounded-lg bg-[var(--brand-primary)] px-4 font-semibold text-white shadow-sm transition-colors hover:bg-[var(--brand-primary)]/90"
             onClick={() => setNewCustomerOpen(true)}
           >
             + Create customer
