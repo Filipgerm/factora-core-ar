@@ -79,8 +79,8 @@ def _generic_platform_product_detail(amount: float, currency: str) -> dict[str, 
 def _fallback_hub(legal_name: str, currency: str) -> dict[str, Any]:
     sym = _sym(currency)
     return {
-        "metaLine": f"SYNCED FROM REGISTRY · {legal_name.upper()}",
-        "customerSinceYear": 2024,
+        "dataSourcesLine": f"Exists in HubSpot · {legal_name} (registry)",
+        "customerSinceDate": "2024-03-18",
         "termEndsLabel": "—",
         "remainingInvoices": 3,
         "billedThroughTabs": 18500,
@@ -202,6 +202,8 @@ def _acme_product_detail(
 def _acme_corporation_context(ar_customer: dict[str, Any]) -> dict[str, Any]:
     """Rich catalog for ACME Corporation — matches designer reference (tiered usage SKUs)."""
     hub = _fallback_hub("ACME Corporation", "USD")
+    hub["dataSourcesLine"] = "Exists in HubSpot · Stripe Billing"
+    hub["customerSinceDate"] = "2022-11-03"
     hub["productPricingRows"] = [
         {"product": "API Call Blocks", "pricing": "$0.04 – $0.08 /unit/mo"},
         {"product": "Core Platform: Starter", "pricing": "$1,000.00 /mo"},
@@ -364,8 +366,8 @@ _DC_CHART_3K_R = _revenue_monthly(3000.0)
 
 def _digital_consulting_context() -> dict[str, Any]:
     hub = {
-        "metaLine": "CREATED APR 17, 2025 BY QBO · EXISTS IN QBO, SALESFORCE",
-        "customerSinceYear": 2025,
+        "dataSourcesLine": "Exists in QuickBooks · Salesforce",
+        "customerSinceDate": "2025-04-17",
         "termEndsLabel": "May 1, 2026",
         "remainingInvoices": 7,
         "billedThroughTabs": 61250,

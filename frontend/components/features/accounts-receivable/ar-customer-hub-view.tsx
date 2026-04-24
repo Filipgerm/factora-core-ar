@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
+import { format, parseISO } from "date-fns";
 import { ChevronRight, Search, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,14 @@ function fmtMoney(n: number, currency: string) {
   }).format(n);
 }
 
+function formatCustomerSince(isoDate: string): string {
+  try {
+    return format(parseISO(isoDate), "d MMMM yyyy");
+  } catch {
+    return isoDate;
+  }
+}
+
 function spreadAcrossSixMonths(total: number): number[] {
   const n = 6;
   if (total <= 0) return Array.from({ length: n }, () => 0);
@@ -63,7 +72,6 @@ type FinancialMetricRow = {
 };
 
 function buildFinancialRows(demo: ReturnType<typeof hubDemoFromCounterparty>): FinancialMetricRow[] {
-  const c = demo.currency;
   const invoicingTotal = Math.max(demo.billedThroughTabs * 3.2, 1);
   const revenueTotal = Math.max(
     Math.round(demo.billedThroughTabs * 0.42 + demo.cashCollected90d * 0.35),
@@ -241,8 +249,8 @@ export function ArCustomerHubView({ counterparty }: Props) {
               <h1 className="text-2xl font-semibold tracking-tight text-violet-950 dark:text-violet-50">
                 {legalName}
               </h1>
-              <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-violet-900/60 dark:text-violet-200/70">
-                {demo.metaLine}
+              <p className="mt-1.5 text-sm font-medium leading-snug text-violet-900/85 dark:text-violet-100/85">
+                {demo.dataSourcesLine}
               </p>
               <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-white/80 px-2.5 py-0.5 text-xs font-medium text-emerald-900 shadow-sm dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100">
                 <span
@@ -251,6 +259,14 @@ export function ArCustomerHubView({ counterparty }: Props) {
                 />
                 Active
               </span>
+              <dl className="mt-4">
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-violet-900/65 dark:text-violet-200/75">
+                  Customer since
+                </dt>
+                <dd className="mt-1 text-sm font-semibold tabular-nums text-violet-950 dark:text-violet-50">
+                  {formatCustomerSince(demo.customerSinceDate)}
+                </dd>
+              </dl>
             </div>
           </div>
           <div className="text-left sm:text-right">

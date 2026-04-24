@@ -14,8 +14,10 @@ export type ArDemoContextStored = {
 };
 
 export type CustomerHubDemo = {
-  metaLine: string;
-  customerSinceYear: number;
+  /** Where this customer is represented (CRM, billing, etc.). */
+  dataSourcesLine: string;
+  /** ISO date ``YYYY-MM-DD`` — shown as a full calendar date for “Customer since”. */
+  customerSinceDate: string;
   termEndsLabel: string;
   remainingInvoices: number;
   billedThroughTabs: number;
@@ -93,12 +95,36 @@ function currencyFallback(country: string | null | undefined): string {
   return "EUR";
 }
 
-function fallbackHub(legalName: string, country: string | null | undefined): CustomerHubDemo {
+function isoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Map legacy seeded ``metaLine`` copy to a short “Exists in …” line when needed. */
+function dataSourcesLineFromLegacyMeta(metaLine: string): string {
+  const u = metaLine.toUpperCase();
+  if (u.includes("QBO") || u.includes("QUICKBOOKS") || u.includes("SALESFORCE")) {
+    return "Exists in QuickBooks · Salesforce";
+  }
+  if (u.includes("REGISTRY")) {
+    return "Exists in HubSpot · GEMI registry";
+  }
+  return "Exists in HubSpot";
+}
+
+function fallbackHub(
+  legalName: string,
+  country: string | null | undefined,
+  customerCreatedAt?: Date | null
+): CustomerHubDemo {
   const currency = currencyFallback(country);
   const sym = currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$";
+  const since = customerCreatedAt ?? new Date();
   return {
-    metaLine: `${legalName.toUpperCase()} · NO DEMO CONTEXT`,
-    customerSinceYear: new Date().getFullYear(),
+    dataSourcesLine: `Exists in HubSpot · ${legalName}`,
+    customerSinceDate: isoDate(since),
     termEndsLabel: "—",
     remainingInvoices: 0,
     billedThroughTabs: 0,
@@ -116,9 +142,36 @@ function fallbackHub(legalName: string, country: string | null | undefined): Cus
 }
 
 export function hubDemoFromCounterparty(cp: CounterpartyResponse): CustomerHubDemo {
+  const base = fallbackHub(cp.name, cp.country, cp.created_at);
   const ctx = demoContext(cp);
-  if (ctx?.hub) return ctx.hub;
-  return fallbackHub(cp.name, cp.country);
+  if (!ctx?.hub) return base;
+
+  const raw = ctx.hub as Partial<CustomerHubDemo> &
+    Record<string, unknown> & { metaLine?: string; customerSinceYear?: number };
+  const { metaLine: _legacyMeta, customerSinceYear: _legacyYear, ...patch } = raw;
+  const merged: CustomerHubDemo = { ...base, ...patch };
+
+  if (
+    typeof merged.dataSourcesLine !== "string" ||
+    !merged.dataSourcesLine.trim()
+  ) {
+    merged.dataSourcesLine =
+      typeof _legacyMeta === "string" && _legacyMeta.trim()
+        ? dataSourcesLineFromLegacyMeta(_legacyMeta)
+        : base.dataSourcesLine;
+  }
+
+  if (
+    typeof merged.customerSinceDate !== "string" ||
+    !merged.customerSinceDate.trim()
+  ) {
+    merged.customerSinceDate =
+      typeof _legacyYear === "number"
+        ? `${_legacyYear}-01-15`
+        : base.customerSinceDate;
+  }
+
+  return merged;
 }
 
 export function productGroupsFromCounterparty(cp: CounterpartyResponse): ProductGroupDemo[] {
