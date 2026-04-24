@@ -375,7 +375,12 @@ export function ArInvoicesView() {
           ctaLabel="Check integrations"
         />
       ) : (
-        <DataTable columns={columns} data={rows} getRowId={(r) => r.id} />
+        <DataTable
+          columns={columns}
+          data={rows}
+          getRowId={(r) => r.id}
+          rowHover="ledger"
+        />
       )}
     </div>
   );

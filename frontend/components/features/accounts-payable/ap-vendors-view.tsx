@@ -153,15 +153,11 @@ export function ApVendorsView() {
 
   return (
     <div className="space-y-5">
-      <p className="text-xs text-muted-foreground">
-        Vendors from{" "}
-        <span className="font-medium text-foreground">counterparties</span>. Spend
-        and bill lines are placeholders until AP APIs ship.
-      </p>
       <DataTable
         columns={columns}
         data={vendors}
         getRowId={(r) => r.id}
+        rowHover="ledger"
         onRowClick={(row) => {
           setActive(row);
           setOpen(true);

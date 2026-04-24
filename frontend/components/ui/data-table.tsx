@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LEDGER_TABLE_BODY_ROW } from "@/lib/ledger-table-row-styles";
 import { cn } from "@/lib/utils";
 
 export type DataTableProps<TData, TValue> = {
@@ -33,6 +34,11 @@ export type DataTableProps<TData, TValue> = {
   className?: string;
   /** When provided, only matching rows can be selected (e.g. bulk actions on overdue only). */
   isRowSelectable?: (row: TData) => boolean;
+  /**
+   * ``ledger`` matches General Ledger body rows: white surface with
+   * ``--brand-primary-subtle`` hover (see ``gl-table-surface``).
+   */
+  rowHover?: "default" | "ledger";
 };
 
 export function DataTable<TData, TValue>({
@@ -47,6 +53,7 @@ export function DataTable<TData, TValue>({
   emptyLabel = "No results.",
   className,
   isRowSelectable,
+  rowHover = "default",
 }: DataTableProps<TData, TValue>) {
   const [internalSelection, setInternalSelection] =
     React.useState<RowSelectionState>({});
@@ -109,8 +116,15 @@ export function DataTable<TData, TValue>({
                 key={row.id}
                 data-state={row.getIsSelected() ? "selected" : undefined}
                 className={cn(
-                  "cursor-pointer border-slate-100 transition-colors duration-200 hover:bg-slate-50/90 dark:border-slate-800/80 dark:hover:bg-slate-900/40",
-                  row.getIsSelected() && "bg-slate-50 dark:bg-slate-900/50",
+                  rowHover === "ledger"
+                    ? cn(
+                        LEDGER_TABLE_BODY_ROW,
+                        "cursor-pointer dark:border-slate-800/80"
+                      )
+                    : "cursor-pointer border-slate-100 transition-colors duration-200 hover:bg-slate-50/90 dark:border-slate-800/80 dark:hover:bg-slate-900/40",
+                  rowHover !== "ledger" &&
+                    row.getIsSelected() &&
+                    "bg-slate-50 dark:bg-slate-900/50",
                   getRowClassName?.(row.original)
                 )}
                 onClick={(e) => {
