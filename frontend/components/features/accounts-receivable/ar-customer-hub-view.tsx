@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { format, parseISO } from "date-fns";
-import { ChevronRight, Search, Upload } from "lucide-react";
+import { BarChart3, ChevronRight, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -159,7 +158,6 @@ export function ArCustomerHubView({ counterparty }: Props) {
   const legalName = counterparty.name;
   const productsHref = `/accounts-receivable/customers/${customerId}/products`;
   const base = `/accounts-receivable/customers/${customerId}`;
-  const [hubSearch, setHubSearch] = useState("");
 
   /** This shell only mounts on the customer overview route today. */
   const isOverview = pathname === base || pathname === `${base}/`;
@@ -168,8 +166,6 @@ export function ArCustomerHubView({ counterparty }: Props) {
   const isCreditMemos = false;
 
   const financialRows = useMemo(() => buildFinancialRows(demo), [demo]);
-
-  const initial = legalName.trim().charAt(0).toUpperCase() || "?";
 
   return (
     <div className="space-y-6">
@@ -180,102 +176,123 @@ export function ArCustomerHubView({ counterparty }: Props) {
         ]}
       />
 
-      <div className="flex flex-col items-center gap-5">
-        <div className="relative w-full max-w-md">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            aria-label="Search on customer profile"
-            className="h-9 rounded-lg border-slate-200/90 pl-9 text-sm dark:border-slate-800"
-            placeholder="Search"
-            value={hubSearch}
-            onChange={(e) => setHubSearch(e.target.value)}
-          />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {legalName}
+          </h1>
+          <p className="mt-1 text-sm font-medium leading-snug text-muted-foreground">
+            {demo.dataSourcesLine}
+          </p>
         </div>
-        <nav
-          className="flex flex-wrap items-center justify-center gap-x-10 gap-y-2"
-          aria-label="Customer profile sections"
-        >
-          <HubTab href={base} label="Overview" active={isOverview} />
-          <HubTab
-            href="/accounts-receivable/contracts"
-            label="Contracts"
-            active={isContracts}
-          />
-          <HubTab
-            href="/accounts-receivable/invoices"
-            label="Invoices"
-            active={isInvoices}
-          />
-          <HubTab
-            href="/accounts-receivable/credit-memos"
-            label="Credit Memos"
-            active={isCreditMemos}
-          />
-        </nav>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="transition-all duration-200"
+            type="button"
+          >
+            <Upload className="mr-1.5 size-3.5" aria-hidden />
+            Upload document
+          </Button>
+          <Button variant="secondary" size="sm" type="button">
+            Settings &amp; more
+          </Button>
+        </div>
       </div>
 
-      <div className="flex justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="transition-all duration-200"
-          type="button"
-        >
-          <Upload className="mr-1.5 size-3.5" aria-hidden />
-          Upload document
-        </Button>
-        <Button variant="secondary" size="sm" type="button">
-          Settings &amp; more
-        </Button>
-      </div>
+      <nav
+        className="flex flex-wrap items-center justify-center gap-x-10 gap-y-2"
+        aria-label="Customer profile sections"
+      >
+        <HubTab href={base} label="Overview" active={isOverview} />
+        <HubTab
+          href="/accounts-receivable/contracts"
+          label="Contracts"
+          active={isContracts}
+        />
+        <HubTab
+          href="/accounts-receivable/invoices"
+          label="Invoices"
+          active={isInvoices}
+        />
+        <HubTab
+          href="/accounts-receivable/credit-memos"
+          label="Credit Memos"
+          active={isCreditMemos}
+        />
+      </nav>
 
       <section
         className={cn(
-          "rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50/95 via-purple-50/80 to-[var(--brand-primary-subtle)] px-5 py-6 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.08)] dark:border-violet-900/50 dark:from-violet-950/40 dark:via-purple-950/30 dark:to-teal-950/20 sm:px-8 sm:py-7"
+          "rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50/95 via-purple-50/80 to-[var(--brand-primary-subtle)] px-5 py-5 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.08)] dark:border-violet-900/50 dark:from-violet-950/40 dark:via-purple-950/30 dark:to-teal-950/20 sm:px-8 sm:py-6"
         )}
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div
-              className="flex size-12 shrink-0 items-center justify-center rounded-full bg-rose-500 text-lg font-semibold text-white shadow-sm"
-              aria-hidden
-            >
-              {initial}
+        <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-violet-900/70 dark:text-violet-200/80">
+                Customer since
+              </dt>
+              <dd className="mt-1 font-semibold text-violet-950 dark:text-violet-50">
+                {formatCustomerSince(demo.customerSinceDate)}
+              </dd>
             </div>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold tracking-tight text-violet-950 dark:text-violet-50">
-                {legalName}
-              </h1>
-              <p className="mt-1.5 text-sm font-medium leading-snug text-violet-900/85 dark:text-violet-100/85">
-                {demo.dataSourcesLine}
-              </p>
-              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-white/80 px-2.5 py-0.5 text-xs font-medium text-emerald-900 shadow-sm dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100">
-                <span
-                  className="size-1.5 shrink-0 rounded-full bg-[var(--brand-primary)]"
-                  aria-hidden
-                />
-                Active
-              </span>
-              <dl className="mt-4">
-                <dt className="text-[10px] font-semibold uppercase tracking-wide text-violet-900/65 dark:text-violet-200/75">
-                  Customer since
-                </dt>
-                <dd className="mt-1 text-sm font-semibold tabular-nums text-violet-950 dark:text-violet-50">
-                  {formatCustomerSince(demo.customerSinceDate)}
-                </dd>
-              </dl>
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-violet-900/70 dark:text-violet-200/80">
+                Term ends
+              </dt>
+              <dd className="mt-1 font-semibold text-violet-950 dark:text-violet-50">
+                {demo.termEndsLabel}
+              </dd>
             </div>
-          </div>
-          <div className="text-left sm:text-right">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-violet-900/60 dark:text-violet-200/70">
-              Customer Id
-            </p>
-            <p className="mt-1 break-all font-mono text-xs text-violet-900/90 dark:text-violet-100/90">
-              {customerId}
-            </p>
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-violet-900/70 dark:text-violet-200/80">
+                Remaining bills
+              </dt>
+              <dd className="mt-1 font-semibold text-violet-950 dark:text-violet-50">
+                {demo.remainingInvoices} invoices
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-violet-900/70 dark:text-violet-200/80">
+                Billed through Factora
+              </dt>
+              <dd className="mt-1 font-semibold tabular-nums text-violet-950 dark:text-violet-50">
+                {fmtMoney(demo.billedThroughTabs, demo.currency)}
+              </dd>
+            </div>
+          </dl>
+          <div className="space-y-4 border-t border-violet-200/50 pt-4 lg:border-l lg:border-t-0 lg:pt-0 lg:pl-10 dark:border-violet-800/40">
+            <div className="flex gap-2">
+              <BarChart3 className="mt-0.5 size-4 shrink-0 text-[color:var(--brand-primary)]" />
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-900/70 dark:text-violet-200/80">
+                  Revenue
+                </p>
+                <p className="mt-1 text-sm text-violet-950 dark:text-violet-100">
+                  ARR is{" "}
+                  <span className="font-semibold tabular-nums">
+                    {fmtMoney(demo.revenueArr, demo.currency)}
+                  </span>{" "}
+                  ({demo.revenueNote})
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <BarChart3 className="mt-0.5 size-4 shrink-0 text-[color:var(--brand-primary)]" />
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-900/70 dark:text-violet-200/80">
+                  Cash collected
+                </p>
+                <p className="mt-1 text-sm text-violet-950 dark:text-violet-100">
+                  <span className="font-semibold tabular-nums">
+                    {fmtMoney(demo.cashCollected90d, demo.currency)}
+                  </span>{" "}
+                  in the last 90 days
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
