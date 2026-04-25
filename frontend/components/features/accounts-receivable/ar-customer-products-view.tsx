@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   ArrowUpDown,
   ChevronDown,
-  Circle,
   Filter,
   MoreVertical,
   Package,
@@ -235,13 +234,13 @@ function ProductGroupCard({
                     ) : null}
                     <p className="mt-2 flex items-center gap-1.5 text-xs text-foreground">
                       {row.activePeriod ? (
-                        <Circle
-                          className="size-2.5 shrink-0 fill-emerald-500 text-emerald-500"
+                        <span
+                          className="size-2.5 shrink-0 rounded-full bg-emerald-500"
                           aria-hidden
                         />
                       ) : (
-                        <Circle
-                          className="size-2.5 shrink-0 fill-slate-400 text-slate-400"
+                        <span
+                          className="size-2.5 shrink-0 rounded-full border-2 border-slate-300 bg-transparent dark:border-slate-500"
                           aria-hidden
                         />
                       )}
