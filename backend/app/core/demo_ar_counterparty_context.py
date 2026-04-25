@@ -147,6 +147,63 @@ def _generic_shell(
 
 _DC = "f6a7b8c9-d0e1-42f3-a4b5-c6d7e8f90101"
 _ACME_ID = "f6a7b8c9-d0e1-42f3-a4b5-c6d7e8f90102"
+_ATLAS_ID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c01"
+
+
+def _atlas_cloud_services_context(
+    ar_customer: dict[str, Any],
+    legal_name: str,
+) -> dict[str, Any]:
+    """Designer Tabs-style financial summary (Nov 2025–Apr 2026) for the Atlas demo customer."""
+    base = _generic_shell(
+        country="GR",
+        legal_name=legal_name,
+        ar_customer=ar_customer,
+        amount=2500.0,
+    )
+    hub = dict(base["hub"])
+    hub["dataSourcesLine"] = "Exists in HubSpot"
+    hub["currency"] = "USD"
+    hub["subsidiarySelectLabel"] = "1. Monster Inc Demo"
+    hub["financialSummaryRows"] = [
+        {
+            "key": "revenue",
+            "label": "Revenue",
+            "monthly": [500.0, 500.0, 500500.0, 500500.0, 500508.66, 500484.94],
+            "total": 2002993.60,
+            "link": True,
+        },
+        {
+            "key": "invoicing",
+            "label": "Invoicing",
+            "monthly": [500.0, 500.0, 6000500.0, 500.0, 960.27, 500.0],
+            "total": 6003460.27,
+            "link": True,
+        },
+        {
+            "key": "deferred",
+            "label": "Deferred revenue",
+            "monthly": [0.0, 0.0, 5500000.0, 5000000.0, 4499951.61, 3999466.67],
+            "total": 3999466.67,
+            "link": True,
+        },
+        {
+            "key": "usage",
+            "label": "Usage",
+            "monthly": [None, None, None, None, None, None],
+            "total": None,
+            "link": True,
+        },
+        {
+            "key": "arr",
+            "label": "ARR/MRR",
+            "monthly": [6000.0, 6000.0, 6006000.0, 6006000.0, 6006000.0, 6006000.0],
+            "total": 6006000.0,
+            "link": True,
+        },
+    ]
+    base["hub"] = hub
+    return base
 
 
 def _acme_monthly_demo(
@@ -601,6 +658,9 @@ def ar_demo_context_for_counterparty(
 
     if counterparty_id == _ACME_ID:
         return _acme_corporation_context(ar_customer)
+
+    if counterparty_id == _ATLAS_ID:
+        return _atlas_cloud_services_context(ar_customer, legal_name)
 
     return _generic_shell(
         country=country,

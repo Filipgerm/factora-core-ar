@@ -18,7 +18,7 @@ DEMO_OPEN_INVOICES: list[dict[str, Any]] = [
     {
         "id": "inv_demo_6",
         "amount": "3100.00",
-        "counterparty": "Atlas Cloud Services S.A.",
+        "counterparty": "Atlas Cloud Services IKE",
     },
     {"id": "inv_demo_7", "amount": "8750.50", "counterparty": "Helios Analytics OÜ"},
     {
