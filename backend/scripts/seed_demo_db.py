@@ -182,7 +182,7 @@ def build_programmatic_demo_transactions(
     counterparties = [
         "Acme Logistics S.A.",
         "Nordic Parts AB",
-        "Atlas Cloud Services IKE",
+        "Atlas Cloud Services S.A.",
         "Helios Analytics OÜ",
         "Benelux Retail BV",
         "Mediterranean Trading SA",
@@ -326,7 +326,7 @@ def build_programmatic_demo_transactions(
         ("demo-tx-match03", Decimal("45280.00"), "Wire — Nordic Parts AB — PO-7781"),
         ("demo-tx-match04", Decimal("9900.00"), "SEPA — Baltic Freight OÜ"),
         ("demo-tx-match05", Decimal("4200.00"), "Stripe payout — card acquiring"),
-        ("demo-tx-match06", Decimal("3100.00"), "SEPA — Atlas Cloud Services IKE"),
+        ("demo-tx-match06", Decimal("3100.00"), "SEPA — Atlas Cloud Services S.A."),
         ("demo-tx-match07", Decimal("8750.50"), "Incoming — Helios Analytics OÜ"),
         ("demo-tx-match08", Decimal("26400.00"), "SEPA — Mediterranean Trading SA"),
         ("demo-tx-match09", Decimal("5125.25"), "FPS — Benelux Retail BV"),

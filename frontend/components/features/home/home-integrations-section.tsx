@@ -15,13 +15,13 @@ type LogoItem = {
   /** Wider frame for Stripe wordmark */
   frameSize?: "wordmark" | "mark";
   logo:
-    | {
-        kind: "image";
-        src: string;
-        alt: string;
-        shape?: "mark" | "wordmark";
-      }
-    | { kind: "lucide"; className: string };
+  | {
+    kind: "image";
+    src: string;
+    alt: string;
+    shape?: "mark" | "wordmark";
+  }
+  | { kind: "lucide"; className: string };
 };
 
 const ITEMS: ReadonlyArray<LogoItem> = [
