@@ -13,9 +13,22 @@ export type ArDemoContextStored = {
   product_details?: Record<string, ProductDetailDemo>;
 };
 
+/** Optional six-month financial summary grid (seeded ``hub.financialSummaryRows``). */
+export type FinancialSummaryMetricRowStored = {
+  key: string;
+  label: string;
+  monthly: (number | null)[];
+  total: number | null;
+  link?: boolean;
+};
+
 export type CustomerHubDemo = {
   /** Where this customer is represented (CRM, billing, etc.). */
   dataSourcesLine: string;
+  /** Subsidiary filter label in the AR hub (demo). */
+  subsidiarySelectLabel?: string;
+  /** When set, the hub financial table uses these rows instead of derived placeholders. */
+  financialSummaryRows?: FinancialSummaryMetricRowStored[];
   /** ISO date ``YYYY-MM-DD`` — shown as a full calendar date for “Customer since”. */
   customerSinceDate: string;
   termEndsLabel: string;
