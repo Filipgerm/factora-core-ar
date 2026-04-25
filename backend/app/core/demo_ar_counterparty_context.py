@@ -101,6 +101,9 @@ def _price_mo(sym: str, amount: float) -> str:
     return f"{sym}{amount:,.2f} /mo"
 
 
+_DEMO_SERVICE_PERIOD = "May 1 '24 – Apr 30 '25"
+
+
 def _generic_shell(
     *,
     country: str | None,
@@ -120,18 +123,45 @@ def _generic_shell(
                     "id": "generic-platform",
                     "name": "Platform subscription",
                     "kindLabel": "Subscription",
-                    "serviceRange": "Rolling annual",
-                    "invoicingLabel": "Aligned to schedule",
-                    "invoicingTone": "partial",
+                    "kindTone": "platform",
+                    "serviceRange": f"Service {_DEMO_SERVICE_PERIOD}",
+                    "invoicingLabel": "",
+                    "invoicingTone": "complete",
+                    "invoicesIssued": 12,
+                    "invoicesTotal": 12,
                     "priceLabel": _price_mo(sym, amount),
                     "activePeriod": True,
-                }
+                },
+                {
+                    "id": "generic-professional-services",
+                    "name": "Professional Services",
+                    "kindLabel": "Service",
+                    "kindTone": "usage",
+                    "serviceRange": f"Service {_DEMO_SERVICE_PERIOD}",
+                    "invoicingLabel": "",
+                    "invoicingTone": "partial",
+                    "invoicesIssued": 6,
+                    "invoicesTotal": 12,
+                    "priceLabel": f"{sym}{200:,.2f} /unit/mo",
+                    "activePeriod": False,
+                },
             ],
         }
     ]
 
     details = {
         "generic-platform": _generic_platform_product_detail(amount, currency),
+        "generic-professional-services": _acme_product_detail(
+            "generic-professional-services",
+            "Professional Services",
+            monthly_amount=200.0,
+            currency=currency,
+            pricing_model="Per unit",
+            qty=15,
+            unit_price=200.0,
+            period_label=f"{_DEMO_SERVICE_PERIOD} (12 invoices)",
+            svc_period=_DEMO_SERVICE_PERIOD,
+        ),
     }
     out: dict[str, Any] = {
         "hub": hub,
@@ -214,8 +244,10 @@ def _atlas_cloud_services_context(
                     "kindLabel": "Platform",
                     "kindTone": "platform",
                     "serviceRange": "Service May 1 '24 – Apr 30 '25",
-                    "invoicingLabel": "12 of 12 invoiced",
+                    "invoicingLabel": "",
                     "invoicingTone": "complete",
+                    "invoicesIssued": 12,
+                    "invoicesTotal": 12,
                     "priceLabel": f"{sym_usd}3,000.00 /mo",
                     "activePeriod": True,
                 },
@@ -225,10 +257,12 @@ def _atlas_cloud_services_context(
                     "kindLabel": "Service",
                     "kindTone": "usage",
                     "serviceRange": "Service May 1 '24 – Apr 30 '25",
-                    "invoicingLabel": "12 of 12 invoiced",
-                    "invoicingTone": "complete",
+                    "invoicingLabel": "",
+                    "invoicingTone": "partial",
+                    "invoicesIssued": 6,
+                    "invoicesTotal": 12,
                     "priceLabel": f"{sym_usd}200.00 /unit/mo",
-                    "activePeriod": True,
+                    "activePeriod": False,
                 },
             ],
         }

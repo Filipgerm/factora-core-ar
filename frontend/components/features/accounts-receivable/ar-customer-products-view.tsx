@@ -20,11 +20,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArCustomerCrumbBar } from "@/components/features/accounts-receivable/ar-customer-nav";
 import { FeatureEmptyState } from "@/components/features/common/feature-empty-state";
+import { LEDGER_TABLE_BODY_ROW } from "@/lib/ledger-table-row-styles";
 import type { CounterpartyResponse } from "@/lib/schemas/organization";
 import {
+  formatProductInvoiceProgress,
+  isProductInvoiceProgressComplete,
   productGroupsFromCounterparty,
+  productKindTagClass,
+  splitProductPriceLabel,
   type ProductGroupDemo,
   type ProductRowDemo,
 } from "@/lib/views/ar-counterparty-context";
@@ -36,7 +40,6 @@ type Props = {
 
 export function ArCustomerProductsView({ counterparty }: Props) {
   const customerId = counterparty.id;
-  const legalName = counterparty.name;
   const groups = productGroupsFromCounterparty(counterparty);
   const base = `/accounts-receivable/customers/${customerId}`;
   const defaultOpen = useMemo(
@@ -51,13 +54,6 @@ export function ArCustomerProductsView({ counterparty }: Props) {
   if (groups.length === 0) {
     return (
       <div className="space-y-6">
-        <ArCustomerCrumbBar
-          segments={[
-            { label: "Customer", href: "/accounts-receivable/customers" },
-            { label: legalName, href: base },
-            { label: "Products" },
-          ]}
-        />
         <FeatureEmptyState
           icon={Package}
           title="No products"
@@ -71,14 +67,6 @@ export function ArCustomerProductsView({ counterparty }: Props) {
 
   return (
     <div className="space-y-6">
-      <ArCustomerCrumbBar
-        segments={[
-          { label: "Customer", href: "/accounts-receivable/customers" },
-          { label: legalName, href: base },
-          { label: "Products" },
-        ]}
-      />
-
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold tracking-tight">Products</h1>
         <Button size="sm" variant="outline" type="button" disabled>
@@ -179,16 +167,6 @@ export function ArCustomerProductsView({ counterparty }: Props) {
   );
 }
 
-function kindTagClass(tone: ProductRowDemo["kindTone"]): string {
-  if (tone === "seats") {
-    return "font-semibold text-orange-600 dark:text-orange-400";
-  }
-  if (tone === "usage" || tone === "platform") {
-    return "font-semibold text-blue-600 dark:text-blue-400";
-  }
-  return "font-semibold text-[color:var(--brand-primary)]";
-}
-
 function ProductGroupCard({
   group,
   basePath,
@@ -220,63 +198,80 @@ function ProductGroupCard({
       </button>
       {open ? (
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          {group.rows.map((row) => (
-            <Link
-              key={row.id}
-              href={`${basePath}/products/${row.id}`}
-              className="flex flex-col gap-3 px-4 py-4 transition-colors duration-200 hover:bg-[var(--brand-primary-subtle)]/50 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div className="flex min-w-0 items-start gap-3">
-                <span
-                  className="mt-1 inline-flex size-4 shrink-0 items-center justify-center rounded-sm border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-950"
-                  aria-hidden
-                />
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground">{row.name}</p>
-                  <p className={cn("text-xs", kindTagClass(row.kindTone))}>
-                    {row.kindLabel}
-                  </p>
-                  {row.tieredPricing?.length ? (
-                    <ul className="mt-2 space-y-1 border-l border-slate-200 pl-3 text-xs text-muted-foreground dark:border-slate-700">
-                      {row.tieredPricing.map((t) => (
-                        <li key={t.label} className="flex justify-between gap-6 tabular-nums">
-                          <span>{t.label}</span>
-                          <span className="font-mono text-foreground/90">{t.price}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Circle
-                      className={cn(
-                        "size-2.5 shrink-0 fill-current",
-                        row.activePeriod
-                          ? "text-emerald-500"
-                          : "text-slate-400"
+          {group.rows.map((row) => {
+            const { amount: priceAmount, suffix: priceSuffix } = splitProductPriceLabel(
+              row.priceLabel
+            );
+            const invoiceLine = formatProductInvoiceProgress(row);
+            const invoiceComplete = isProductInvoiceProgressComplete(row);
+            return (
+              <Link
+                key={row.id}
+                href={`${basePath}/products/${row.id}`}
+                className={cn(
+                  LEDGER_TABLE_BODY_ROW,
+                  "flex cursor-pointer flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                )}
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    className="mt-1 inline-flex size-4 shrink-0 items-center justify-center rounded-sm border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-950"
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="font-semibold text-foreground">{row.name}</span>
+                      <span className={productKindTagClass(row.kindTone)}>{row.kindLabel}</span>
+                    </div>
+                    {row.tieredPricing?.length ? (
+                      <ul className="mt-2 space-y-1 border-l border-slate-200 pl-3 text-xs text-muted-foreground dark:border-slate-700">
+                        {row.tieredPricing.map((t) => (
+                          <li key={t.label} className="flex justify-between gap-6 tabular-nums">
+                            <span>{t.label}</span>
+                            <span className="font-mono text-foreground/90">{t.price}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-foreground">
+                      {row.activePeriod ? (
+                        <Circle
+                          className="size-2.5 shrink-0 fill-emerald-500 text-emerald-500"
+                          aria-hidden
+                        />
+                      ) : (
+                        <Circle
+                          className="size-2.5 shrink-0 fill-slate-400 text-slate-400"
+                          aria-hidden
+                        />
                       )}
-                      aria-hidden
-                    />
-                    {row.serviceRange}
+                      {row.serviceRange}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-start gap-x-6 gap-y-1 sm:ml-auto sm:min-w-0 sm:flex-nowrap sm:justify-end">
+                  <span
+                    className={cn(
+                      "text-xs font-medium tabular-nums sm:text-right",
+                      invoiceComplete
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-foreground"
+                    )}
+                  >
+                    {invoiceLine}
+                  </span>
+                  <p className="text-right font-mono text-sm tabular-nums sm:whitespace-nowrap">
+                    <span className="font-semibold text-foreground">{priceAmount}</span>
+                    {priceSuffix ? (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {priceSuffix}
+                      </span>
+                    ) : null}
                   </p>
                 </div>
-              </div>
-              <div className="flex flex-wrap items-start gap-x-6 gap-y-1 sm:min-w-[280px] sm:flex-nowrap sm:justify-end">
-                <span
-                  className={cn(
-                    "text-xs font-medium sm:text-right",
-                    row.invoicingTone === "complete"
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-foreground"
-                  )}
-                >
-                  {row.invoicingLabel}
-                </span>
-                <span className="font-mono text-sm font-semibold tabular-nums sm:text-right">
-                  {row.priceLabel}
-                </span>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       ) : null}
     </section>

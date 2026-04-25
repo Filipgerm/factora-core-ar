@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Package, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ArCustomerCrumbBar } from "@/components/features/accounts-receivable/ar-customer-nav";
 import {
   BillingScheduleChart,
   RevenueScheduleChart,
@@ -31,7 +30,6 @@ export function ArCustomerProductDetailView({
   productSlug,
 }: Props) {
   const customerId = counterparty.id;
-  const legalName = counterparty.name;
   const base = `/accounts-receivable/customers/${customerId}`;
   const demo = productDetailFromCounterparty(counterparty, productSlug);
 
@@ -51,15 +49,6 @@ export function ArCustomerProductDetailView({
 
   return (
     <div className="space-y-10 pb-16">
-      <ArCustomerCrumbBar
-        segments={[
-          { label: "Customer", href: "/accounts-receivable/customers" },
-          { label: legalName, href: base },
-          { label: "Products", href: `${base}/products` },
-          { label: demo.title },
-        ]}
-      />
-
       <section className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-5 py-5 dark:border-slate-800 dark:bg-slate-900/40 sm:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>

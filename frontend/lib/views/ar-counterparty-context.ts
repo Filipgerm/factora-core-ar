@@ -54,13 +54,66 @@ export type ProductRowDemo = {
   kindLabel: string;
   /** Tag color variant — Usage/Platform vs Seats in designer reference. */
   kindTone?: "usage" | "platform" | "seats";
+  /** Service schedule line (e.g. ``Service May 1 '24 – Apr 30 '25``). */
   serviceRange: string;
+  /** Legacy copy; superseded by ``invoicesIssued`` / ``invoicesTotal`` when both are set. */
   invoicingLabel: string;
   invoicingTone: "complete" | "partial";
   priceLabel: string;
   activePeriod?: boolean;
   tieredPricing?: ProductTierRowDemo[];
+  /** When both are set with ``invoicesTotal > 0``, UI shows ``issued/total`` (e.g. ``6/12``). */
+  invoicesIssued?: number;
+  invoicesTotal?: number;
 };
+
+/** Split e.g. ``$3,000.00 /mo`` into bold amount + muted suffix. */
+export function splitProductPriceLabel(priceLabel: string): {
+  amount: string;
+  suffix: string;
+} {
+  const idx = priceLabel.indexOf(" /");
+  if (idx === -1) {
+    return { amount: priceLabel.trim(), suffix: "" };
+  }
+  return {
+    amount: priceLabel.slice(0, idx).trim(),
+    suffix: priceLabel.slice(idx),
+  };
+}
+
+export function formatProductInvoiceProgress(row: ProductRowDemo): string {
+  if (
+    typeof row.invoicesIssued === "number" &&
+    typeof row.invoicesTotal === "number" &&
+    row.invoicesTotal > 0
+  ) {
+    return `${row.invoicesIssued}/${row.invoicesTotal}`;
+  }
+  const label = typeof row.invoicingLabel === "string" ? row.invoicingLabel.trim() : "";
+  return label ? label : "—";
+}
+
+export function isProductInvoiceProgressComplete(row: ProductRowDemo): boolean {
+  if (
+    typeof row.invoicesIssued === "number" &&
+    typeof row.invoicesTotal === "number" &&
+    row.invoicesTotal > 0
+  ) {
+    return row.invoicesIssued >= row.invoicesTotal;
+  }
+  return row.invoicingTone === "complete";
+}
+
+export function productKindTagClass(tone: ProductRowDemo["kindTone"]): string {
+  if (tone === "seats") {
+    return "text-xs font-semibold text-orange-600 dark:text-orange-400";
+  }
+  if (tone === "usage" || tone === "platform") {
+    return "text-xs font-semibold text-blue-600 dark:text-blue-400";
+  }
+  return "text-xs font-semibold text-[color:var(--brand-primary)]";
+}
 
 export type ProductGroupDemo = {
   id: string;

@@ -22,10 +22,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  formatProductInvoiceProgress,
   hubDemoFromCounterparty,
+  isProductInvoiceProgressComplete,
   productGroupsFromCounterparty,
+  productKindTagClass,
+  splitProductPriceLabel,
   type ProductRowDemo,
 } from "@/lib/views/ar-counterparty-context";
+import { LEDGER_TABLE_BODY_ROW } from "@/lib/ledger-table-row-styles";
 import type { CounterpartyResponse } from "@/lib/schemas/organization";
 import { cn } from "@/lib/utils";
 
@@ -125,28 +130,6 @@ function buildFinancialRows(demo: ReturnType<typeof hubDemoFromCounterparty>): F
 
 function flattenProductRows(counterparty: CounterpartyResponse): ProductRowDemo[] {
   return productGroupsFromCounterparty(counterparty).flatMap((g) => g.rows);
-}
-
-function kindProductTagClass(tone: ProductRowDemo["kindTone"]): string {
-  if (tone === "seats") {
-    return "text-xs font-semibold text-orange-600 dark:text-orange-400";
-  }
-  if (tone === "usage" || tone === "platform") {
-    return "text-xs font-semibold text-blue-600 dark:text-blue-400";
-  }
-  return "text-xs font-semibold text-[color:var(--brand-primary)]";
-}
-
-/** Split e.g. ``$3,000.00 /mo`` into bold amount + muted suffix. */
-function splitPriceLabel(priceLabel: string): { amount: string; suffix: string } {
-  const idx = priceLabel.indexOf(" /");
-  if (idx === -1) {
-    return { amount: priceLabel.trim(), suffix: "" };
-  }
-  return {
-    amount: priceLabel.slice(0, idx).trim(),
-    suffix: priceLabel.slice(idx),
-  };
 }
 
 type HubTabProps = {
@@ -311,7 +294,7 @@ export function ArCustomerHubView({ counterparty }: Props) {
                 return (
                   <TableRow
                     key={row.key}
-                    className="border-slate-100 transition-all duration-200 hover:bg-[var(--brand-primary-subtle)]/50 dark:border-slate-800"
+                    className={cn(LEDGER_TABLE_BODY_ROW, "dark:border-slate-800")}
                   >
                     <TableCell className="font-medium">
                       {row.link ? (
@@ -378,18 +361,22 @@ export function ArCustomerHubView({ counterparty }: Props) {
               {catalogRows.length > 0
                 ? catalogRows.map((row) => {
                     const href = `${base}/products/${row.id}`;
-                    const { amount: priceAmount, suffix: priceSuffix } = splitPriceLabel(
-                      row.priceLabel
-                    );
+                    const { amount: priceAmount, suffix: priceSuffix } =
+                      splitProductPriceLabel(row.priceLabel);
+                    const invoiceLine = formatProductInvoiceProgress(row);
+                    const invoiceComplete = isProductInvoiceProgressComplete(row);
                     return (
                       <TableRow
                         key={row.id}
-                        className="border-slate-100 p-0 hover:bg-transparent dark:border-slate-800"
+                        className={cn(
+                          LEDGER_TABLE_BODY_ROW,
+                          "cursor-pointer border-slate-100 p-0 dark:border-slate-800"
+                        )}
                       >
                         <TableCell colSpan={2} className="p-0">
                           <Link
                             href={href}
-                            className="flex flex-col gap-3 px-3 py-4 transition-all duration-200 hover:bg-[var(--brand-primary-subtle)]/50 sm:flex-row sm:items-center sm:justify-between"
+                            className="flex flex-col gap-3 px-3 py-4 sm:flex-row sm:items-center sm:justify-between"
                           >
                             <div className="flex min-w-0 items-start gap-3">
                               <span
@@ -397,11 +384,15 @@ export function ArCustomerHubView({ counterparty }: Props) {
                                 aria-hidden
                               />
                               <div className="min-w-0 text-left">
-                                <p className="font-semibold text-foreground">{row.name}</p>
-                                <p className={kindProductTagClass(row.kindTone)}>
-                                  {row.kindLabel}
-                                </p>
-                                <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                  <span className="font-semibold text-foreground">
+                                    {row.name}
+                                  </span>
+                                  <span className={productKindTagClass(row.kindTone)}>
+                                    {row.kindLabel}
+                                  </span>
+                                </div>
+                                <p className="mt-2 flex items-center gap-1.5 text-xs text-foreground">
                                   {row.activePeriod ? (
                                     <span
                                       className="size-2.5 shrink-0 rounded-full bg-emerald-500"
@@ -420,13 +411,13 @@ export function ArCustomerHubView({ counterparty }: Props) {
                             <div className="flex flex-col items-start gap-2 sm:ml-auto sm:min-w-0 sm:flex-row sm:items-center sm:justify-end sm:gap-6">
                               <span
                                 className={cn(
-                                  "text-xs font-medium sm:text-right",
-                                  row.invoicingTone === "complete"
+                                  "text-xs font-medium tabular-nums sm:text-right",
+                                  invoiceComplete
                                     ? "text-emerald-600 dark:text-emerald-400"
                                     : "text-foreground"
                                 )}
                               >
-                                {row.invoicingLabel}
+                                {invoiceLine}
                               </span>
                               <p className="text-right font-mono text-sm tabular-nums sm:whitespace-nowrap">
                                 <span className="font-semibold text-foreground">
@@ -447,7 +438,7 @@ export function ArCustomerHubView({ counterparty }: Props) {
                 : demo.productPricingRows.map((r, idx) => (
                     <TableRow
                       key={`${r.product}-${idx}`}
-                      className="border-slate-100 transition-all duration-200 hover:bg-[var(--brand-primary-subtle)]/50 dark:border-slate-800"
+                      className={cn(LEDGER_TABLE_BODY_ROW, "dark:border-slate-800")}
                     >
                       <TableCell className="font-medium">{r.product}</TableCell>
                       <TableCell className="text-right font-mono text-xs tabular-nums">
