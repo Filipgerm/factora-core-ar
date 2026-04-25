@@ -166,10 +166,6 @@ def _atlas_cloud_services_context(
     hub["currency"] = "USD"
     hub["subsidiarySelectLabel"] = "1. Monster Inc Demo"
     sym_usd = _sym("USD")
-    hub["productPricingRows"] = [
-        {"product": "Platform subscription", "pricing": f"{sym_usd}2,500.00 /month"},
-        {"product": "Professional services", "pricing": f"{sym_usd}180.00 /hour"},
-    ]
     hub["financialSummaryRows"] = [
         {
             "key": "revenue",
@@ -207,7 +203,66 @@ def _atlas_cloud_services_context(
             "link": True,
         },
     ]
+    product_groups: list[dict[str, Any]] = [
+        {
+            "id": "og-atlas-subscription",
+            "title": "Subscription & services",
+            "rows": [
+                {
+                    "id": "atlas-core-platform",
+                    "name": "Core Platform",
+                    "kindLabel": "Platform",
+                    "kindTone": "platform",
+                    "serviceRange": "Service May 1 '24 – Apr 30 '25",
+                    "invoicingLabel": "12 of 12 invoiced",
+                    "invoicingTone": "complete",
+                    "priceLabel": f"{sym_usd}3,000.00 /mo",
+                    "activePeriod": True,
+                },
+                {
+                    "id": "atlas-professional-services",
+                    "name": "Professional Services",
+                    "kindLabel": "Service",
+                    "kindTone": "usage",
+                    "serviceRange": "Service May 1 '24 – Apr 30 '25",
+                    "invoicingLabel": "12 of 12 invoiced",
+                    "invoicingTone": "complete",
+                    "priceLabel": f"{sym_usd}200.00 /unit/mo",
+                    "activePeriod": True,
+                },
+            ],
+        }
+    ]
+    product_details: dict[str, Any] = {
+        "atlas-core-platform": _acme_product_detail(
+            "atlas-core-platform",
+            "Core Platform",
+            monthly_amount=3000.0,
+            currency="USD",
+            pricing_model="Recurring",
+            qty=1,
+            period_label="May 1 '24 – Apr 30 '25 (12 invoices)",
+            svc_period="May 1 '24 – Apr 30 '25",
+        ),
+        "atlas-professional-services": _acme_product_detail(
+            "atlas-professional-services",
+            "Professional Services",
+            monthly_amount=200.0,
+            currency="USD",
+            pricing_model="Per unit",
+            qty=15,
+            unit_price=200.0,
+            period_label="May 1 '24 – Apr 30 '25 (12 invoices)",
+            svc_period="May 1 '24 – Apr 30 '25",
+        ),
+    }
+    hub["productPricingRows"] = [
+        {"product": "Core Platform", "pricing": f"{sym_usd}3,000.00 /mo"},
+        {"product": "Professional Services", "pricing": f"{sym_usd}200.00 /unit/mo"},
+    ]
     base["hub"] = hub
+    base["product_groups"] = product_groups
+    base["product_details"] = product_details
     return base
 
 
