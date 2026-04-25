@@ -165,6 +165,11 @@ def _atlas_cloud_services_context(
     hub["dataSourcesLine"] = "Exists in HubSpot"
     hub["currency"] = "USD"
     hub["subsidiarySelectLabel"] = "1. Monster Inc Demo"
+    sym_usd = _sym("USD")
+    hub["productPricingRows"] = [
+        {"product": "Platform subscription", "pricing": f"{sym_usd}2,500.00 /month"},
+        {"product": "Professional services", "pricing": f"{sym_usd}180.00 /hour"},
+    ]
     hub["financialSummaryRows"] = [
         {
             "key": "revenue",
